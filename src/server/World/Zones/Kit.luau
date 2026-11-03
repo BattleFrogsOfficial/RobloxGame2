@@ -291,6 +291,53 @@ function Kit.Gate(ctx: Ctx, style: GateStyle): Model
 end
 
 ----------------------------------------------------------------------------------------------------
+-- Zone arch (the zone-start boundary across the whole field). Built for the raised throwing platform
+-- (top Y = 40, eye ~45): only a thin beam crosses the lane, ABOVE eye level, so it never hides the field
+-- ground; the zone-name boards (the only text in the field besides distance markers) hang under the
+-- beam over the outer bands. Opening: (width - 4) wide x (height - beam) tall. Visual only: CanQuery off
+-- everywhere so the cutscene landing raycast never stops on it.
+----------------------------------------------------------------------------------------------------
+Kit.ArchBeam = 1.6
+Kit.ArchBoard = Vector3.new(26, 8, 1.6)
+
+function Kit.ZoneArch(P: any, parent: Instance, center: Vector3, width: number, height: number, pillar: Color3,
+	board: Color3, accent: Color3, text: string): Model
+	local m = P.Model(parent, "Arch")
+	local beamY = center.Y + height - Kit.ArchBeam / 2
+	for _, side in { -1, 1 } do
+		local base = center + Vector3.new(side * width / 2, 0, 0)
+		P.Block(m, "Pillar", Vector3.new(4, height, 4), CFrame.new(base + Vector3.new(0, height / 2, 0)), pillar)
+		P.Block(m, "PillarTrim", Vector3.new(4.4, 1.2, 4.4), CFrame.new(base + Vector3.new(0, height * 0.55, 0)), accent,
+			Enum.Material.Neon)
+		P.Ball(m, "Orb", base + Vector3.new(0, height + 2.5, 0), 5, accent, Enum.Material.Neon)
+		-- name board hanging under the beam, next to the pillar (outside the centre lane)
+		local bs = Kit.ArchBoard
+		local bx = center.X + side * (width / 2 - 2 - 1 - bs.X / 2)
+		local by = beamY - Kit.ArchBeam / 2 - 0.4 - bs.Y / 2
+		local b = P.Block(m, "Board", bs, CFrame.new(bx, by, center.Z), board)
+		P.Block(m, "Trim", bs + Vector3.new(1.2, 1.2, -bs.Z * 0.5), CFrame.new(bx, by, center.Z), accent, Enum.Material.Neon)
+		for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+			P.Label(b, text, { Face = face, PixelsPerStud = 8 })
+		end
+		P.Block(m, "Hanger", Vector3.new(0.6, 0.6, 0.6), CFrame.new(bx, beamY - Kit.ArchBeam / 2 - 0.2, center.Z), pillar)
+	end
+	local beam = P.Block(m, "Beam", Vector3.new(width + 4, Kit.ArchBeam, 2), CFrame.new(center.X, beamY, center.Z), pillar)
+	P.Block(m, "BeamTrim", Vector3.new(width, 0.4, 2.3), CFrame.new(center.X, beamY - Kit.ArchBeam / 2, center.Z), accent,
+		Enum.Material.Neon)
+	for _, d in m:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.CanQuery = false
+			d.CanTouch = false
+			d.CanCollide = false
+		end
+	end
+	m.PrimaryPart = beam
+	m:SetAttribute("Boundary", true)
+	m:SetAttribute("BoundaryKind", "Arch")
+	return m
+end
+
+----------------------------------------------------------------------------------------------------
 -- Particles: one invisible volume part per effect covering the zone band
 ----------------------------------------------------------------------------------------------------
 export type ParticleOpts = {

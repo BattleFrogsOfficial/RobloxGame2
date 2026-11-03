@@ -18,11 +18,13 @@ Player model (a "typical F2P player"; all assumptions are constants below):
     throwing), plus a small walking overhead.
   * Timing skill: release error ~ N(0, TIMING_SD) seconds around the meter peak -> mean quality
     ~0.70 (see analytic table). Tutorial throw is guaranteed Common in the Backyard.
-  * Training: Pull-Up Bar at PULLUP_RPS reps/s (human pressing the prompt), Throwing Machine at
-    1 rep/s whenever unlocked and the rep cost is < 2% of cash, Sprint laps ignored for the F2P baseline
-    (reported analytically).
-  * Shopping: greedy "cheapest useful upgrade first" over {next Training level, next Ball, +Slots
-    when the yard is full}. Boosts/consumables only in the dedicated scenarios.
+  * Training: the one training station ("Main") at min(PULLUP_RPS, 1 / Cooldown) reps/s (a human
+    pressing the prompt), Gain x TrainMult per rep, rep cost from Training.RepCost (free today).
+  * Balls are consumables (one purchase = Uses throws; Tennis is free and unlimited). Before every
+    throw the player buys + throws the best ball whose price is <= BALL_INCOME_SECONDS of current
+    income (and affordable), otherwise throws the Tennis Ball.
+  * Shopping: greedy "cheapest useful upgrade first" over {next Training level, +Slots when the yard
+    is full}. Boosts/consumables only in the dedicated scenarios.
   * Yard: keeps the best dogs by adult income; when full, sells the weakest if the new dog is better
     (manual sell pays SellIncomeSeconds of adult income) otherwise sells the new one. Dupes auto-sell
     per Shop.DefaultKeepDupes. Kennel Book milestones are claimed automatically.
@@ -47,7 +49,8 @@ WALK_OVERHEAD = 10        # seconds lost walking pad <-> plaza per block switch
 TARGET_MEAN_QUALITY = 0.70  # "average player"; TIMING_SD is calibrated to hit this
 TIMING_SD = 0.5           # release timing error (s); overwritten by calibrate()
 REACTION = 0.8            # seconds of human slack per throw
-PULLUP_RPS = 1.6          # pull-up reps / second a person actually presses
+PULLUP_RPS = 1.6          # training reps / second a person actually presses
+BALL_INCOME_SECONDS = 2.0 # buys a consumable ball for a throw when it costs <= this many seconds of income
 FTUE_SECONDS = 45         # spawn -> walk to pad -> tutorial throw starts
 SHOP_WALK = 25            # walk to the shop + buy (first training purchase)
 SQUIRREL_WIN_P = 1 / 6    # 6-player servers
@@ -126,15 +129,17 @@ def load_config():
     b = read("Balls.luau")
     c["Balls"] = []
     for m in re.finditer(r'(\w+)\s*=\s*\{\s*Id\s*=\s*"\w+",\s*Name\s*=\s*"([^"]+)",\s*Order\s*=\s*(\d+),\s*RangeMult\s*=\s*([\d.]+),'
-                         r'\s*Luck\s*=\s*([\d.]+),\s*Price\s*=\s*([\d_]+)', b):
+                         r'\s*Luck\s*=\s*([\d.]+),\s*Price\s*=\s*([\d_]+),\s*Consumable\s*=\s*(true|false),'
+                         r'\s*Uses\s*=\s*(\d+|nil)', b):
         c["Balls"].append({"Id": m.group(1), "Name": m.group(2), "Order": int(m.group(3)), "Range": float(m.group(4)),
-                           "Luck": float(m.group(5)), "Price": ev(m.group(6))})
+                           "Luck": float(m.group(5)), "Price": ev(m.group(6)), "Consumable": m.group(7) == "true",
+                           "Uses": 0 if m.group(8) == "nil" else int(m.group(8))})
     c["Balls"].sort(key=lambda x: x["Order"])
 
     t = read("Training.luau")
     c["MaxThrowPower"] = field(t, "Training.MaxThrowPower")
     c["Stations"] = {}
-    for sid in ("PullUpBar", "ThrowingMachine", "Sprint"):
+    for sid in ("Main",):
         s = block(t, sid)
         c["Stations"][sid] = {k: field(s, k) for k in ("Gain", "Cooldown", "UnlockPower", "CashPerRepMin",
                                                       "CashPerRepPerPower")}
@@ -288,7 +293,8 @@ class Player:
         self.events = {}      # first-time events -> play seconds
         self.purchases = []   # (play_s, what, cost, income_at_purchase)
         self.samples = []     # (play_s, income, tp, zone_idx_median, cash)
-        self.spent = {"Training": 0, "Ball": 0, "Slots": 0, "Boosts": 0, "Items": 0, "MachineReps": 0}
+        self.spent = {"Training": 0, "Ball": 0, "Slots": 0, "Boosts": 0, "Items": 0, "TrainReps": 0}
+        self.ball_throws = {b["Id"]: 0 for b in c["Balls"]}
         self.earned = {"Active": 0, "Offline": 0, "Sell": 0, "Daily": 0, "Book": 0}
         self.catches = {t: 0 for t in c["Order"]}
         self.misses = {t: 0 for t in c["Order"]}
@@ -402,8 +408,29 @@ class Player:
                     self.bones += self.c["BookBones"][k]
 
     # -- the throw
+    def pick_ball(self):
+        """Consumable balls: buy the best ball costing <= BALL_INCOME_SECONDS of income (Tennis otherwise)."""
+        c = self.c
+        self.ball = 0
+        if self.o.get("NoBalls"):
+            return
+        budget = min(self.cash, self.income() * self.o.get("ball_seconds", BALL_INCOME_SECONDS))
+        for i in range(len(c["Balls"]) - 1, 0, -1):
+            b = c["Balls"][i]
+            if b["Consumable"] and b["Price"] <= budget:
+                self.cash -= b["Price"] / max(1, b["Uses"])  # one throw's share of a pack
+                self.spent["Ball"] += b["Price"] / max(1, b["Uses"])
+                self.ball = i
+                self.mark("ball:" + b["Id"])
+                break
+        self.ball_throws[c["Balls"][self.ball]["Id"]] += 1
+
     def throw(self, tutorial=False):
         g, c, rng = self.g, self.c, self.rng
+        if tutorial:
+            self.ball = 0
+        else:
+            self.pick_ball()
         q = g.sample_quality(rng, self.o.get("sd"))
         if tutorial:
             zi = 0
@@ -478,9 +505,8 @@ class Player:
     # -- training (returns the seconds actually spent; the player stops at the power cap)
     def train(self, seconds):
         c, g = self.c, self.g
-        mult = g.train_mult(self.lvl)
-        mach = c["Stations"]["ThrowingMachine"]
-        pull = c["Stations"]["PullUpBar"]
+        st = c["Stations"]["Main"]
+        rps = min(PULLUP_RPS, 1.0 / st["Cooldown"])
         dt = 5.0
         el = 0.0
         while el < seconds - 1e-9:
@@ -489,15 +515,13 @@ class Player:
                 break
             mult = g.train_mult(self.lvl)
             step = min(dt, seconds - el)
-            cost = g.rep_cost("ThrowingMachine", self.tp)
-            use_machine = self.tp >= mach["UnlockPower"] and cost * 50 <= self.cash and not self.o.get("NoMachine")
-            if use_machine:
-                reps = step / mach["Cooldown"]
-                self.cash -= cost * reps
-                self.spent["MachineReps"] += cost * reps
-                self.tp += reps * mach["Gain"] * mult
-            else:
-                self.tp += step * PULLUP_RPS * pull["Gain"] * mult
+            reps = step * rps
+            cost = g.rep_cost("Main", self.tp) * reps
+            if cost > self.cash:
+                break
+            self.cash -= cost
+            self.spent["TrainReps"] += cost
+            self.tp += reps * st["Gain"] * mult
             self.tp = min(self.tp, cap)
             self.advance(step)
             self.after_step()
@@ -510,8 +534,6 @@ class Player:
         opts = []
         if self.lvl < c["Upg"]["MaxLevel"]:
             opts.append(("Training", g.train_cost(self.lvl + 1)))
-        if self.ball + 1 < len(c["Balls"]):
-            opts.append(("Ball", c["Balls"][self.ball + 1]["Price"]))
         if self.slots < c["Slots"]["Max"] + (c["Pass"]["ExtraSlots"] if self.o.get("ExtraSlots") else 0) \
                 and len(self.dogs) >= self.slots:
             opts.append(("Slots", g.slot_cost(self.slots - (c["Pass"]["ExtraSlots"] if self.o.get("ExtraSlots") else 0))))
@@ -533,10 +555,6 @@ class Player:
                 self.lvl += 1
                 self.mark("buy:Training%d" % self.lvl)
                 label = "Training L%d" % self.lvl
-            elif what == "Ball":
-                self.ball += 1
-                label = "Ball " + c["Balls"][self.ball]["Id"]
-                self.mark("buy:" + label)
             else:
                 self.slots += c["Slots"]["Step"]
                 self.slot_buys += 1
@@ -700,12 +718,10 @@ def analytic(c, out):
                " (none %.2f%%). Expected variant income mult per non-Common: x%.3f\n" % (
                    100 * rem, rem + sum(vc[v] * c["Variants"][v]["IncomeMult"] for v in vc)))
     # training stations
-    out.append("Training rates at level L (TP/s x 1.5^L): Pull-Up %.2f (at %.1f reps/s), Throwing Machine %.2f "
-               "(costs max($%d, TP x %.2f)/rep), Sprint %.2f (one lap of %d studs at WalkSpeed 16 = %.1fs)\n" % (
-                   PULLUP_RPS * c["Stations"]["PullUpBar"]["Gain"], PULLUP_RPS,
-                   c["Stations"]["ThrowingMachine"]["Gain"] / c["Stations"]["ThrowingMachine"]["Cooldown"],
-                   c["Stations"]["ThrowingMachine"]["CashPerRepMin"], c["Stations"]["ThrowingMachine"]["CashPerRepPerPower"],
-                   c["Stations"]["Sprint"]["Gain"] / max(c["Stations"]["Sprint"]["Cooldown"], 220 / 16), 220, 220 / 16))
+    st = c["Stations"]["Main"]
+    rps = min(PULLUP_RPS, 1.0 / st["Cooldown"])
+    out.append("Training rate at level L (TP/s x %.2f^L): Training Station %.2f TP/s (%.1f reps/s x Gain %.2f, "
+               "cooldown %.2fs, free)\n" % (c["Upg"]["MultBase"], rps * st["Gain"], rps, st["Gain"], st["Cooldown"]))
     out.append("| Training level | Cost | Gain mult |")
     out.append("|---|---|---|")
     for L in (1, 2, 3, 4, 5, 6, 8, 10, 12, 15):
@@ -772,7 +788,7 @@ def report(c, runs_n, hours, quick):
     for v in c["VariantOrder"]:
         row("First %s variant caught" % v, "variant:" + v, "-")
     for b in c["Balls"][1:]:
-        row("Buy %s" % b["Name"], "buy:Ball " + b["Id"], "-")
+        row("First %s throw (consumable)" % b["Name"], "ball:" + b["Id"], "-")
     out.append("")
 
     out.append("## F2P baseline: curve at checkpoints (medians)\n")
@@ -819,6 +835,8 @@ def report(c, runs_n, hours, quick):
                                       for k in keys_e))
     out.append("\nSpent: " + ", ".join("%s %.1f%%" % (k, 100 * med([r.spent[k] / max(1, t) for r, t in zip(base, ts_)]))
                                        for k in keys_s))
+    out.append("\nThrows by ball (median per run): " + ", ".join("%s %d" % (b["Id"], med([r.ball_throws[b["Id"]] for r in base]))
+                                                             for b in c["Balls"]))
     out.append("\nCatches by tier (median): " + ", ".join("%s %d" % (t, med([r.catches[t] for r in base])) for t in c["Order"]))
     out.append("\nMisses by tier (median): " + ", ".join("%s %d" % (t, med([r.misses[t] for r in base])) for t in c["Order"]))
     out.append("\nBones after %gh: %d (all cosmetics cost %d)\n" % (hours, med([r.bones for r in base]),
@@ -833,7 +851,8 @@ def report(c, runs_n, hours, quick):
     out.append("|---|---|---|---|---|---|---|---|---|---|---|")
     scen = [
         ("F2P baseline", {}, ""),
-        ("No Throwing Machine (pull-ups only)", {"NoMachine": True}, "checks the machine matters"),
+        ("Tennis only (never buys balls)", {"NoBalls": True}, "checks consumable balls matter"),
+        ("Ball-heavy (buys at <= 6 s of income)", {"ball_seconds": 6.0}, "spends more on balls"),
         ("Buys Lucky Biscuit when cheap", {"Boosts": ("LuckyBiscuit",)}, "cash boost"),
         ("Buys Sticky Ball when cheap", {"Boosts": ("StickyBall",)}, "cash boost"),
         ("Carries a Golden Whistle (Legendary+)", {"Items": ("GoldenWhistle",), "WhistleMin": 4}, "cash consumable"),

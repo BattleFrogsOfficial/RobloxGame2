@@ -156,10 +156,11 @@ function Shop.new(deps: ShopDeps)
 				ZIndex = card.Preview.ZIndex + 2,
 				Parent = card.Preview,
 			})
-			if count > 0 and card.Buy then
-				-- split the bottom row: Buy (left) + Equip / Equipped (right)
+			local buyBtn = card.Buy
+			if count > 0 and buyBtn then
+				-- split the bottom row: Buy (left) + Equip / On (right)
 				local pad = Theme.Space.S
-				card.Buy.Root.Size = UDim2.new(0.5, -math.ceil(pad * 1.5), 0, 44)
+				buyBtn.Root.Size = UDim2.new(0.5, -math.ceil(pad * 1.5), 0, 44)
 				local equipBtn = Button.new({
 					Name = "Equip",
 					Text = if isActive then "On" else "Equip",
@@ -169,7 +170,7 @@ function Shop.new(deps: ShopDeps)
 					Position = UDim2.new(1, -pad, 1, -pad),
 					AnchorPoint = Vector2.new(1, 1),
 					Shadow = false,
-					ZIndex = card.Buy.Root.ZIndex,
+					ZIndex = buyBtn.Root.ZIndex,
 					Parent = card.Root,
 					OnClick = function()
 						if equipped ~= id then
@@ -257,7 +258,7 @@ function Shop.new(deps: ShopDeps)
 
 	-- The puppy an Instant Grow would target: the one with the longest wait left.
 	local function growTarget(): (any, number)
-		local best, bestLeft = nil, 0
+		local best: any, bestLeft = nil, 0
 		local now = os.time()
 		for _, d in State.Dogs() do
 			local left = (d.GrownAt or 0) - now

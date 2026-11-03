@@ -22,7 +22,9 @@ local Field = {}
 local Y = Layout.GroundY
 local T = WorldTheme.Field
 
-Field.ArchHeight = 44
+-- The throwing platform is raised to Y = 40 (eye ~45): the arch beam sits above eye level so no arch ever
+-- hides the field ground or the zones behind it (see Kit.ZoneArch).
+Field.ArchHeight = 56
 Field.FirstArchOffset = 12 -- the Backyard arch sits just past the throw-line wall
 
 local function zoneStartZ(zone: any): number
@@ -142,10 +144,8 @@ function Field.Build(parent: Instance)
 		buildBand(zf, zone)
 
 		local archZ = Field.ArchZ(zone)
-		local arch = Props.Arch(zf, "Arch", Vector3.new(Kit.CenterX, Y, archZ), Kit.ArchX * 2, Field.ArchHeight,
+		local arch = Kit.ZoneArch(Props, zf, Vector3.new(Kit.CenterX, Y, archZ), Kit.ArchX * 2, Field.ArchHeight,
 			T.ArchPillar, T.ArchBoard, zone.Theme.Accent, string.upper(zone.Name))
-		arch:SetAttribute("Boundary", true)
-		arch:SetAttribute("BoundaryKind", "Arch")
 		arch:SetAttribute("ZoneId", zone.Id)
 
 		local ctx = {

@@ -131,10 +131,13 @@ local function placeOnGround(model: Model, pos: Vector3, yaw: number)
 end
 
 local function positions(result: Contract.ThrowResult): (Vector3, Vector3)
-	local padX = Layout.ThrowLine.PadsX[result.PadIndex] or 0
-	local start = result.StartPosition or Vector3.new(padX, Layout.GroundY, Layout.ThrowLine.Z)
-	local landing = result.LandingPosition
-		or Vector3.new(padX, Layout.GroundY, Layout.DistanceToZ(result.Distance))
+	-- One shared raised platform: the ball leaves the deck (ThrowLine.Y) and lands on the field (GroundY).
+	local r = result :: any
+	local x = Layout.ThrowLine.X or 0
+	local start = r.LaunchPos or result.StartPosition or Vector3.new(x, Layout.ThrowLine.Y or Layout.GroundY, Layout.ThrowLine.Z)
+	local landing = r.LandPos
+		or result.LandingPosition
+		or Vector3.new(x, Layout.GroundY, Layout.DistanceToZ(result.Distance))
 	return start, landing
 end
 

@@ -50,7 +50,8 @@ function Outskirts.Build(parent: Instance)
 	end
 	-- clouds
 	for _ = 1, 14 do
-		local cx = rng:NextNumber(-150, 150)
+		-- beside the landing lane (|x| >= 62 incl. puffs) and inside the scenery walls
+		local cx = (if rng:NextNumber() < 0.5 then -1 else 1) * rng:NextNumber(112, 170)
 		local cz = rng:NextNumber(-150, Layout.Field.MaxZ)
 		local cy = rng:NextNumber(150, 230)
 		local s = rng:NextNumber(0.8, 1.6)

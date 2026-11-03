@@ -33,11 +33,11 @@ function ThrowLine.Build(parent: Instance)
 	for _, side in { -1, 1 } do
 		local a = side * (towerHalf + 0.6)
 		local b = if side < 0 then pminX + 0.6 else pmaxX - 0.6
-		Props.FenceLine(folder, Vector3.new(a, Y, TL.Z - 0.6), Vector3.new(b, Y, TL.Z - 0.6), 6, 2.6,
+		Props.FenceLine(folder, Vector3.new(a, Y, TL.Z - 1), Vector3.new(b, Y, TL.Z - 1), 6, 2.6,
 			WorldTheme.YardColors[3], false)
 		local edge = if side < 0 then pminX else pmaxX
 		Props.Wall(folder, "PlazaEndWall", math.min(side * towerHalf, edge), math.max(side * towerHalf, edge),
-			TL.Z - 1, TL.Z, Y, ThrowLine.WallHeight)
+			TL.Z - 0.6, TL.Z, Y, ThrowLine.WallHeight)
 	end
 end
 

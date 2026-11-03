@@ -74,7 +74,7 @@ local function buildRamp(f: Instance)
 	local railX = w / 2 - 0.6
 	for _, side in { -1, 1 } do
 		Props.FenceLine(f, Vector3.new(bottom.X + side * railX, bottom.Y, bottom.Z + 0.6),
-			Vector3.new(top.X + side * railX, top.Y, top.Z), 5, 3, T.Rail, false)
+			Vector3.new(top.X + side * railX, top.Y, top.Z), 5, Platform.RailHeight, T.Rail, false)
 		local x0 = bottom.X + side * (w / 2)
 		Props.Wall(f, "RampGuard", math.min(x0, x0 + side), math.max(x0, x0 + side), bottom.Z, top.Z,
 			bottom.Y, rise + Platform.ColliderHeight)
@@ -115,7 +115,7 @@ local function buildDeck(f: Instance)
 	end
 
 	-- visible low railings (front, sides, back beside the ramp opening)
-	local inset = 0.6
+	local inset = 1.0 -- rail caps stay behind the deck front edge (= throw line)
 	local rh = Platform.RailHeight
 	local y = deckTop
 	local gap = PL.RampWidth / 2 + 0.6
@@ -145,8 +145,7 @@ function Platform.Build(parent: Instance)
 	local f = Props.Folder(parent, "Platform")
 	local deck = buildDeck(f)
 	buildRamp(f)
-	local m = f :: any
-	m:SetAttribute("DeckY", deck.CFrame.Position.Y + deck.Size.Y / 2)
+	f:SetAttribute("DeckY", deck.CFrame.Position.Y + deck.Size.Y / 2)
 end
 
 return Platform

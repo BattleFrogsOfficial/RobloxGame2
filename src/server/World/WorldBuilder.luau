@@ -1,5 +1,6 @@
 --!strict
--- WORLD BUILDER (agent D). Builds the whole T-shaped map procedurally under workspace.Map.
+-- WORLD BUILDER (agent D). Builds the whole T-shaped map procedurally under workspace.Map, then runs
+-- WorldCheck (warnings in the output). Headless twin: lune run tools/worldcheck/run.luau
 -- Build() is idempotent: it destroys any previous workspace.Map, builds a fresh one detached,
 -- then parents it in one go (so tag-added signals fire once everything exists).
 -- Every coordinate comes from Config/Layout.luau (+ Zones.luau); colours from Config/WorldTheme.luau.
@@ -13,7 +14,11 @@ local WorldBuilder = {}
 -- Remove the default template Baseplate / SpawnLocation (they overlap the map at Y = 0).
 WorldBuilder.RemoveTemplateParts = true
 
-local STEPS = { "Outskirts", "Yards", "Street", "Plaza", "ThrowLine", "Field", "Boundaries" }
+WorldBuilder.Steps = { "Outskirts", "Yards", "Street", "Plaza", "Platform", "ThrowLine", "Field", "Boundaries", "Walls" }
+-- step names to skip (the headless checker uses this for --no-field)
+WorldBuilder.SkipSteps = {} :: { [string]: boolean }
+-- run WorldCheck after building and warn every violation
+WorldBuilder.RunCheck = true
 
 function WorldBuilder.Build(): Folder
 	local old = Workspace:FindFirstChild("Map")
@@ -32,7 +37,10 @@ function WorldBuilder.Build(): Folder
 	local map = Instance.new("Folder")
 	map.Name = "Map"
 
-	for _, name in STEPS do
+	for _, name in WorldBuilder.Steps do
+		if WorldBuilder.SkipSteps[name] then
+			continue
+		end
 		local ok, err = pcall(function()
 			local mod = require(World:WaitForChild(name)) :: any
 			mod.Build(map)
@@ -48,6 +56,24 @@ function WorldBuilder.Build(): Folder
 	end)
 	if not okLight then
 		warn("[WorldBuilder] Lighting failed: " .. tostring(errLight))
+	end
+
+	if WorldBuilder.RunCheck then
+		local okCheck, result = pcall(function()
+			local check = require(World:WaitForChild("WorldCheck")) :: any
+			return check.Check(map)
+		end)
+		if not okCheck then
+			warn("[WorldCheck] failed to run: " .. tostring(result))
+		else
+			for _, v in result :: { string } do
+				warn("[WorldCheck] " .. v)
+			end
+			map:SetAttribute("WorldCheckViolations", #(result :: { string }))
+			if #(result :: { string }) == 0 then
+				print("[WorldCheck] OK: tags on their ground, spawns clear")
+			end
+		end
 	end
 
 	map:SetAttribute("PartCount", Props.PartCount)

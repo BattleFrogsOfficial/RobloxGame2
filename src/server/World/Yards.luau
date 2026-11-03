@@ -104,22 +104,23 @@ local function buildYard(parent: Instance, index: number)
 	Props.FenceLine(model, sw, Vector3.new(cx - gp, fy, maxZ - i0), 9, L.FenceHeight, T.Fence, true)
 	Props.FenceLine(model, Vector3.new(cx + gp, fy, maxZ - i0), se, 9, L.FenceHeight, T.Fence, true)
 
-	-- gate pillars in the yard colour
+	-- gate pillars in the yard colour (set just inside the plot so the orbs never overhang the street)
+	local gz = maxZ - i0 - 0.6
 	for _, side in { -1, 1 } do
-		local base = Vector3.new(cx + side * gp, fy, maxZ - i0)
+		local base = Vector3.new(cx + side * gp, fy, gz)
 		Props.Block(model, "GatePillar", Vector3.new(2.4, 7, 2.4), CFrame.new(base + Vector3.new(0, 3.5, 0)), color)
 		Props.Ball(model, "GateOrb", base + Vector3.new(0, 8, 0), 3, color, WorldTheme.AccentMaterial)
 	end
 
 	-- YardSign over the gate, facing the street (+Z). Big + glowing for readability across the crossbar.
-	local board = Props.Sign(model, "YardSignModel", Vector3.new(cx, fy, maxZ - i0), Vector3.new(0, 0, 1),
+	local board = Props.Sign(model, "YardSignModel", Vector3.new(cx, fy, gz), Vector3.new(0, 0, 1),
 		L.SignBoard, L.SignBottom, T.SignBoard, color, "Free Yard",
 		{ LabelName = "OwnerLabel", PixelsPerStud = 16, TextColor = T.SignText })
 	board.Name = "YardSign"
 	Props.Tag(board, "YardSign", { YardIndex = index })
 	-- yard number medallion on top of the sign
 	local medal = Props.Part({ Parent = model, Name = "YardNumber", Size = Vector3.new(5, 5, 1),
-		CFrame = CFrame.lookAt(Vector3.new(cx, fy + L.SignBottom + L.SignBoard.Y + 2.8, maxZ - i0),
+		CFrame = CFrame.lookAt(Vector3.new(cx, fy + L.SignBottom + L.SignBoard.Y + 2.8, gz),
 			Vector3.new(cx, fy + L.SignBottom + L.SignBoard.Y + 2.8, maxZ + 10)),
 		Color = color, Material = WorldTheme.AccentMaterial })
 	Props.Label(medal, tostring(index), { PixelsPerStud = 30, TextColor = Color3.new(1, 1, 1) })

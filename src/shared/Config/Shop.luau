@@ -5,7 +5,7 @@
 local Shop = {}
 
 -- ShopPurchase itemIds handled by ShopService (strings, validated server-side):
---   "Ball:<BallId>"         buy a ball tier (Balls.luau)
+--   "Ball:<BallId>"         buy Uses more throws of a consumable ball (repeatable) and equip it; "Ball:Tennis" equips
 --   "Training"              next training upgrade level
 --   "Slots"                 +Slots.Step yard slots
 --   "Boost:<BoostId>"       timed boost (cash)

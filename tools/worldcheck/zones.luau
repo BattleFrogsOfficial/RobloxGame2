@@ -309,6 +309,49 @@ for _, zone in Zones do
 		end
 	end
 	row.decor = n
+
+	-- footprints of decorations, the landmark, the gate and the distance-marker signs must not overlap
+	local boxesXZ = {}
+	if decorFolder then
+		for _, c in decorFolder:GetChildren() do
+			if c:GetAttribute("Decor") == true then
+				table.insert(boxesXZ, { name = c.Name, b = bounds(c) })
+			end
+		end
+	end
+	for _, c in zf:GetChildren() do
+		if c:GetAttribute("Landmark") == true or (c:GetAttribute("Boundary") == true and c:GetAttribute("BoundaryKind") ~= "Arch") then
+			table.insert(boxesXZ, { name = c.Name, b = bounds(c) })
+		end
+	end
+	for _, mk in fieldFolder.DistanceMarkers:GetChildren() do
+		if mk:IsA("Model") then
+			local b = bounds(mk)
+			if b.z1 > z0 and b.z0 < z1 then
+				table.insert(boxesXZ, { name = mk.Name, b = b })
+			end
+		end
+	end
+	local arch = zf:FindFirstChild("Arch")
+	if arch then
+		for _, p in parts(arch) do
+			local a = aabb(p)
+			if a.y0 <= 1 then
+				table.insert(boxesXZ, { name = "ArchPillar", b = a })
+			end
+		end
+	end
+	for i = 1, #boxesXZ do
+		for j = i + 1, #boxesXZ do
+			local a, b = boxesXZ[i].b, boxesXZ[j].b
+			local dx = math.min(a.x1, b.x1) - math.max(a.x0, b.x0)
+			local dz = math.min(a.z1, b.z1) - math.max(a.z0, b.z0)
+			local tall = (a.y1 - a.y0) > 0.5 and (b.y1 - b.y0) > 0.5
+			if dx > 0.25 and dz > 0.25 and tall then
+				fail(zone.Id, ("%s overlaps %s (%.1f x %.1f)"):format(boxesXZ[i].name, boxesXZ[j].name, dx, dz))
+			end
+		end
+	end
 	if n < 15 or n > 30 then
 		fail(zone.Id, ("%d decorations (want 15-30)"):format(n))
 	end
@@ -364,14 +407,15 @@ for _, zone in Zones do
 	if arch == nil then
 		fail(zone.Id, "no arch at the band start")
 	else
-		-- opening: inner faces of the parts that reach the ground, and the lowest part over the lane
+		-- opening: the widest gap between arch parts that come below 30 studs, and the lowest part over the lane
 		local innerX, lowest = math.huge, math.huge
 		for _, p in parts(arch) do
 			local a = aabb(p)
 			if a.x1 > -LANE and a.x0 < LANE then
 				lowest = math.min(lowest, a.y0)
-			elseif a.y0 <= 1 then
-				innerX = math.min(innerX, if a.x0 > 0 then a.x0 else -a.x1)
+			end
+			if a.y0 < 30 then
+				innerX = math.min(innerX, if a.x0 > 0 then a.x0 elseif a.x1 < 0 then -a.x1 else 0)
 			end
 		end
 		row.opening = ("%.0fx%.0f"):format(innerX * 2, lowest)
@@ -462,11 +506,6 @@ for _, d in fieldFolder:GetDescendants() do
 	end
 end
 
--- landmark visibility from the platform: the landmark's top fifth must not be fully hidden behind nearer parts
-local function angles(x, y, z)
-	local dz = z - EYE.Z
-	return math.atan2(x - EYE.X, dz), math.atan2(y - EYE.Y, math.sqrt((x - EYE.X) ^ 2 + dz ^ 2))
-end
 local allParts = parts(fieldFolder)
 local boxes = {}
 for _, p in allParts do
@@ -474,52 +513,110 @@ for _, p in allParts do
 		table.insert(boxes, { p = p, a = aabb(p) })
 	end
 end
-for _, lm in landmarks do
-	local b = lm.b
-	local topY0 = b.y1 - (b.y1 - 0) * 0.2
-	local nearZ = b.z0
-	local azL = angles(b.x0, 0, nearZ)
-	local azR = angles(b.x1, 0, nearZ)
-	local az0, az1 = math.min(azL, azR), math.max(azL, azR)
-	local cx = (b.x0 + b.x1) / 2
-	local _, elTop = angles(cx, b.y1, nearZ)
-	local _, elLow = angles(cx, topY0, nearZ)
-	-- sample 5 azimuths across the landmark; visible if any sample's top fifth is unblocked
-	local visible = false
-	for k = 0, 4 do
-		local az = az0 + (az1 - az0) * (k + 0.5) / 5
-		local blocked = false
-		for _, bx in boxes do
-			local a = bx.a
-			if a.z1 < nearZ - 1 and a.z0 > EYE.Z and not bx.p:IsDescendantOf(lm.inst) then
-				local zz = math.max(a.z0, EYE.Z + 1)
-				local azA = angles(a.x0, 0, zz)
-				local azB = angles(a.x1, 0, zz)
-				local azC = angles(a.x0, 0, a.z1)
-				local azD = angles(a.x1, 0, a.z1)
-				local lo = math.min(azA, azB, azC, azD)
-				local hi = math.max(azA, azB, azC, azD)
-				if az >= lo and az <= hi then
-					local _, el = angles((a.x0 + a.x1) / 2, a.y1, zz)
-					if el >= elLow + (elTop - elLow) * 0.9 then
-						blocked = true
-						break
-					end
+
+-- lane ground visibility from the platform: sight lines from the eye to lane points in every zone must not
+-- pass through any part taller than 1 stud (arches, gates, decor, landmarks)
+local function rayHitsBox(o, d, a)
+	local tmin, tmax = 0, 1
+	for _, ax in { { "X", "x0", "x1" }, { "Y", "y0", "y1" }, { "Z", "z0", "z1" } } do
+		local oc, dc, lo, hi = o[ax[1]], d[ax[1]], a[ax[2]], a[ax[3]]
+		if math.abs(dc) < 1e-9 then
+			if oc < lo or oc > hi then
+				return false
+			end
+		else
+			local t1, t2 = (lo - oc) / dc, (hi - oc) / dc
+			if t1 > t2 then
+				t1, t2 = t2, t1
+			end
+			tmin, tmax = math.max(tmin, t1), math.min(tmax, t2)
+			if tmin > tmax then
+				return false
+			end
+		end
+	end
+	return true
+end
+local solid = {}
+for _, bx in boxes do
+	if bx.a.y1 > Layout.GroundY + 1 and not bx.p:FindFirstAncestor("FieldEnd") then
+		table.insert(solid, bx)
+	end
+end
+for _, zone in Zones do
+	local z0 = Layout.DistanceToZ(zone.MinDistance)
+	local z1 = Layout.DistanceToZ(zone.MaxDistance)
+	local hidden = 0
+	local samples = 0
+	local blocker
+	for _, fz in { 0.25, 0.5, 0.75 } do
+		for _, x in { -40, 0, 40 } do
+			samples += 1
+			local target = Vector3.new(x, Layout.GroundY + 0.2, z0 + (z1 - z0) * fz)
+			local dir = target - EYE
+			for _, bx in solid do
+				if rayHitsBox(EYE, dir, bx.a) then
+					hidden += 1
+					blocker = bx.p:GetFullName()
+					break
 				end
 			end
 		end
-		if not blocked then
-			visible = true
-			break
-		end
 	end
 	for _, r in rows do
-		if r.id == lm.zone then
-			r.visible = visible
+		if r.id == zone.Id then
+			r.laneSeen = ("%d/%d"):format(samples - hidden, samples)
 		end
 	end
-	if not visible then
-		fail(lm.zone, "landmark is hidden from the platform behind nearer parts")
+	if hidden > 0 then
+		fail(zone.Id, ("%d/%d lane ground points hidden from the platform (e.g. by %s)"):format(hidden, samples, blocker))
+	end
+end
+
+-- landmark visibility from the platform: at least 30% of the sight lines to the parts in the landmark's top
+-- quarter must reach them without passing through a nearer part
+for _, lm in landmarks do
+	local b = lm.b
+	local seen, total = 0, 0
+	-- targets: the centre and top centre of every landmark part in its top quarter
+	local targets = {}
+	for _, p in parts(lm.inst) do
+		local a = aabb(p)
+		if (a.y0 + a.y1) / 2 >= b.y1 * 0.75 then
+			table.insert(targets, Vector3.new((a.x0 + a.x1) / 2, (a.y0 + a.y1) / 2, a.z0 + 0.05))
+			table.insert(targets, Vector3.new((a.x0 + a.x1) / 2, a.y1 - 0.05, a.z0 + 0.05))
+		end
+	end
+	lm.blockers = {}
+	for _, target in targets do
+		total += 1
+		local dir = target - EYE
+		local hit = false
+		for _, bx in solid do
+			if bx.a.z0 < b.z0 and not bx.p:IsDescendantOf(lm.inst) and rayHitsBox(EYE, dir, bx.a) then
+				hit = true
+				lm.blockers[bx.p:GetFullName()] = true
+				break
+			end
+		end
+		if not hit then
+			seen += 1
+		end
+	end
+	local need = math.max(1, math.ceil(total * 0.3))
+	for _, r in rows do
+		if r.id == lm.zone then
+			r.visible = seen >= need
+			r.seenRays = ("%d/%d"):format(seen, total)
+		end
+	end
+	if seen < need then
+		local names = {}
+		for k in lm.blockers do
+			table.insert(names, k)
+		end
+		fail(lm.zone, ("landmark top hidden from the platform (%d/%d sight lines clear; blocked by %s)"):format(seen, total,
+			table.concat(names, ", ", 1, math.min(#names, 3))))
 	end
 end
 
@@ -536,11 +633,11 @@ local function pad(s, n)
 	s = tostring(s)
 	return if #s >= n then s else s .. string.rep(" ", n - #s)
 end
-print(pad("zone", 13) .. pad("ground", 13) .. pad("landmark", 16) .. pad("h", 6) .. pad("seen", 5) .. pad("boundary", 16)
+print(pad("zone", 13) .. pad("ground", 13) .. pad("landmark", 16) .. pad("h", 6) .. pad("seen", 6) .. pad("lane", 5) .. pad("boundary", 16)
 	.. pad("opening", 9) .. pad("decor", 6) .. pad("parts", 6) .. "particles")
 for _, r in rows do
 	print(pad(r.id, 13) .. pad(r.ground or "?", 13) .. pad(r.landmark or "-", 16)
-		.. pad(r.height and string.format("%.0f", r.height) or "-", 6) .. pad(if r.visible then "yes" else "NO", 5)
+		.. pad(r.height and string.format("%.0f", r.height) or "-", 6) .. pad(r.seenRays or "NO", 6) .. pad(r.laneSeen or "-", 5)
 		.. pad(r.boundary or "-", 16) .. pad(r.opening or "-", 9) .. pad(r.decor or 0, 6) .. pad(r.parts or 0, 6)
 		.. (r.particles or ""))
 end
