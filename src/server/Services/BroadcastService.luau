@@ -4,7 +4,6 @@
 -- older than QueueDropAfter are dropped. Payload: {Kind, Text, Rarity?, Variant?, Global}.
 local MessagingService = game:GetService("MessagingService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
@@ -56,9 +55,7 @@ local function pumpQueue()
 end
 
 function BroadcastService.Start()
-	if RunService:IsStudio() then
-		-- MessagingService works in Studio only for published places; failures are harmless.
-	end
+	-- MessagingService only works in published places; in Studio the subscribe fails harmlessly.
 	task.spawn(function()
 		local ok, err = pcall(function()
 			MessagingService:SubscribeAsync(Game.Broadcast.Topic, function(message)

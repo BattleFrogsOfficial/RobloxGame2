@@ -2,7 +2,7 @@ id,zone,rarity,order_in_tier,name,body,scale,coat_primary,coat_secondary,pattern
 forest_c01,Forest,Common,1,Bluetick Coonhound,large_lean,1.23,#69787C,#211C16,ticked,none,none,,256.00,Bays at the moon and at the mailbox.
 forest_c02,Forest,Common,2,Redbone Coonhound,large_lean,1.22,#A04922,#72301E,none,none,none,,256.97,A copper hound with a voice like a trumpet.
 forest_c03,Forest,Common,3,Plott Hound,large_lean,1.29,#60402E,#1E181D,brindle,none,none,,257.93,A striped mountain tracker.
-forest_c04,Forest,Common,4,Treeing Walker Coonhound,large_lean,1.20,#F4EFE9,#B58045,saddle,none,none,,258.90,Chases raccoons up trees and waits forever.
+forest_c04,Forest,Common,4,Treeing Walker Coonhound,large_lean,1.20,#F4EFE9,#1E1A18,saddle,none,none,,258.90,Chases raccoons up trees and waits forever.
 forest_c05,Forest,Common,5,Black and Tan Coonhound,large_lean,1.30,#211918,#B98448,tan_points,none,none,,259.86,"Long ears, longer patience."
 forest_c06,Forest,Common,6,American Foxhound,large_lean,1.29,#BB8446,#F4F3E5,piebald,none,none,,260.83,Runs all day through the hills.
 forest_c07,Forest,Common,7,English Foxhound,large_athletic,1.27,#F5EDE4,#B47E46,saddle,none,none,,261.80,A pack hound who loves company.
@@ -21,27 +21,27 @@ forest_c19,Forest,Common,19,Bavarian Mountain Hound,medium_lean,0.96,#9E4D28,#1C
 forest_c20,Forest,Common,20,Slovensky Kopov,medium_lean,0.97,#1C1919,#8B461C,tan_points,none,none,,274.35,A black-and-tan forest hound.
 forest_c21,Forest,Common,21,Irish Wolfhound,giant,1.85,#9E908A,#898789,none,none,none,,275.32,The tallest dog in the forest and the gentlest.
 forest_c22,Forest,Common,22,Scottish Deerhound,giant,1.70,#505358,#B6B4B6,none,none,none,,276.29,A rough-coated greyhound of the highlands.
-forest_c23,Forest,Common,23,Gordon Setter,large_lean,1.29,#23191D,#8B4721,tan_points,none,none,,277.25,A black-and-tan setter of the Scottish moors.
+forest_c23,Forest,Common,23,Gordon Setter,medium_fluffy,1.15,#23191D,#8B4721,tan_points,none,none,,277.25,A black-and-tan setter of the Scottish moors.
 forest_c24,Forest,Common,24,Large Munsterlander,large_fluffy,1.40,#F2F0E3,#201D18,roan,none,none,,278.22,A black-and-white feathered gundog.
 forest_c25,Forest,Common,25,Small Munsterlander,medium_fluffy,0.98,#F5EFE8,#6B3A2E,roan,none,none,,279.18,A versatile little pointer.
 forest_c26,Forest,Common,26,Kooikerhondje,medium_fluffy,0.85,#F1F0E5,#B45427,piebald,none,none,,280.15,Waves its tail to lure ducks. Has earrings.
-forest_c27,Forest,Common,27,German Spaniel,medium_fluffy,1.05,#6D3E28,#EFEDE5,ticked,none,none,,281.12,A hardy spaniel that flushes from dense cover.
+forest_c27,Forest,Common,27,American Water Spaniel,poodle_type,1.00,#5B3524,#6E4430,none,none,none,,281.12,A curly brown spaniel that loves a cold creek.
 forest_c28,Forest,Common,28,Drentsche Patrijshond,large_athletic,1.26,#F2F1E7,#683B2F,piebald,none,none,,282.08,A Dutch partridge dog.
-forest_c29,Forest,Common,29,Stabyhoun,medium_fluffy,1.03,#1B1D17,#F6F3E4,ticked,none,none,,283.05,A Frisian farm and forest helper.
+forest_c29,Forest,Common,29,Stabyhoun,medium_fluffy,1.03,#C0682E,#F4F0E6,ticked,none,none,,283.05,A Frisian farm and forest helper.
 forest_c30,Forest,Common,30,Clumber Spaniel,long_low,0.95,#EFEDE3,#E3CA87,eye_patch,none,none,,284.02,"A heavy, gentle spaniel that ambles."
 forest_c31,Forest,Common,31,Sussex Spaniel,long_low,0.77,#7C4025,#583722,none,none,none,,284.98,A golden-liver spaniel that hums as it hunts.
 forest_c32,Forest,Common,32,Field Spaniel,medium_fluffy,1.01,#6E382E,#765740,none,none,none,,285.95,A calm spaniel with a silky coat.
-forest_c33,Forest,Common,33,Grand Basset Griffon Vendeen,long_low,0.86,#F1EEE9,#BC7E47,saddle,none,none,,286.91,A tall-for-a-basset bearded hound.
+forest_c33,Forest,Common,33,Grand Basset Griffon Vendeen,long_low,0.86,#F1EEE9,#3A2A20,saddle,none,none,,286.91,A tall-for-a-basset bearded hound.
 forest_c34,Forest,Common,34,Petit Basset Griffon Vendeen,long_low,0.78,#F0EEE4,#836B54,piebald,none,none,,287.88,"Happy, scruffy and always busy."
 forest_c35,Forest,Common,35,Basset Fauve de Bretagne,long_low,0.79,#A8622A,#BB8546,none,none,none,,288.85,A wire-haired fawn hound from Brittany.
 forest_c36,Forest,Common,36,Lagotto Romagnolo,poodle_type,1.12,#D2B688,#F7F3E6,roan,none,none,,289.81,Sniffs out truffles in the oak woods.
 forest_c37,Forest,Common,37,Pudelpointer,large_athletic,1.25,#6A372E,#5B3B26,none,none,none,,290.78,"Poodle brains, pointer nose."
-forest_c38,Forest,Common,38,Bracco Italiano,large_lean,1.28,#F3F2E5,#AA602C,spotted,none,none,,291.74,A noble Italian pointer with droopy lips.
+forest_c38,Forest,Common,38,Bracco Italiano,large_lean,1.28,#F3F2E5,#7A4A2C,roan,none,none,,291.74,A noble Italian pointer with droopy lips.
 forest_c39,Forest,Common,39,Spinone Italiano,large_fluffy,1.38,#EFEEE9,#A9622A,roan,none,none,,292.71,A bearded pointer with soulful eyes.
 forest_c40,Forest,Common,40,Irish Red and White Setter,large_lean,1.18,#F2EFE9,#9D4C27,piebald,none,none,,293.68,Patched in red like autumn leaves.
 forest_c41,Forest,Common,41,Hamiltonstovare,medium_lean,1.01,#BA7F44,#1C171A,saddle,none,none,,294.64,A handsome Swedish tricolour hound.
-forest_c42,Forest,Common,42,Finnish Hound,medium_lean,1.05,#B98546,#F2EBE8,saddle,none,none,,295.61,Hunts hares in the snowy pines.
-forest_c43,Forest,Common,43,Schillerstovare,medium_lean,0.94,#9E4F22,#231B1D,saddle,none,none,,296.57,A fast Swedish hound with a black saddle.
+forest_c42,Forest,Common,42,Porcelaine,medium_lean,1.05,#F7F3EC,#D99A5B,spotted,none,none,,295.61,A glossy white French hound with orange ear spots.
+forest_c43,Forest,Common,43,Dunker,medium_lean,0.94,#7D8691,#B9834A,merle,none,none,,296.57,A blue-marbled Norwegian hare hound.
 forest_c44,Forest,Common,44,Tyrolean Hound,medium_lean,0.99,#A14722,#F5F0E2,blaze,none,none,,297.54,An alpine tracker from Tyrol.
 forest_c45,Forest,Common,45,Jagdterrier,small_terrier,0.82,#1B1B17,#B97E48,tan_points,none,none,,298.51,"A small, fierce hunting terrier."
 forest_c46,Forest,Common,46,Alpine Dachsbracke,long_low,0.83,#9F4826,#1B1F1B,mask,none,none,,299.47,A low-slung mountain tracker.
@@ -49,7 +49,7 @@ forest_c47,Forest,Common,47,Norfolk Terrier,small_terrier,0.66,#7B6D55,#BC8445,n
 forest_c48,Forest,Common,48,Irish Terrier,small_terrier,0.70,#9E4A25,#7F3B21,none,none,none,,301.40,A red-haired daredevil.
 forest_c49,Forest,Common,49,Kerry Blue Terrier,poodle_type,1.10,#6B7480,#4B575F,none,none,none,,302.37,"Born black, turns blue as it grows."
 forest_c50,Forest,Common,50,Mossy Mutt,medium_stocky,1.01,#715743,#836953,ticked,none,none,,303.34,Rolled in moss and liked it.
-forest_c51,Forest,Common,51,Timber Mutt,large_athletic,1.36,#99948A,#B8854A,sable,none,none,,304.30,A logging camp regular.
+forest_c51,Forest,Common,51,Timber Mutt,large_athletic,1.36,#6E5A44,#2A221C,brindle,none,none,,304.30,A logging camp regular.
 forest_c52,Forest,Common,52,Czechoslovakian Wolfdog,large_athletic,1.33,#9C9587,#E8D8B3,mask,none,none,,305.27,"Looks like a wolf, acts like a puppy."
 forest_c53,Forest,Common,53,Hovawart,large_fluffy,1.34,#1F1B1D,#D09A46,tan_points,none,none,,306.23,A courtyard guardian from old German farms.
 forest_c54,Forest,Common,54,Wirehaired Vizsla,large_athletic,1.36,#A56532,#8A491C,none,none,none,,307.20,A bearded copper gundog.
@@ -60,20 +60,20 @@ forest_u04,Forest,Uncommon,4,Birchbark Beagle,medium_lean,1.05,#F0EFE6,#221F1B,t
 forest_u05,Forest,Uncommon,5,Campfire Coonhound,large_lean,1.27,#B8562A,#F2B04A,ember_tips,none,none,,682.67,Sits by the campfire for marshmallows.
 forest_u06,Forest,Uncommon,6,Owl Hoot Hound,large_athletic,1.34,#8A6E4B,#E5D8B9,star_freckles,none,none,,693.33,Hoots back at the owls.
 forest_u07,Forest,Uncommon,7,Glowworm Laika,medium_fluffy,1.11,#9E978C,#D4F27A,star_freckles,none,none,,704.00,Lights up the trail at night. Somehow.
-forest_u08,Forest,Uncommon,8,Mossy Log Dachshund,long_low,0.88,#6B7F3A,#79583C,leaf_dapple,none,none,,714.67,Hides in hollow logs.
+forest_u08,Forest,Uncommon,8,Fallen Log Dachshund,long_low,0.88,#6B7F3A,#79583C,leaf_dapple,none,none,,714.67,Hides in hollow logs.
 forest_u09,Forest,Uncommon,9,Creek Springer,medium_fluffy,1.09,#693E2B,#8FC1D9,wave_stripes,none,none,,725.33,Jumps in every creek on the trail.
-forest_u10,Forest,Uncommon,10,Bramble Bulldog,medium_stocky,0.97,#5D4634,#6E3B5C,zigzag,none,none,,736.00,Bulldozes through the blackberry brambles.
+forest_u10,Forest,Uncommon,10,Badger Den Bulldog,medium_stocky,0.97,#5D4634,#6E3B5C,zigzag,none,none,,736.00,Bulldozes through the brambles to its den.
 forest_u11,Forest,Uncommon,11,Thicket Pug,toy,0.73,#C39763,#3E5B2E,tiger_stripe,none,none,,746.67,"Camouflaged in the bushes, snoring."
-forest_u12,Forest,Uncommon,12,Woodsmoke Wolfhound,giant,1.59,#A7A6A7,#383439,wave_stripes,none,none,,757.33,"Smells like a campfire, always."
+forest_u12,Forest,Uncommon,12,Woodsmoke Wolfhound,giant,1.59,#7A6E66,#D8D2C8,wave_stripes,none,none,,757.33,"Smells like a campfire, always."
 forest_u13,Forest,Uncommon,13,Berry Bush Bichon,small_fluffy,0.73,#F2EEE2,#7A3B8F,polka_dots,none,none,,768.00,Stained purple from eating berries.
-forest_r01,Forest,Rare,1,Lantern Coonhound,large_lean,1.28,#A24726,#EAD4B1,none,lantern,none,,1536.00,Leads the night hike with a swinging lantern.
-forest_r02,Forest,Rare,2,Backpack Basset,long_low,0.89,#B87F4A,#F0EFE8,piebald,backpack,none,,1587.20,Carries trail mix. Low to the ground.
-forest_r03,Forest,Rare,3,Ranger Hat Elkhound,medium_fluffy,1.15,#9B9689,#E9DAB3,none,ranger_hat,none,,1638.40,A forest ranger with a curled tail.
+forest_r01,Forest,Rare,1,Trail Lamp Coonhound,large_lean,1.28,#A24726,#EAD4B1,socks,lantern,none,,1536.00,Leads the night hike with a swinging lantern.
+forest_r02,Forest,Rare,2,Trailhead Basset,long_low,0.89,#231D1A,#C08550,tan_points,backpack,none,,1587.20,Carries trail mix. Low to the ground.
+forest_r03,Forest,Rare,3,Ranger Hat Elkhound,medium_fluffy,1.15,#57524D,#D9CBA6,saddle,ranger_hat,none,,1638.40,A forest ranger with a curled tail.
 forest_r04,Forest,Rare,4,Beanie Spinone,large_fluffy,1.45,#A66532,#F6EEE7,ticked,beanie,none,,1689.60,Ready for chilly mornings in the woods.
-forest_r05,Forest,Rare,5,Leaf Wreath Lagotto,poodle_type,1.08,#D3B286,#6E8B3D,none,leaf_wreath,none,,1740.80,Wears a crown of oak leaves.
-forest_r06,Forest,Rare,6,Hoodie Hovawart,large_fluffy,1.47,#1D1A18,#D29C42,none,hoodie,none,,1792.00,"Hood up, ready for the trail."
-forest_r07,Forest,Rare,7,Monocle Munster,medium_fluffy,1.04,#F5ECE3,#69372B,spotted,monocle,none,,1843.20,Inspects every leaf very closely.
-forest_e01,Forest,Epic,1,Hermit Mossbeard,large_fluffy,1.56,#4F6B3A,#C9D8A0,leaf_dapple,wizard_hat,sparkle,,3840.00,Lives in a hollow tree and brews herbal tea.
+forest_r05,Forest,Rare,5,Leaf Wreath Lagotto,poodle_type,1.08,#6E4A32,#6E8B3D,none,leaf_wreath,none,,1740.80,Wears a crown of oak leaves.
+forest_r06,Forest,Rare,6,Hiker Hovawart,large_fluffy,1.47,#D9B26A,#F2E3BE,none,hoodie,none,,1792.00,"Hood up, ready for the trail."
+forest_r07,Forest,Rare,7,Bookworm Munsterlander,medium_fluffy,1.04,#6B3A2B,#F5ECE3,spotted,monocle,none,,1843.20,Inspects every leaf very closely.
+forest_e01,Forest,Epic,1,Hermit Burdock,large_fluffy,1.56,#4F6B3A,#C9D8A0,leaf_dapple,wizard_hat,sparkle,,3840.00,Lives in a hollow tree and brews herbal tea.
 forest_e02,Forest,Epic,2,Baron Bramblethorn,medium_lean,1.14,#5B2E4A,#D7A6C9,zigzag,royal_collar,sparkle,,4224.00,Owns all the blackberry bushes. Shares none.
 forest_e03,Forest,Epic,3,Lady Fernwhistle,small_terrier,0.89,#6FA35A,#F4EBD0,star_freckles,crystal_tiara,sparkle,,4608.00,Whistles and the ferns uncurl.
 forest_l01,Forest,Legendary,1,Mossmantle,giant_fluffy,1.91,#3D5A2E,#9CC36B,moss_velvet,none,aura,,12800.00,A coat so mossy that birds nest in it.

@@ -27,7 +27,7 @@ Timers.RunawaySeconds = 60 -- runaway dog roams the plaza this long
 Timers.WhistleWindow = 60 -- whistle usable from the miss until the runaway leaves (>= RunawaySeconds)
 
 Timers.OfflineCapSeconds = 2 * 3600
-Timers.OfflineRate = 1.0
+Timers.OfflineRate = 0.5
 
 Timers.AutosaveInterval = 60
 Timers.SessionLockStale = 10 * 60

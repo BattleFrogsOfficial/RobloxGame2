@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch Legends dog roster tool.
+"""Throw a Ball for Dogs dog roster tool.
 
 Usage:
     python3 tools/roster.py check   # validate data/zones/*.csv, nonzero exit on failure
@@ -8,7 +8,7 @@ Usage:
 Source of truth: data/zones/<ZoneId>.csv (80 rows per zone).
 Zone base incomes are parsed from src/shared/Config/Zones.luau and rarity numbers
 from src/shared/Config/Rarities.luau, so a balance pass there flows through on rebuild
-(re-run data/authoring/author.py or edit the income column, then check).
+(edit the income column, then check).
 """
 from __future__ import annotations
 
@@ -500,23 +500,14 @@ def build_luau(rows, zones):
     w("local ByZoneRarity: { [string]: { [string]: { Dog } } } = {}")
     w("for _, dog in list do")
     w("\tById[dog.Id] = dog")
-    w("\tlocal zoneList = ByZone[dog.Zone]")
-    w("\tif zoneList == nil then")
-    w("\t\tzoneList = {}")
-    w("\t\tByZone[dog.Zone] = zoneList")
-    w("\tend")
-    w("\ttable.insert(zoneList :: { Dog }, dog)")
-    w("\tlocal byRarity = ByZoneRarity[dog.Zone]")
-    w("\tif byRarity == nil then")
-    w("\t\tbyRarity = {}")
-    w("\t\tByZoneRarity[dog.Zone] = byRarity")
-    w("\tend")
-    w("\tlocal tierList = (byRarity :: { [string]: { Dog } })[dog.Rarity]")
-    w("\tif tierList == nil then")
-    w("\t\ttierList = {}")
-    w("\t\t(byRarity :: { [string]: { Dog } })[dog.Rarity] = tierList")
-    w("\tend")
-    w("\ttable.insert(tierList :: { Dog }, dog)")
+    w("\tlocal zoneList: { Dog } = ByZone[dog.Zone] or {}")
+    w("\tByZone[dog.Zone] = zoneList")
+    w("\ttable.insert(zoneList, dog)")
+    w("\tlocal byRarity: { [string]: { Dog } } = ByZoneRarity[dog.Zone] or {}")
+    w("\tByZoneRarity[dog.Zone] = byRarity")
+    w("\tlocal tierList: { Dog } = byRarity[dog.Rarity] or {}")
+    w("\tbyRarity[dog.Rarity] = tierList")
+    w("\ttable.insert(tierList, dog)")
     w("end")
     w("")
     w("local module: any = list")

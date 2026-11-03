@@ -1,4 +1,4 @@
-# Fetch Legends — Game Design Document
+# Throw a Ball for Dogs — Game Design Document
 
 > Working title. The display name lives in `src/shared/Config/Game.luau` (`Name`). It must never be the name of an existing Roblox game, a real brand or a real character.
 >
@@ -299,15 +299,15 @@ Rules:
 
 ## 11. Ball tiers
 
-Balls are **permanent owned tiers**. You buy one once, then equip any you own (`EquipBall`). **[tunable: Config/Balls.luau]** (values proposed):
+Balls are **permanent owned tiers**. You buy one once, then equip any you own (`EquipBall`). **[tunable: Config/Balls.luau]** (values after the balance pass, see docs/qa/BALANCE.md):
 
 | Ball | RangeMult | Luck shift | Price (proposed) | Unlock feel |
 |------|-----------|------------|------------------|-------------|
 | Tennis | 1.00 | 0 | free | starter |
-| Rubber | 1.25 | +0.10 | $500 | Park → Beach |
-| Frisbee | 1.50 | +0.20 | $25,000 | Farm → Forest |
-| Glow | 1.75 | +0.35 | $2.5M | Snowy → City |
-| Golden | 2.00 | +0.50 | $250M | Space → Meadow |
+| Rubber | 1.25 | +0.10 | $500 | Park → Beach (~3 min) |
+| Flying Disc | 1.50 | +0.20 | $50,000 | Beach → Farm (~15 min) |
+| Glow | 1.75 | +0.35 | $5M | Farm → Forest/Snowy (~1 h) |
+| Golden | 2.00 | +0.50 | $3B | Snowy → City and beyond (~3 h) |
 
 To reach Mythic Meadow (2,500 studs) with a Golden ball on a Perfect throw needs ThrowPower ≥ 1,250. With a Tennis ball it needs 2,500, so the balls matter.
 
@@ -319,12 +319,12 @@ ThrowPower is the grind stat. It is permanent, never resets (there is no rebirth
 
 | Station (`StationId`) | Interaction | Gain per rep (proposed) | Cost | Server cooldown |
 |-----------------------|-------------|-------------------------|------|-----------------|
-| PullUpBar | click / tap reps | +1 × TrainMult | free | 0.5 s |
-| ThrowingMachine | timed rep (mini meter) | +4 × TrainMult | cash per rep, scales with ThrowPower | 1.0 s |
+| PullUpBar | click / tap reps | +0.5 × TrainMult | free | 0.5 s |
+| ThrowingMachine | timed rep (mini meter) | +3 × TrainMult | cash per rep, scales with ThrowPower | 1.0 s |
 | Sprint | run a lap around the plaza track, checkpoints validated by the server | +12 × TrainMult | free | per lap |
 
 - Starting ThrowPower is 60 (proposed). That gives a Tennis-ball Backyard throw of up to 60 studs, and Park becomes reachable after a few minutes of reps or with a Rubber ball.
-- `TrainMult` comes from training upgrades sold at the Yard/Training shop. These are cash sinks that scale ×1.5 per level (proposed).
+- Training upgrades (cash, `Training.UpgradeCost`: $50 × 2.6^(level-1)) do two things: raise the **power cap** (`Training.Upgrades.Caps`, 100 at level 0 up to 2,000 at level 29) and multiply rep gains (`TrainMult` = 1.03^level). Reps cannot push ThrowPower past the cap, so each upgrade is the gate to the next zone and reps are the short grind (~20-70 s of pull-ups) that fills it. Without the cap, free pull-ups alone cleared the whole field within minutes (balance pass, docs/qa/BALANCE.md). The HUD shows "Power X/cap" while below the cap.
 - The first training purchase is part of the FTUE (section 19).
 - Anti-autofarm: see section 21.4.
 
@@ -396,7 +396,7 @@ You claim it once per UTC day at the plaza's walk sign (`ClaimDailyWalk`). The r
 
 ### 14.4 Offline earnings
 
-On join, `min(now - lastSeen, 2 h) × current $/s` (proposed 100% rate; **[tunable: Config/Timers.luau → OfflineCapSeconds / OfflineRate]**). It is shown in a "While you were away" toast. Puppy growth also continues offline, uncapped.
+On join, `min(now - lastSeen, 2 h) × current $/s × 0.5` (50% rate after the balance pass, so a full 2 h away pays 1 h of income; **[tunable: Config/Timers.luau → OfflineCapSeconds / OfflineRate]**). It is shown in a "While you were away" toast. Puppy growth also continues offline, uncapped.
 
 ---
 
@@ -437,7 +437,7 @@ On join, `min(now - lastSeen, 2 h) × current $/s` (proposed 100% rate; **[tunab
 | Squirrel won | server | "X's dog caught the squirrel!" |
 
 - Sent through the `Broadcast` remote with `{Kind, Text, Rarity?, Variant?, Global}`. The text is coloured by rarity in a top-centre ticker and the chat system channel.
-- Cross-server uses `MessagingService` topic `FetchLegends_Broadcast` (proposed). It is throttled to stay well under the MessagingService publish limits: at most one publish per server per 2 s, and excess is queued and dropped after 30 s.
+- Cross-server uses `MessagingService` topic `ThrowABallForDogs_Broadcast` (proposed). It is throttled to stay well under the MessagingService publish limits: at most one publish per server per 2 s, and excess is queued and dropped after 30 s.
 - Spectators see every other player's throw as a **park-view banner** (section 20.5), so the server feels alive.
 - The plaza `Leaderboard` (SurfaceGui `List`) ranks players in the server by total $/s, with optional rarest catch.
 
@@ -633,7 +633,7 @@ Anti-autofarm measures:
 
 ## 22. Data storage
 
-- **DataStore:** `FetchLegends_Player_v1`, key `u_<UserId>`, with session locking: a lock field with JobId and timestamp, taken over if stale for more than 10 min. The ProfileService pattern is implemented in-house with no external dependency.
+- **DataStore:** `ThrowABallForDogs_Player_v1`, key `u_<UserId>`, with session locking: a lock field with JobId and timestamp, taken over if stale for more than 10 min. The ProfileService pattern is implemented in-house with no external dependency.
 - **Schema** = `PlayerState` (see `Remotes.luau`) + `LastSeen`, `CommonCutscenesSeen`, `Settings` (KeepDupes per rarity, TreatPocket mode), `Titles`, `Version` (for migrations).
 - **Dogs:** an array of `{Uid, DogId, Variant?, BornAt, GrownAt, Displayed}`. Uid is a GUID. Store `DogId`, never computed income, so tuning income re-prices everyone automatically.
 - **Book:** `{[DogId] = {Variants}}`. That is at most 720 keys plus variant lists, comfortably under the 4 MB key limit.

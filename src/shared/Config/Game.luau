@@ -2,7 +2,7 @@
 -- Global game config. Owned by C1 (server); the Balance pass may tune numbers but not rename keys.
 local Game = {}
 
-Game.Name = "Fetch Legends" -- working title; original IP
+Game.Name = "Throw a Ball for Dogs"
 -- Public servers hold 6 players: one yard + one throw pad each. Set Max Players = 6 in
 -- Game Settings > Places; the server assumes <= Layout.Yards.Count players.
 Game.MaxPlayers = 6
@@ -45,7 +45,7 @@ Game.Throw = {
 	MinDistance = 5,
 	RequireOnPad = true,
 	PadRadius = 18, -- studs (XZ) from the pad centre
-	LateralScatter = 40, -- landing X = pad X + U(-n, n), clamped into the field
+	LateralScatter = 40, -- landing X = 0.5 x pad X + 0.5 x U(-n, n), clamped into the clear centre lane (|x| <= 56)
 }
 
 -- Luck: every non-Common tier's odds are multiplied by (1 + Luck); Common absorbs the difference.
@@ -63,7 +63,7 @@ Game.Broadcast = {
 	CatchGlobalMin = "Legendary",
 	MissServerMin = "Epic",
 	MissGlobalMin = "Legendary",
-	Topic = "FetchLegends_Broadcast",
+	Topic = "ThrowABallForDogs_Broadcast",
 	MinPublishInterval = 2, -- seconds between cross-server publishes per server
 	QueueDropAfter = 30, -- queued global messages older than this are dropped
 }

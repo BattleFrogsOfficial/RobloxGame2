@@ -22,7 +22,7 @@ local PlayerStats = require(Util:WaitForChild("PlayerStats"))
 
 local DataService = {}
 
-local STORE_NAME = "FetchLegends_Player_v1"
+local STORE_NAME = "ThrowABallForDogs_Player_v1"
 local CURRENT_VERSION = 1
 local LOAD_ATTEMPTS = 6
 local SAVE_ATTEMPTS = 4
@@ -61,7 +61,7 @@ function DataService.DefaultState(): any
 		EquippedBall = Balls.Default,
 		SlotCount = Shop.Slots.Start,
 		Dogs = {}, -- { {Uid, DogId, Variant?, BornAt, GrownAt, Displayed?, Locked?, Held?, PendingSale?} }
-		Book = {}, -- [DogId] = { Count, FirstAt, Variants = { [variant] = true } }
+		Book = {}, -- [DogId] = { Count, FirstAt, Variants = { "Gold", ... } } (array; BookService.Record)
 		BookRewards = {}, -- [ZoneId] = { ["25"] = true, ... } (string keys: DataStore/remote safe)
 		Boosts = {}, -- [boostId] = expiresAt (os.time)
 		Whistles = 0,
@@ -481,7 +481,7 @@ local function onPlayerAdded(player: Player)
 	end
 	if not ok then
 		sessions[player] = nil
-		player:Kick("Fetch Legends couldn't load your save (it may still be open on another server). Please rejoin in a minute.")
+		player:Kick("Throw a Ball for Dogs couldn't load your save (it may still be open on another server). Please rejoin in a minute.")
 		return
 	end
 	local state = if type(data) == "table" then data else DataService.DefaultState()
@@ -499,8 +499,9 @@ local function onPlayerRemoving(player: Player)
 	if not session then
 		return
 	end
+	local alreadyReleased = session.Leaving -- BindToClose already ran the callbacks + final save
 	session.Leaving = true
-	if session.Loaded then
+	if session.Loaded and not alreadyReleased then
 		for _, fn in releasingCallbacks do
 			local ok, err = pcall(fn, player, session.State)
 			if not ok then
@@ -560,12 +561,25 @@ function DataService.Start()
 						pcall(fn, player, s.State)
 					end
 					saveSession(player, true)
+					if sessions[player] == s then
+						sessions[player] = nil
+					end
 					pending -= 1
 				end)
 			end
 		end
+		-- Also wait for saves already started by PlayerRemoving (they clear sessions[player] when done).
+		local function leavingSaves(): number
+			local n = 0
+			for _, s in sessions do
+				if s.Loaded and s.Leaving then
+					n += 1
+				end
+			end
+			return n
+		end
 		local deadline = os.clock() + 25
-		while pending > 0 and os.clock() < deadline do
+		while (pending > 0 or leavingSaves() > 0) and os.clock() < deadline do
 			task.wait(0.1)
 		end
 	end)

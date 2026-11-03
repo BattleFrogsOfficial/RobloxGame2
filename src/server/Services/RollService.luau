@@ -12,7 +12,7 @@ local Rng = require(Util:WaitForChild("Rng"))
 local Odds = require(Util:WaitForChild("Odds"))
 local DogCatalog = require(Util:WaitForChild("DogCatalog"))
 
-type Rng = Rng.Rng
+type RngT = Rng.Rng
 
 export type ResolveCtx = {
 	ZoneId: string,
@@ -41,19 +41,19 @@ local RollService = {}
 
 RollService.NewRng = Rng.new
 
-function RollService.RollTier(rng: Rng, luck: number, available: { string }?): string
+function RollService.RollTier(rng: RngT, luck: number, available: { string }?): string
 	local odds = Odds.TierOdds(luck, available)
 	return rng:Weighted(Rarities.Order, odds) or (available and available[1]) or "Common"
 end
 
-function RollService.PickDog(rng: Rng, list: { any }): any?
+function RollService.PickDog(rng: RngT, list: { any }): any?
 	if #list == 0 then
 		return nil
 	end
 	return rng:Pick(list)
 end
 
-function RollService.RollVariant(rng: Rng, rarity: string): string?
+function RollService.RollVariant(rng: RngT, rarity: string): string?
 	if rarity == "Common" then
 		return nil
 	end
@@ -67,7 +67,7 @@ function RollService.RollVariant(rng: Rng, rarity: string): string?
 end
 
 -- Returns caught, displayed chance, luckyStreakTriggered.
-function RollService.RollCatch(rng: Rng, rarity: string, catchBonus: number, luckyStreak: number,
+function RollService.RollCatch(rng: RngT, rarity: string, catchBonus: number, luckyStreak: number,
 	forced: boolean?): (boolean, number, boolean)
 	local chance = Odds.CatchChance(rarity, catchBonus)
 	if forced then
@@ -99,7 +99,7 @@ function RollService.ShouldUseTreat(mode: string?, rarity: string): boolean
 	return true -- "Always" / default
 end
 
-function RollService.Resolve(rng: Rng, ctx: ResolveCtx): Outcome
+function RollService.Resolve(rng: RngT, ctx: ResolveCtx): Outcome
 	local lists = ctx.ZoneTierLists
 	local available: { string } = {}
 	for _, tier in Rarities.Order do

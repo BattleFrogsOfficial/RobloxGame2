@@ -175,6 +175,21 @@ end
 function PlayerStats.Compute(state: any, ctx: Ctx?): { [string]: any }
 	local luck, luckSources = PlayerStats.Luck(state, ctx)
 	local catchBonus, catchSources = PlayerStats.CatchBonus(state, ctx)
+	-- A banked premium throw is spent automatically on the next (non-tutorial) throw, so the posted odds
+	-- include it exactly as ThrowService applies it: luck lifted to the Golden ball's, +catch unless a
+	-- Sticky Ball is already active.
+	if (state.PremiumThrows or 0) > 0 and state.TutorialThrowDone == true then
+		local asBall = Balls.ById[Shop.PremiumThrow.LuckAsBall]
+		local extraLuck = math.max(0, asBall.Luck - PlayerStats.Ball(state).Luck)
+		if extraLuck > 0 then
+			luck += extraLuck
+			table.insert(luckSources, { Name = "Premium throw", Amount = extraLuck })
+		end
+		if not table.find(PlayerStats.ActiveBoosts(state, ctx), "StickyBall") then
+			catchBonus += Shop.PremiumThrow.CatchBonus
+			table.insert(catchSources, { Name = "Premium throw", Amount = Shop.PremiumThrow.CatchBonus })
+		end
+	end
 	local income = PlayerStats.IncomePerSec(state, ctx)
 	local catchChances: { [string]: number } = {}
 	for _, tier in Rarities.Order do
@@ -224,6 +239,7 @@ function PlayerStats.Compute(state: any, ctx: Ctx?): { [string]: any }
 		DogsHeld = held,
 		Puppies = puppies,
 		TrainMult = Training.Mult(level),
+		PowerCap = Training.PowerCap(level),
 		Prices = prices,
 		ActiveBoosts = PlayerStats.ActiveBoosts(state, ctx),
 		LuckyStreakArmed = (state.LuckyStreak or 0) >= Rarities.LuckyStreakMisses,
