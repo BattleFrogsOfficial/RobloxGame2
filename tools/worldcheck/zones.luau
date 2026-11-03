@@ -726,14 +726,20 @@ local function rayHitsBox(o, d, a)
 end
 -- ground of each zone: sight lines from the platform camera to points spread over the zone's plot must first hit
 -- something of THAT zone (its ground, cover, props, boundary or landmark), not a nearer zone's props
-local zoneOfPart = {}
-for _, zone in Zones do
-	local zf = fieldFolder:FindFirstChild(zone.Id)
-	if zf then
-		for _, p in parts(zf) do
-			zoneOfPart[p] = zone.Id
+local function zoneOf(p, a)
+	local cur = p
+	while cur.Parent and cur.Parent ~= fieldFolder do
+		cur = cur.Parent
+	end
+	if cur.Name == "DistanceMarkers" then -- a marker sign belongs to the zone it stands in
+		local zc = (a.z0 + a.z1) / 2 - Layout.ThrowLine.Z
+		for _, zone in Zones do
+			if zc >= zone.MinDistance and zc < zone.MaxDistance then
+				return zone.Id
+			end
 		end
 	end
+	return cur.Name
 end
 local hitAll = {}
 for _, p in allParts do
@@ -771,23 +777,53 @@ for _, zone in Zones do
 			samples += 1
 			local target = Vector3.new(x, Layout.GroundY - 0.05, z0 + (z1 - z0) * fz)
 			local dir = target - EYE
-			local best, bestP = math.huge, nil
+			local best, bestB = math.huge, nil
 			for _, bx in hitAll do
 				if not bx.p:HasTag("ZoneBand") and bx.a.z1 > EYE.Z then
 					local t = firstT(EYE, dir, bx.a)
 					if t and t < best then
-						best, bestP = t, bx.p
+						best, bestB = t, bx
 					end
 				end
 			end
-			if bestP == nil or zoneOfPart[bestP] == zone.Id then
+			local hitZone = if bestB then zoneOf(bestB.p, bestB.a) else zone.Id
+			if hitZone == zone.Id then
 				own += 1
+			elseif process.env.ZDEBUG then
+				print(("  [%s] sight (%d, %.0f) first hits %s"):format(zone.Id, x, target.Z, bestB.p:GetFullName()))
 			end
 		end
 	end
 	rowById[zone.Id].groundSeen = ("%d/%d"):format(own, samples)
-	if own / samples < 0.6 then
+	-- beyond ~1000 studs the sight lines graze the ground (about 8 studs up over the zone before), so far zones
+	-- are told apart by their prop tops + landmark instead (checked below)
+	if zone.MinDistance < 1000 and own / samples < 0.6 then
 		fail(zone.Id, ("only %d/%d platform sight lines into the zone land on the zone itself"):format(own, samples))
+	end
+	-- prop tops: at least half of the zone's props must show their top to the platform camera
+	local seenTops, tops = 0, 0
+	for _, pr in allProps do
+		if pr.zone == zone.Id then
+			tops += 1
+			local target = Vector3.new((pr.b.x0 + pr.b.x1) / 2, pr.b.y1 - 0.1, (pr.b.z0 + pr.b.z1) / 2)
+			local dir = target - EYE
+			local best, bestB = math.huge, nil
+			for _, bx in hitAll do
+				if not bx.p:HasTag("ZoneBand") and bx.a.z1 > EYE.Z then
+					local t = firstT(EYE, dir, bx.a)
+					if t and t < best - 1e-3 then
+						best, bestB = t, bx
+					end
+				end
+			end
+			if bestB == nil or zoneOf(bestB.p, bestB.a) == zone.Id then
+				seenTops += 1
+			end
+		end
+	end
+	rowById[zone.Id].topsSeen = ("%d/%d"):format(seenTops, tops)
+	if tops > 0 and seenTops / tops < 0.5 then
+		fail(zone.Id, ("only %d/%d prop tops are visible from the platform camera"):format(seenTops, tops))
 	end
 end
 -- landmark tops: >= 30% of the sight lines to the parts in the top quarter must be clear
@@ -886,12 +922,12 @@ local function f1(v)
 end
 print(pad("zone", 13) .. pad("ground", 13) .. pad("cover", 6) .. pad("/1k", 5) .. pad("props", 6) .. pad("kinds", 6)
 	.. pad("gap", 6) .. pad("fixed", 6) .. pad("landmark", 15) .. pad("h", 5) .. pad("seen", 7) .. pad("grnd", 6)
-	.. pad("boundary", 10) .. pad("bh", 5) .. pad("parts", 6) .. "particles")
+	.. pad("tops", 6) .. pad("boundary", 10) .. pad("bh", 5) .. pad("parts", 6) .. "particles")
 for _, r in rows do
 	print(pad(r.id, 13) .. pad(r.ground or "?", 13) .. pad(r.cover or 0, 6) .. pad(f1(r.density), 5) .. pad(r.props or 0, 6)
 		.. pad(r.kinds or 0, 6) .. pad(f1(r.minGap), 6) .. pad(f1(r.minFixed), 6) .. pad(r.landmark or "-", 15)
 		.. pad(r.height and string.format("%.0f", r.height) or "-", 5) .. pad(r.seenRays or "NO", 7) .. pad(r.groundSeen or "-", 6)
-		.. pad(r.boundary or "-", 10) .. pad(f1(r.bheight), 5) .. pad(r.parts or 0, 6) .. (r.particles or ""))
+		.. pad(r.topsSeen or "-", 6) .. pad(r.boundary or "-", 10) .. pad(f1(r.bheight), 5) .. pad(r.parts or 0, 6) .. (r.particles or ""))
 end
 print("landmark footprints:")
 for _, r in rows do

@@ -4,8 +4,12 @@
 -- so CLIENT-SIDE use is purely local (Transform never replicates).
 --
 --   local anim = DogAnimator.new(model, { AlwaysAnimate = true })
---   anim:Play("idle" | "run" | "bolt" | "sit")     looping states
---   anim:PlayOnce("leap" | "catch" | "fumble", seconds?)   one-shot; YIELDS, then returns to the loop state
+--   anim:Play("idle" | "run" | "bolt" | "sit" | "hop")     looping states
+--   anim:PlayOnce("leap" | "catch" | "fumble" | "sniff" | "look" | "pickup", seconds?)   one-shot; YIELDS, then
+--                                                    returns to the loop state
+--   anim:StartOnce(state, seconds?)                  same one-shot without yielding (cutscene timelines)
+--   anim.LookYaw / anim.LookPitch (radians)          where the "look" one-shot turns the head (e.g. at the camera)
+--   anim.HopRate (hops per second)                   pace of the "hop" loop
 --   anim:Destroy()
 --
 -- Root motion (moving the whole model across the ground) is the caller's job (PivotTo); the animator
@@ -15,8 +19,8 @@ local RunService = game:GetService("RunService")
 local DogAnimator = {}
 DogAnimator.__index = DogAnimator
 
-export type LoopState = "idle" | "run" | "bolt" | "sit"
-export type OnceState = "leap" | "catch" | "fumble"
+export type LoopState = "idle" | "run" | "bolt" | "sit" | "hop"
+export type OnceState = "leap" | "catch" | "fumble" | "sniff" | "look" | "pickup"
 
 type Motors = {
 	Root: Motor6D?,
@@ -41,10 +45,13 @@ export type Animator = typeof(setmetatable({} :: {
 	Speed: number,
 	AlwaysAnimate: boolean,
 	Destroyed: boolean,
+	LookYaw: number,
+	LookPitch: number,
+	HopRate: number,
 }, DogAnimator))
 
 DogAnimator.CullDistance = 220 -- studs; farther dogs freeze (unless AlwaysAnimate)
-DogAnimator.Lengths = { leap = 0.9, catch = 0.8, fumble = 1.1 }
+DogAnimator.Lengths = { leap = 0.9, catch = 0.8, fumble = 1.1, sniff = 0.6, look = 0.6, pickup = 0.4 }
 
 local active: { [Animator]: boolean } = {}
 local conn: RBXScriptConnection? = nil
@@ -201,6 +208,52 @@ Poses.fumble = function(self, t, p)
 	secondary(self, t, 4, 0.15, 0.6, 0.3)
 end
 
+-- Bounding hops (the cutscene dog arriving / leaving): the whole body arcs, legs tuck in the air.
+Poses.hop = function(self, t, _p)
+	local ph = t * math.pi * self.HopRate
+	local air = math.abs(math.sin(ph))
+	setT(self.Motors.Root, CFrame.new(0, air * 0.9 * self.Scale, 0) * CFrame.Angles(math.cos(ph) * 0.18, 0, 0))
+	necks(self, function(i)
+		return CFrame.Angles(-0.1 + math.sin(ph * 2 + i) * 0.06, 0, 0)
+	end)
+	local tuck = air * 0.8
+	legs(self, -tuck, -tuck * 0.9, tuck, tuck * 0.9)
+	secondary(self, t, 14, 0.5, 0.35, 0.7)
+end
+
+-- Nose down to the ball, small quick sniffs.
+Poses.sniff = function(self, t, p)
+	local down = smooth(math.min(p * 4, 1)) * (1 - smooth((p - 0.85) / 0.15))
+	setT(self.Motors.Root, CFrame.new(0, -0.15 * down * self.Scale, 0) * CFrame.Angles(0.12 * down, 0, 0))
+	necks(self, function(i)
+		return CFrame.Angles(0.75 * down + math.sin(t * 22 + i) * 0.06 * down, math.sin(t * 3 + i) * 0.15 * down, 0)
+	end)
+	legs(self, 0.15 * down, 0.15 * down, 0, 0)
+	secondary(self, t, 4, 0.12, 0.05, 0)
+end
+
+-- Turn the head toward (LookYaw, LookPitch) and hold (looking at the camera).
+Poses.look = function(self, t, p)
+	local k = smooth(math.min(p * 3, 1))
+	setT(self.Motors.Root, CFrame.new())
+	necks(self, function(_i)
+		return CFrame.Angles(-self.LookPitch * k, self.LookYaw * k, 0)
+	end)
+	legs(self, 0, 0, 0, 0)
+	secondary(self, t, 2, 0.05, 0.25 * k, 0)
+end
+
+-- Dip the head to the ground and come back up (picking up the ball).
+Poses.pickup = function(self, t, p)
+	local dip = math.sin(math.pi * math.clamp(p, 0, 1))
+	setT(self.Motors.Root, CFrame.new(0, -0.2 * dip * self.Scale, 0) * CFrame.Angles(0.2 * dip, 0, 0))
+	necks(self, function(_i)
+		return CFrame.Angles(0.9 * dip, 0, 0)
+	end)
+	legs(self, 0.25 * dip, 0.25 * dip, -0.1 * dip, -0.1 * dip)
+	secondary(self, t, 16, 0.6, 0.3, 0.5)
+end
+
 local function cameraPos(): Vector3?
 	local cam = workspace.CurrentCamera
 	return if cam then cam.CFrame.Position else nil
@@ -260,6 +313,9 @@ function DogAnimator.new(model: Model, opts: { AlwaysAnimate: boolean?, Speed: n
 		Speed = (opts and opts.Speed) or 1,
 		AlwaysAnimate = (opts and opts.AlwaysAnimate) == true,
 		Destroyed = false,
+		LookYaw = 0,
+		LookPitch = 0,
+		HopRate = 2.4,
 	}, DogAnimator)
 	active[self] = true
 	ensureLoop()
@@ -280,6 +336,13 @@ function DogAnimator.PlayOnce(self: Animator, state: OnceState, seconds: number?
 	if self.Once == state then
 		self.Once = nil
 	end
+end
+
+-- One-shot that does not yield: the pose plays for `seconds`, then the loop state resumes.
+function DogAnimator.StartOnce(self: Animator, state: OnceState, seconds: number?)
+	self.Once = state
+	self.OnceStart = os.clock()
+	self.OnceLength = math.max(0.05, seconds or (DogAnimator.Lengths :: any)[state] or 1)
 end
 
 function DogAnimator.Reset(self: Animator)

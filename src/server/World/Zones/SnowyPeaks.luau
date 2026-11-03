@@ -102,7 +102,7 @@ return function(ctx: any)
 		Kit.Flat(P, g, "IceSheet", cx - 26, cx + 26, cz - 16, cz + 16, Y + 0.04, rgb(200, 228, 250), Enum.Material.Ice)
 	end
 
-	-- props (32)
+	-- props (34)
 	Kit.PlaceAll(ctx, {
 		{ Name = "Pine", Count = 11, R = 6, Tall = true, Build = function(c, m, pos)
 			P.Pine(m, pos, rng:NextNumber(1.1, 1.6), D.Pine, rgb(100, 70, 50), D.Snow)
@@ -113,8 +113,8 @@ return function(ctx: any)
 				Vector3.new(rng:NextNumber(8, 11), 3, rng:NextNumber(4, 6)), D.Snow, Enum.Material.Snow)
 		end },
 		{ Name = "Snowman", Count = 5, R = 2.4, Build = snowman },
-		{ Name = "Boulder", Count = 2, R = 3.5, Build = boulder },
-		{ Name = "IceRock", Count = 5, R = 3, Build = iceRock },
+		{ Name = "Boulder", Count = 3, R = 3.5, Build = boulder },
+		{ Name = "IceRock", Count = 6, R = 3, Build = iceRock },
 		{ Name = "Sled", Count = 2, R = 3, Build = sled },
 	})
 

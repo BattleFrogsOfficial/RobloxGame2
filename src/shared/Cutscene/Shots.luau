@@ -24,6 +24,24 @@ local function flat(v: Vector3, fallback: Vector3?): Vector3
 end
 Shots.Flat = flat
 
+-- CFrame looking from `pos` at `target` (same result as CFrame.lookAt, built with fromMatrix so the Lune test
+-- runtime, whose lookAt differs, computes the same frames as Roblox).
+local function lookAt(pos: Vector3, target: Vector3): CFrame
+	local d = target - pos
+	if d.Magnitude < 1e-6 then
+		return CFrame.new(pos)
+	end
+	local look = d.Unit
+	local right = look:Cross(UP)
+	if right.Magnitude < 1e-4 then
+		right = Vector3.new(1, 0, 0)
+	end
+	right = right.Unit
+	local up = right:Cross(look)
+	return CFrame.fromMatrix(pos, right, up, -look)
+end
+Shots.LookAt = lookAt
+
 local function smooth(x: number): number
 	local k = math.clamp(x, 0, 1)
 	return k * k * (3 - 2 * k)
@@ -41,7 +59,7 @@ function Shots.Front(root: Vector3, facing: Vector3): CFrame
 	local left = UP:Cross(fwd) -- facing +Z => left is +X... (player's left when looking along fwd)
 	local pos = root + fwd * w.FrontDistance + left * w.FrontSide + UP * w.FrontHeight
 	local face = root + UP * w.LookHeight
-	return CFrame.lookAt(pos, face)
+	return lookAt(pos, face)
 end
 
 local function yawOf(v: Vector3): number
@@ -84,7 +102,7 @@ function Shots.Sweep(startCF: CFrame, root: Vector3, facing: Vector3, alpha: num
 	if (look - pos).Magnitude < 1e-3 then
 		look = faceLook
 	end
-	return CFrame.lookAt(pos, look)
+	return lookAt(pos, look)
 end
 
 Shots.YawOf = yawOf
@@ -97,7 +115,7 @@ function Shots.Pov(ballPos: Vector3, ballVel: Vector3, fallbackDir: Vector3?): C
 	pitch = math.clamp(pitch, math.rad(f.PovPitchMin), math.rad(f.PovPitchMax))
 	local look = dir * math.cos(pitch) + UP * math.sin(pitch)
 	local pos = ballPos - dir * f.PovBack + UP * f.PovUp
-	return CFrame.lookAt(pos, pos + look)
+	return lookAt(pos, pos + look)
 end
 
 function Shots.Wide(landPos: Vector3, forward: Vector3): CFrame
@@ -105,19 +123,19 @@ function Shots.Wide(landPos: Vector3, forward: Vector3): CFrame
 	local fwd = flat(forward)
 	local side = UP:Cross(fwd)
 	local pos = landPos - fwd * L.WideBack + UP * L.WideUp + side * L.WideSide
-	return CFrame.lookAt(pos, landPos + fwd * L.BounceRoll)
+	return lookAt(pos, landPos + fwd * L.BounceRoll)
 end
 
 function Shots.Toward(fromCF: CFrame, target: Vector3, share: number): CFrame
 	local pos = fromCF.Position:Lerp(target, math.clamp(share, 0, 0.95))
-	return CFrame.lookAt(pos, target)
+	return lookAt(pos, target)
 end
 
 function Shots.Follow(pos: Vector3, travelDir: Vector3): CFrame
 	local o = C.Outcome
 	local dir = flat(travelDir)
 	local cam = pos - dir * o.FollowBack + UP * o.FollowUp
-	return CFrame.lookAt(cam, pos + dir * 4)
+	return lookAt(cam, pos + dir * 4)
 end
 
 -- Deterministic decaying shake: zero at t <= 0 and t >= length.

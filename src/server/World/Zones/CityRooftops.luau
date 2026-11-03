@@ -151,7 +151,7 @@ return function(ctx: any)
 		end
 	end
 
-	-- props (32)
+	-- props (34)
 	Kit.PlaceAll(ctx, {
 		{ Name = "RoofBlock", Count = 2, R = 8.5, Build = roofBlock },
 		{ Name = "Billboard", Count = 2, R = 7.5, Tall = true, MinAbsX = 50, Build = billboard },
@@ -159,9 +159,9 @@ return function(ctx: any)
 		{ Name = "Antenna", Count = 3, R = 2, Tall = true, Build = antenna },
 		{ Name = "StairHut", Count = 3, R = 4, Build = stairHut },
 		{ Name = "ACUnit", Count = 7, R = 3.2, Build = acUnit },
-		{ Name = "Skylight", Count = 3, R = 4, Build = skylight },
+		{ Name = "Skylight", Count = 4, R = 4, Build = skylight },
 		{ Name = "CrateStack", Count = 5, R = 3, Build = crateStack },
-		{ Name = "VentStack", Count = 4, R = 1.8, Build = ventStack },
+		{ Name = "VentStack", Count = 5, R = 1.8, Build = ventStack },
 	})
 
 	-- ground cover: cracks, puddles, gravel, drain grates, paint marks, bolts

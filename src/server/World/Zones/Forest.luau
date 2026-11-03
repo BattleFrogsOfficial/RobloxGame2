@@ -75,7 +75,7 @@ return function(ctx: any)
 			if i % 3 == 0 then rgb(110, 80, 45) else rgb(80, 96, 44), Enum.Material.Ground)
 	end
 
-	-- props (32): a dense wood with low things in the middle
+	-- props (34): a dense wood with low things in the middle
 	Kit.PlaceAll(ctx, {
 		{ Name = "Pine", Count = 12, R = 6, Tall = true, Build = function(c, m, pos, i)
 			P.Pine(m, pos, rng:NextNumber(1.2, 1.6), if i % 3 == 0 then D.PineDark else D.Pine, D.Trunk)
@@ -84,11 +84,19 @@ return function(ctx: any)
 			P.Tree(m, pos, rng:NextNumber(1, 1.2), D.Trunk, rgb(70, 150, 60))
 		end },
 		{ Name = "Log", Count = 4, R = 4.5, Build = log },
-		{ Name = "MossyRock", Count = 4, R = 3, Build = function(c, m, pos)
+		{ Name = "MossyRock", Count = 3, R = 3, Build = function(c, m, pos)
 			P.Rock(m, pos, rng:NextNumber(0.8, 1.1), rgb(110, 120, 100), rng:NextNumber(0, 6.28))
 		end },
 		{ Name = "Stump", Count = 4, R = 1.8, Build = stump },
-		{ Name = "Mushroom", Count = 4, R = 2.2, Build = mushroom },
+		{ Name = "Mushroom", Count = 3, R = 2.2, Build = mushroom },
+		{ Name = "FernClump", Count = 4, R = 2.5, Build = function(c, m, pos)
+			for k = 0, 4 do
+				local a = k * 1.26 + rng:NextNumber(0, 0.5)
+				P.Wedge({ Parent = m, Name = "Frond", Size = Vector3.new(0.6, 2.6, 2.4),
+					CFrame = CFrame.new(pos + Vector3.new(math.cos(a) * 1.1, 1.3, math.sin(a) * 1.1)) * CFrame.Angles(0, -a + math.pi / 2, 0),
+					Color = if k % 2 == 0 then rgb(50, 130, 55) else rgb(70, 150, 60), Material = Enum.Material.Grass })
+			end
+		end },
 	})
 
 	-- ground cover (dense clumps): leaves, ferns, tiny mushrooms, moss, twigs

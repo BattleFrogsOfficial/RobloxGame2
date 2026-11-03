@@ -129,7 +129,7 @@ return function(ctx: any)
 			D.Panel:Lerp(D.Glow, 0.3))
 	end
 
-	-- props (34)
+	-- props (36)
 	Kit.PlaceAll(ctx, {
 		{ Name = "StationModule", Count = 4, R = 10, Build = module },
 		{ Name = "Dome", Count = 2, R = 7.5, Build = dome },
@@ -137,8 +137,8 @@ return function(ctx: any)
 		{ Name = "FloatingRock", Count = 4, R = 3.5, Tall = true, MinAbsX = 40, Build = floatingRock },
 		{ Name = "SolarPanel", Count = 6, R = 6, Build = solarPanel },
 		{ Name = "FuelTank", Count = 3, R = 4, Build = fuelTank },
-		{ Name = "Crate", Count = 8, R = 2.6, Build = crate },
-		{ Name = "Beacon", Count = 4, R = 1, Build = beacon },
+		{ Name = "Crate", Count = 9, R = 2.6, Build = crate },
+		{ Name = "Beacon", Count = 5, R = 1, Build = beacon },
 	})
 
 	-- ground cover: floor lights, bolts, vent grates, cables, moon rocks
