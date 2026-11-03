@@ -3,8 +3,8 @@
 local Game = {}
 
 Game.Name = "Throw a Ball for Dogs"
--- Public servers hold 6 players: one yard + one throw pad each. Set Max Players = 6 in
--- Game Settings > Places; the server assumes <= Layout.Yards.Count players.
+-- Public servers hold 6 players: one yard each, one shared throwing platform with a queue. Set Max
+-- Players = 6 in Game Settings > Places; the server assumes <= Layout.Yards.Count players.
 Game.MaxPlayers = 6
 
 -- Debug: adds a client button that plays random cutscene outcomes (client/Cutscene reads this).
@@ -12,6 +12,10 @@ Game.CutsceneTestMode = false
 -- Studio: skip DataStores (in-memory mock) even if API access is on. Mock is also used automatically
 -- when DataStores are unavailable in Studio.
 Game.UseMockData = false
+
+-- Character movement, applied on every spawn (server CharacterService; Humanoid.UseJumpPower = true).
+Game.WalkSpeed = 32
+Game.JumpPower = 60
 
 Game.StartingCash = 50
 Game.StartingThrowPower = 60
@@ -40,12 +44,18 @@ Game.Meter = {
 Game.Throw = {
 	MinChargeSeconds = 0.25,
 	MaxChargeSeconds = 6, -- server auto-releases after this
-	MinSecondsBetweenThrows = 2, -- hard floor measured release -> next ChargeBegin
+	MinSecondsBetweenThrows = 2, -- hard floor measured release -> next ChargeBegin; also the gap after a turn ends
 	Scatter = 0.02, -- distance * (1 + U(-Scatter, Scatter))
 	MinDistance = 5,
-	RequireOnPad = true,
-	PadRadius = 18, -- studs (XZ) from the pad centre
-	LateralScatter = 40, -- landing X = 0.5 x pad X + 0.5 x U(-n, n), clamped into the clear centre lane (|x| <= 56)
+	LateralScatter = 40, -- landing X = 0.5 x platform X + 0.5 x U(-n, n), clamped into the clear centre lane (|x| <= 56)
+}
+
+-- The one shared throwing platform (Layout.Platform) and its FIFO queue (ThrowService).
+-- On the platform = XZ distance to Layout.Platform.ThrowSpot <= StandRadius and Y >= Layout.ThrowLine.Y - YTolerance.
+Game.Platform = {
+	SampleInterval = 0.25, -- presence sampling (~4x per second)
+	YTolerance = 4,
+	TurnStartSeconds = 15, -- the player at position 1 must ChargeBegin within this or goes to the back
 }
 
 -- Luck: every non-Common tier's odds are multiplied by (1 + Luck); Common absorbs the difference.

@@ -9,7 +9,8 @@
 --   2 RevealDog (dog pops in, name + rarity banner in the rarity colour)
 --   3 RevealVariant (VariantFX applied + badge) — only if the dog has a variant
 --   4 Catch (leap -> catch + wag, or fumble -> bolts off toward the plaza)
---   5 EndCard (dog preview, name, rarity colour, variant badge, multiplied $/s / ran-off info)
+--   5 EndCard (dog preview, name, rarity colour, variant badge, multiplied $/s / ran-off info); skipped when
+--     Input.EndCard == false because the client UI's Reveal card takes over
 -- Spectators: a small camera-less banner card (~50% length), never blocks input.
 -- CLIENT ONLY.
 local Players = game:GetService("Players")
@@ -448,49 +449,52 @@ local function runThrower(input: Contract.Input, handle: Contract.Handle)
 	end
 
 	-- 5. END CARD ---------------------------------------------------------------------------
-	callout.Text = ""
-	big.Text = ""
-	local card = new("Frame", { Name = "EndCard", BackgroundColor3 = WHITE, Size = UDim2.fromScale(0.6, 0.56), Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5), Parent = gui }, { corner(18), stroke(color, 5),
-		new("UISizeConstraint", { MinSize = Vector2.new(320, 190), MaxSize = Vector2.new(620, 340) }) })
-	pop(card, 0.3)
-	local _, stopPreview = preview(card, def, result.Variant)
-	table.insert(cleanup, stopPreview)
-	local right = new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(0.5, 0.84), Position = UDim2.fromScale(0.48, 0.08),
-		Parent = card }, { new("UIListLayout", { Padding = UDim.new(0.03, 0), SortOrder = Enum.SortOrder.LayoutOrder }) })
-	local function row(text: string, h: number, col: Color3, font: Enum.Font?, order: number): TextLabel
-		return label({ Text = text, Size = UDim2.fromScale(1, h), TextColor3 = col, Font = font or FONT_HEAD, TextStrokeTransparency = 1,
-			TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = order, Parent = right })
-	end
-	local rarityBar = new("Frame", { BackgroundColor3 = color, Size = UDim2.fromScale(1, 0.14), LayoutOrder = 1, Parent = right }, { corner(8) })
-	label({ Text = string.upper(result.Rarity), Size = UDim2.fromScale(1, 1), TextStrokeTransparency = 0.6, Parent = rarityBar })
-	row(def.Name or result.DogName or "Dog", 0.2, INK, nil, 2)
-	if result.Variant then
-		local vb = variantBadge(right, result.Variant, UDim2.fromScale(0.6, 0.12), UDim2.new(), Vector2.zero)
-		vb.LayoutOrder = 3
-	end
-	if result.Caught then
-		local income = result.Income or (def.Income or 0)
-		row(FormatNumber.PerSecond(income), 0.18, Color3.fromRGB(40, 160, 70), nil, 4)
-		local note = ("Puppy: earns %d%% for now while it grows"):format(math.floor(Timers.PuppyIncomeFraction * 100))
-		if result.Status == "Held" then
-			note = "Yard full: it waits in the kennel for a free slot"
-		elseif result.Status == "PendingSale" then
-			note = "Duplicate: auto-sells soon unless you press Keep"
+	-- Skipped when the client UI shows its own Reveal card (Input.EndCard == false).
+	if input.EndCard ~= false then
+		callout.Text = ""
+		big.Text = ""
+		local card = new("Frame", { Name = "EndCard", BackgroundColor3 = WHITE, Size = UDim2.fromScale(0.6, 0.56), Position = UDim2.fromScale(0.5, 0.5),
+			AnchorPoint = Vector2.new(0.5, 0.5), Parent = gui }, { corner(18), stroke(color, 5),
+			new("UISizeConstraint", { MinSize = Vector2.new(320, 190), MaxSize = Vector2.new(620, 340) }) })
+		pop(card, 0.3)
+		local _, stopPreview = preview(card, def, result.Variant)
+		table.insert(cleanup, stopPreview)
+		local right = new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(0.5, 0.84), Position = UDim2.fromScale(0.48, 0.08),
+			Parent = card }, { new("UIListLayout", { Padding = UDim.new(0.03, 0), SortOrder = Enum.SortOrder.LayoutOrder }) })
+		local function row(text: string, h: number, col: Color3, font: Enum.Font?, order: number): TextLabel
+			return label({ Text = text, Size = UDim2.fromScale(1, h), TextColor3 = col, Font = font or FONT_HEAD, TextStrokeTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = order, Parent = right })
 		end
-		row(note, 0.12, Color3.fromRGB(90, 90, 110), FONT_BODY, 5)
-	else
-		row("RAN OFF!", 0.18, Color3.fromRGB(220, 60, 60), nil, 4)
-		row("It's roaming the plaza for " .. Timers.RunawaySeconds .. "s", 0.11, Color3.fromRGB(90, 90, 110), FONT_BODY, 5)
-		local idx = table.find(Rarities.Order, result.Rarity) or 1
-		if idx >= (table.find(Rarities.Order, "Legendary") or 5) then
-			local streak = math.clamp(result.LuckyStreak or 0, 0, Rarities.LuckyStreakMisses)
-			local armed = streak >= Rarities.LuckyStreakMisses
-			row(if armed then "Lucky Streak ARMED: next Legendary+ is a guaranteed catch!"
-				else ("Lucky Streak %d/%d"):format(streak, Rarities.LuckyStreakMisses), 0.11, Color3.fromRGB(200, 140, 20), FONT_BODY, 6)
+		local rarityBar = new("Frame", { BackgroundColor3 = color, Size = UDim2.fromScale(1, 0.14), LayoutOrder = 1, Parent = right }, { corner(8) })
+		label({ Text = string.upper(result.Rarity), Size = UDim2.fromScale(1, 1), TextStrokeTransparency = 0.6, Parent = rarityBar })
+		row(def.Name or result.DogName or "Dog", 0.2, INK, nil, 2)
+		if result.Variant then
+			local vb = variantBadge(right, result.Variant, UDim2.fromScale(0.6, 0.12), UDim2.new(), Vector2.zero)
+			vb.LayoutOrder = 3
 		end
+		if result.Caught then
+			local income = result.Income or (def.Income or 0)
+			row(FormatNumber.PerSecond(income), 0.18, Color3.fromRGB(40, 160, 70), nil, 4)
+			local note = ("Puppy: earns %d%% for now while it grows"):format(math.floor(Timers.PuppyIncomeFraction * 100))
+			if result.Status == "Held" then
+				note = "Yard full: it waits in the kennel for a free slot"
+			elseif result.Status == "PendingSale" then
+				note = "Duplicate: auto-sells soon unless you press Keep"
+			end
+			row(note, 0.12, Color3.fromRGB(90, 90, 110), FONT_BODY, 5)
+		else
+			row("RAN OFF!", 0.18, Color3.fromRGB(220, 60, 60), nil, 4)
+			row("It's roaming the plaza for " .. Timers.RunawaySeconds .. "s", 0.11, Color3.fromRGB(90, 90, 110), FONT_BODY, 5)
+			local idx = table.find(Rarities.Order, result.Rarity) or 1
+			if idx >= (table.find(Rarities.Order, "Legendary") or 5) then
+				local streak = math.clamp(result.LuckyStreak or 0, 0, Rarities.LuckyStreakMisses)
+				local armed = streak >= Rarities.LuckyStreakMisses
+				row(if armed then "Lucky Streak ARMED: next Legendary+ is a guaranteed catch!"
+					else ("Lucky Streak %d/%d"):format(streak, Rarities.LuckyStreakMisses), 0.11, Color3.fromRGB(200, 140, 20), FONT_BODY, 6)
+			end
+		end
+		hold(handle, if skipped then Contract.MinEndCard else timing.EndCard)
 	end
-	hold(handle, if skipped then Contract.MinEndCard else timing.EndCard)
 
 	TweenService:Create(topBar, TweenInfo.new(0.2), { Position = UDim2.fromScale(0, -0.09) }):Play()
 	TweenService:Create(botBar, TweenInfo.new(0.2), { Position = UDim2.fromScale(0, 1) }):Play()

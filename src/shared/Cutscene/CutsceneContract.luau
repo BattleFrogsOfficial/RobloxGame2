@@ -59,9 +59,10 @@ export type Options = {
 	IsThrower: boolean,
 	IsSpectator: boolean,
 	BannerParent: GuiObject?, -- spectator banner container (HUD slot); a fallback ScreenGui is used if nil
+	EndCard: boolean?, -- false: skip the implementation's own end card (the client UI shows its Reveal card instead)
 }
 
-export type Input = { Result: ThrowResult, IsThrower: boolean, IsSpectator: boolean, BannerParent: GuiObject? }
+export type Input = { Result: ThrowResult, IsThrower: boolean, IsSpectator: boolean, BannerParent: GuiObject?, EndCard: boolean? }
 
 export type Handle = {
 	Finished: any, -- Signal (fires once)
@@ -256,11 +257,13 @@ end
 function CutsceneContract.Play(result: any, opts: Options | boolean | nil): Handle
 	local isThrower: boolean
 	local banner: GuiObject? = nil
+	local endCard = true
 	if type(opts) == "boolean" then
 		isThrower = opts
 	elseif type(opts) == "table" then
 		isThrower = opts.IsThrower == true
 		banner = opts.BannerParent
+		endCard = opts.EndCard ~= false
 	else
 		isThrower = false
 	end
@@ -276,7 +279,8 @@ function CutsceneContract.Play(result: any, opts: Options | boolean | nil): Hand
 	if not implementation then
 		implementation = require(script.Parent:WaitForChild("PlaceholderCutscene")) :: any
 	end
-	local input: Input = { Result = normalised, IsThrower = isThrower, IsSpectator = not isThrower, BannerParent = banner }
+	local input: Input = { Result = normalised, IsThrower = isThrower, IsSpectator = not isThrower, BannerParent = banner,
+		EndCard = endCard }
 	return implementation.Play(input)
 end
 

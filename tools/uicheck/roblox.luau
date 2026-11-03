@@ -661,7 +661,7 @@ function methods.Fire(self, ...)
 	raw(self).signals.Event:Fire(...)
 end
 
-local SIGNAL_NAMES = { Activated = true, MouseButton1Click = true, MouseButton1Down = true, MouseButton1Up = true, MouseButton2Click = true, MouseEnter = true, MouseLeave = true, InputBegan = true, InputEnded = true, InputChanged = true, Changed = true, Destroying = true, ChildAdded = true, ChildRemoved = true, DescendantAdded = true, AncestryChanged = true, OnClientEvent = true, Event = true, Heartbeat = true, RenderStepped = true, Stepped = true, Completed = true, PlayerAdded = true, PlayerRemoving = true, TouchTap = true, SelectionGained = true, SelectionLost = true, FocusLost = true, Focused = true, CharacterAdded = true }
+local SIGNAL_NAMES = { Activated = true, MouseButton1Click = true, MouseButton1Down = true, MouseButton1Up = true, MouseButton2Click = true, MouseEnter = true, MouseLeave = true, InputBegan = true, InputEnded = true, InputChanged = true, Changed = true, Destroying = true, ChildAdded = true, ChildRemoved = true, DescendantAdded = true, AncestryChanged = true, OnClientEvent = true, Event = true, Heartbeat = true, RenderStepped = true, Stepped = true, Completed = true, PlayerAdded = true, PlayerRemoving = true, TouchTap = true, TouchTapInWorld = true, SelectionGained = true, SelectionLost = true, FocusLost = true, Focused = true, CharacterAdded = true }
 
 instanceMeta.__index = function(self, key)
 	local r = rawget(self, "__raw")

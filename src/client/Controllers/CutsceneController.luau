@@ -1,10 +1,11 @@
 --!strict
--- Listens to ThrowResult for EVERY throw in the server:
---   * everyone sees the ball flight (ThrowController.PlayBallFlight)
---   * the thrower gets the full cutscene via CutsceneContract (placeholder implementation for v1),
---     with the HUD hidden and movement disabled, then fires CutsceneFinished(throwId)
---   * everyone else gets the small spectator banner (never takes the camera)
--- After the thrower's cutscene: whistle prompt on a miss (if owned), Keep button for a pending dupe.
+-- The local thrower's 3D cutscene. The UI (src/client/UI) is started with PlaceholderCutscene = false, so on
+-- every ThrowResult for the local player this module:
+--   1. hides the HUD and disables movement,
+--   2. plays the cutscene through CutsceneContract (PlaceholderCutscene for v1) without its own end card,
+--   3. shows the UI's Reveal end card (ui:ShowReveal), and when that closes
+--   4. calls ui:FinishThrow(throwId) and fires CutsceneFinished(throwId) exactly once.
+-- Other players' throws are not handled here: the UI shows its Spectator banner for them.
 -- Config/Game.CutsceneTestMode adds a debug button that plays random fake outcomes locally.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,17 +20,14 @@ local UI = script.Parent.Parent:WaitForChild("UI")
 local Theme = require(UI:WaitForChild("Theme"))
 local Button = require(UI:WaitForChild("Components"):WaitForChild("Button"))
 
-local HudController = require(script.Parent:WaitForChild("HudController"))
-local ThrowController = require(script.Parent:WaitForChild("ThrowController"))
-local NotificationController = require(script.Parent:WaitForChild("NotificationController"))
-local WhistlePrompt = require(script.Parent:WaitForChild("WhistlePrompt"))
-
 local CutsceneController = {}
 
 local player = Players.LocalPlayer
+local ui: any = nil
 local queue: { any } = {}
 local playing = false
 local controls: any = nil
+local reported: { [string]: boolean } = {}
 
 local function setControls(enabled: boolean)
 	if controls == nil then
@@ -51,89 +49,102 @@ local function setControls(enabled: boolean)
 	end
 end
 
-local function afterThrower(result: any)
-	if not result.Caught then
-		WhistlePrompt.Show(result)
-	elseif result.Status == "PendingSale" and result.DogUid and not result.IsTest then
-		NotificationController.Toast(("Duplicate %s: keep it?"):format(tostring(result.DogName)), "Dupe", {
-			Name = "DupeKeep_" .. result.DogUid,
-			Duration = 18,
-			Buttons = { {
-				Text = "Keep",
-				Color = Theme.Color.Good,
-				OnClick = function()
-					local remote = Remotes.Get("DogAction") :: RemoteFunction
-					local ok, success, msg = pcall(function()
-						return remote:InvokeServer("Keep", result.DogUid)
-					end)
-					NotificationController.Toast(if ok then tostring(msg) else "Try again", if ok and success then "Purchase" else "Error")
-				end,
-			} },
-		})
+-- Ends the throw once: unlocks the HUD and tells the server (never for CutsceneTestMode fakes).
+local function finishThrow(result: any)
+	local id = tostring(result.ThrowId)
+	if reported[id] then
+		return
 	end
-end
-
-local function playThrower(result: any)
-	playing = true
-	ThrowController.SetCutsceneActive(true)
-	HudController.SetCutsceneMode(true)
-	setControls(false)
-	local ok, err = pcall(function()
-		local handle = CutsceneContract.Play(result, { IsThrower = true, IsSpectator = false })
-		handle:Await()
-	end)
-	if not ok then
-		warn("[CutsceneController] " .. tostring(err))
-	end
+	reported[id] = true
+	ui:FinishThrow(result.ThrowId)
 	if not result.IsTest then
 		local finished = Remotes.Get("CutsceneFinished") :: RemoteEvent
 		finished:FireServer(result.ThrowId)
 	end
-	HudController.SetCutsceneMode(false)
-	setControls(true)
-	ThrowController.SetCutsceneActive(false)
-	playing = false
-	afterThrower(result)
+end
+
+local playThrower: (result: any) -> ()
+
+local function playNext()
 	local nextResult = table.remove(queue, 1)
 	if nextResult then
 		task.spawn(playThrower, nextResult)
 	end
 end
 
-local function onThrowResult(result: any)
-	if type(result) ~= "table" then
+function playThrower(result: any)
+	playing = true
+	ui.HUD.Root.Visible = false
+	setControls(false)
+	local ok, err = pcall(function()
+		local handle = CutsceneContract.Play(result, { IsThrower = true, IsSpectator = false, EndCard = false })
+		handle:Await()
+	end)
+	if not ok then
+		warn("[CutsceneController] " .. tostring(err))
+	end
+	setControls(true)
+	ui.HUD.Root.Visible = true
+	playing = false
+
+	local rarity = result.Rarity or "Common"
+	if ui.State.Settings.HideCommonReveals and rarity == "Common" then
+		finishThrow(result)
+		playNext()
 		return
 	end
-	local okFlight, flightErr = pcall(ThrowController.PlayBallFlight, result)
-	if not okFlight then
-		warn("[CutsceneController] ball flight: " .. tostring(flightErr))
+	local closed = false
+	ui:ShowReveal(result, {
+		IsDupe = result.Status == "PendingSale" and result.DogUid ~= nil and not result.IsTest,
+		OnClose = function()
+			if closed then
+				return
+			end
+			closed = true
+			finishThrow(result)
+			playNext()
+		end,
+	})
+end
+
+local function onThrowResult(result: any)
+	if type(result) ~= "table" or result.ThrowerUserId ~= player.UserId then
+		return
 	end
-	if result.ThrowerUserId == player.UserId then
-		if playing then
-			table.insert(queue, result)
-		else
-			task.spawn(playThrower, result)
-		end
+	if playing then
+		table.insert(queue, result)
 	else
-		CutsceneContract.Play(result, { IsThrower = false, IsSpectator = true, BannerParent = NotificationController.Messages() })
+		task.spawn(playThrower, result)
 	end
 end
 
 local function buildTestButton()
-	local region = HudController.Region("Debug")
-	region.Visible = true
-	Button.new({ Name = "CutsceneTest", Text = "Test Cutscene", Color = Theme.Color.Purple, TextMax = 16, Parent = region,
+	local E = if ui.IsTouch then Theme.Space.M else Theme.Space.Edge
+	Button.new({
+		Name = "CutsceneTest",
+		Text = "Test Cutscene",
+		Palette = "Purple",
+		TextSize = Theme.Text.Body,
+		Size = UDim2.fromOffset(150, 44),
+		Position = UDim2.new(1, -E, 0.5, 0),
+		AnchorPoint = Vector2.new(1, 0.5),
+		ZIndex = 5,
+		Parent = ui.Root,
 		OnClick = function()
 			local spectator = math.random() < 0.3
 			local fake = CutsceneContract.MakeTestResult(DogCatalog, player.UserId, spectator)
 			if spectator then
-				fake.ThrowerName = "TestPlayer"
+				ui.Spectator:Show(fake.ThrowerName or "TestPlayer", fake)
+			else
+				onThrowResult(fake)
 			end
-			onThrowResult(fake)
-		end })
+		end,
+	})
 end
 
-function CutsceneController.Start()
+function CutsceneController.Start(uiHandle: any)
+	ui = uiHandle
+	ui.Config.PlaceholderCutscene = false
 	local remote = Remotes.Get("ThrowResult") :: RemoteEvent
 	remote.OnClientEvent:Connect(onThrowResult)
 	if Game.CutsceneTestMode then

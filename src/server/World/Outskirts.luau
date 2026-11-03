@@ -1,6 +1,6 @@
 --!strict
--- Everything players see but cannot reach: the grass underlay beneath the whole map, rolling hills
--- behind the yards, tree clumps beside the plaza, and a few chunky clouds.
+-- Everything players see but cannot reach: the grass underlay beneath the whole map, a treeline behind
+-- the yards, tree clumps beside the plaza, and a few chunky clouds. The tall scenery walls are Walls.luau.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -28,28 +28,19 @@ function Outskirts.Build(parent: Instance)
 	end
 
 	local rng = Random.new(4242)
-	local backZ = Layout.Yards.CenterZ - Layout.Yards.Size.Z / 2 -- -200
-	-- rolling hills behind the yards
-	local x = u.MinX + 60
-	while x < u.MaxX - 40 do
-		local w = rng:NextNumber(90, 140)
-		local h = rng:NextNumber(30, 60)
-		Props.Ellipsoid(f, "Hill", CFrame.new(x, Y, backZ - 70 - rng:NextNumber(0, 40)), Vector3.new(w, h * 2, w * 0.8),
-			if rng:NextNumber() < 0.5 then T.Hill else T.HillDark)
-		x += w * 0.7
-	end
-	-- treeline right behind the yard fences (outside the north wall)
-	x = Layout.Street.MinX + 10
+	local backZ = Layout.Yards.CenterZ - Layout.Yards.Size.Z / 2
+	-- treeline right behind the yard fences (outside the north boundary, in front of the scenery wall)
+	local x = Layout.Street.MinX + 10
 	while x < Layout.Street.MaxX do
-		Props.Tree(f, Vector3.new(x + rng:NextNumber(-4, 4), Y, backZ - 14 - rng:NextNumber(0, 10)), rng:NextNumber(1.2, 1.7),
+		Props.Tree(f, Vector3.new(x + rng:NextNumber(-4, 4), Y, backZ - 8 - rng:NextNumber(0, 8)), rng:NextNumber(1.2, 1.7),
 			WorldTheme.Plaza.TreeTrunk, WorldTheme.Plaza.TreeLeaf)
-		x += 34
+		x += 30
 	end
-	-- tree clumps beside the plaza (outside its side walls, south of the street)
+	-- tree clumps beside the plaza (outside its side walls, south of the street, north of the field aprons)
 	for _, side in { -1, 1 } do
 		for k = 0, 7 do
-			local px = side * (Layout.Plaza.MaxX + 20 + (k % 4) * 60 + rng:NextNumber(-8, 8))
-			local pz = Layout.Street.MaxZ + 20 + (k // 4) * 45 + rng:NextNumber(-6, 6)
+			local px = side * (Layout.Plaza.MaxX + 16 + (k % 4) * 38 + rng:NextNumber(-6, 6))
+			local pz = Layout.Street.MaxZ + 14 + (k // 4) * 36 + rng:NextNumber(-6, 6)
 			Props.Tree(f, Vector3.new(px, Y, pz), rng:NextNumber(1.3, 1.9), WorldTheme.Plaza.TreeTrunk, WorldTheme.Plaza.TreeLeaf)
 		end
 	end
@@ -59,8 +50,8 @@ function Outskirts.Build(parent: Instance)
 	end
 	-- clouds
 	for _ = 1, 14 do
-		local cx = rng:NextNumber(-600, 600)
-		local cz = rng:NextNumber(-400, Layout.Field.MaxZ)
+		local cx = rng:NextNumber(-150, 150)
+		local cz = rng:NextNumber(-150, Layout.Field.MaxZ)
 		local cy = rng:NextNumber(150, 230)
 		local s = rng:NextNumber(0.8, 1.6)
 		Props.Ellipsoid(f, "Cloud", CFrame.new(cx, cy, cz), Vector3.new(60, 18, 36) * s, Color3.new(1, 1, 1))

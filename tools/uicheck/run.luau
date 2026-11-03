@@ -62,7 +62,7 @@ local function fakeState()
 		Cash = 1234567,
 		Bones = 420,
 		ThrowPower = 385,
-		Balls = { Tennis = true, Rubber = true },
+		Balls = { Tennis = 1, Rubber = 3 }, -- PlayerState.Balls = {[id] = count}; Tennis is unlimited
 		EquippedBall = "Rubber",
 		SlotCount = 40,
 		Dogs = dogs,
@@ -89,14 +89,52 @@ local VIEWPORTS = {
 	{ name = "desktop", size = Vector2.new(1920, 1080), touch = false },
 }
 
+-- Platform / queue attributes the server sets on the LocalPlayer (ThrowService). Every scenario starts
+-- off the platform; throw scenarios set them.
+local function setPlatform(onPlatform, queuePos)
+	R.LocalPlayer:SetAttribute("OnPlatform", onPlatform)
+	R.LocalPlayer:SetAttribute("ThrowQueuePos", queuePos)
+end
+local Meter = R.Require(Shared.Util.Meter)
+-- Charging with the meter at `frac` (0..1) on the way up: start time chosen so Meter.Position == frac.
+local function chargeAt(ui, frac)
+	setPlatform(true, 1)
+	local period = Meter.Period(false)
+	ui.HUD:SetCharging(true, os.clock() - frac * period / 2, false)
+end
+
 local SCENARIOS = {
 	{ name = "hud", setup = function(ui) end },
+	{ name = "throw-off-platform", setup = function(ui)
+		setPlatform(false, 0)
+	end },
+	{ name = "throw-idle", setup = function(ui)
+		setPlatform(true, 1)
+	end },
+	{ name = "throw-waiting", setup = function(ui)
+		setPlatform(true, 3)
+	end },
+	{ name = "throw-charge-0", setup = function(ui)
+		chargeAt(ui, 0)
+	end },
+	{ name = "throw-charge-50", setup = function(ui)
+		chargeAt(ui, 0.5)
+	end },
+	{ name = "throw-charge-100", setup = function(ui)
+		chargeAt(ui, 1)
+	end },
+	{ name = "throw-tennis", setup = function(ui)
+		local s = fakeState()
+		s.EquippedBall = "Tennis"
+		ui.State.Set(s)
+		chargeAt(ui, 0.8)
+	end },
 	{ name = "hud-events", setup = function(ui)
 		ui.State.SetEvent("Squirrel", { Kind = "Squirrel", Active = true, EndsAt = os.time() + 30 })
 		ui.HUD.Toasts:Show("Bought Rubber Ball", "check", "Grass")
 		ui.HUD.Toasts:Show("Tester caught a LEGENDARY Husky!", "star", "Purple")
 		ui.HUD:Broadcast({ Kind = "Catch", Text = "Tester caught a RARE Beagle!", Rarity = "Rare", Global = false })
-		ui.HUD:SetCharging(true, os.clock() - 0.6)
+		chargeAt(ui, 0.7)
 		ui.Spectator:Show("Rival", { DogId = DogCatalog.All()[5].Id, Rarity = "Epic", Variant = "Gold", Caught = false })
 	end },
 	{ name = "shop", setup = function(ui)
@@ -461,6 +499,7 @@ for _, vp in VIEWPORTS do
 		R.Services.UserInputService.MouseEnabled = not vp.touch
 		local ok, err = pcall(function()
 			-- The UI module caches State across starts; reset the parts a scenario touches.
+			setPlatform(false, 0)
 			local ui = UIModule.Start({ Parent = R.PlayerGui, IsTouch = vp.touch, Viewport = vp.size, Remotes = remoteByName })
 			ui.State.Server.Events = {}
 			ui.State.Set(fakeState())

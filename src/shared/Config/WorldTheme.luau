@@ -58,33 +58,60 @@ WorldTheme.Plaza = {
 	Paving = rgb(240, 226, 196),
 	PavingTrim = rgb(220, 200, 165),
 	Lawn = rgb(126, 210, 96),
-	Track = rgb(232, 110, 80),
-	TrackLine = rgb(255, 255, 255),
+	LawnEdge = rgb(96, 176, 80),
 	Spawn = rgb(90, 200, 255),
 	ShopCounter = rgb(255, 248, 235),
-	ShopAwnings = {
-		Balls = { rgb(255, 90, 90), rgb(255, 255, 255) },
-		Boosts = { rgb(80, 200, 255), rgb(255, 255, 255) },
-		Yard = { rgb(110, 210, 90), rgb(255, 255, 255) },
-		Cosmetics = { rgb(200, 110, 255), rgb(255, 255, 255) },
-	},
+	ShopAwning = { rgb(255, 90, 90), rgb(255, 255, 255) }, -- the one ball shop
 	ShopSign = rgb(40, 40, 60),
 	Equipment = rgb(80, 85, 110),
 	EquipmentAccent = rgb(255, 200, 50),
-	Leaderboard = rgb(35, 35, 55),
-	LeaderboardTrim = rgb(255, 200, 50),
-	Bench = rgb(170, 110, 60),
-	BenchLeg = rgb(60, 60, 75),
+	TrainingMat = rgb(232, 110, 80),
+	TrainingLine = rgb(255, 255, 255),
 	TreeTrunk = rgb(130, 85, 50),
 	TreeLeaf = rgb(80, 190, 80),
-	Planter = rgb(200, 150, 110),
 }
 
 WorldTheme.ThrowLine = {
 	Line = rgb(255, 255, 255),
-	Pad = rgb(255, 255, 255),
-	PadRing = rgb(255, 210, 60),
-	PadNumber = rgb(40, 40, 60),
+}
+
+-- The raised throwing platform (deck at Y = 40), its tower and ramp.
+WorldTheme.Platform = {
+	Deck = rgb(255, 255, 255),
+	DeckTrim = rgb(255, 210, 60),
+	Tower = rgb(214, 196, 168),
+	TowerBand = rgb(186, 164, 134),
+	TowerSign = rgb(40, 40, 60),
+	Ramp = rgb(226, 208, 176),
+	RampStripe = rgb(255, 210, 60),
+	Rail = rgb(255, 255, 255),
+	RailPost = rgb(60, 60, 80),
+	ThrowSpot = rgb(255, 90, 90),
+	ThrowSpotRing = rgb(255, 255, 255),
+	QueueSpot = rgb(70, 160, 255),
+	QueueText = rgb(255, 255, 255),
+}
+
+-- World walls (Walls.luau): stepped cliff / hedge faces around the whole map. Each zone's wall is built
+-- from its Zones.luau Theme (Ground + Accent); this table only picks the material + how the tiers mix.
+-- Top tiers lerp toward SkyFade so the silhouettes melt into the atmosphere.
+WorldTheme.Walls = {
+	SkyFade = rgb(196, 222, 250),
+	Crossbar = { Base = rgb(56, 140, 64), Mid = rgb(74, 164, 78), Top = rgb(104, 186, 98),
+		Material = Enum.Material.LeafyGrass, Hedge = true },
+	-- per-zone material; Hedge = true gives a softer hedge look (less rock trim)
+	Zones = {
+		Backyard = { Material = Enum.Material.LeafyGrass, Hedge = true },
+		Park = { Material = Enum.Material.LeafyGrass, Hedge = true },
+		Beach = { Material = Enum.Material.Sandstone },
+		Farm = { Material = Enum.Material.Ground },
+		Forest = { Material = Enum.Material.Slate },
+		SnowyPeaks = { Material = Enum.Material.Glacier },
+		CityRooftops = { Material = Enum.Material.Concrete },
+		SpaceStation = { Material = Enum.Material.DiamondPlate },
+		MythicMeadow = { Material = Enum.Material.Pebble },
+	},
+	Rock = Enum.Material.Rock,
 }
 
 WorldTheme.Field = {
@@ -127,7 +154,8 @@ WorldTheme.Lighting = {
 	OutdoorAmbient = rgb(150, 150, 165),
 	ExposureCompensation = 0.1,
 	ColorShiftTop = rgb(255, 245, 225),
-	Atmosphere = { Density = 0.22, Offset = 0.15, Color = rgb(200, 225, 255), Decay = rgb(120, 160, 220), Glare = 0.15, Haze = 0.6 },
+	-- near zones (first ~400 studs) stay crisp, the 3,200-stud far end and the walls melt into a blue haze
+	Atmosphere = { Density = 0.34, Offset = 0.32, Color = rgb(199, 224, 252), Decay = rgb(112, 150, 205), Glare = 0.12, Haze = 1.8 },
 	Bloom = { Intensity = 0.6, Size = 24, Threshold = 1.6 },
 	ColorCorrection = { Saturation = 0.18, Contrast = 0.06, Brightness = 0.02, TintColor = rgb(255, 252, 245) },
 	SunRays = { Intensity = 0.04, Spread = 0.6 },

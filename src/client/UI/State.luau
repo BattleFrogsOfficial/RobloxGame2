@@ -72,13 +72,25 @@ function State.Income(): number
 	return c.IncomePerSec or c.Income or 0
 end
 
+-- Def (Balls.ById entry) of the ball the next throw uses: the equipped ball, or the Tennis Ball when the
+-- equipped consumable has no throws left.
 function State.Ball(): any
 	return PlayerStats.Ball(State.Get())
 end
 
+-- Remaining throws of a ball (PlayerState.Balls = { [ballId]: number }). math.huge for the Tennis Ball
+-- (and any other non-consumable); 0 for an unknown id or none left.
+function State.BallCount(ballId: string): number
+	return PlayerStats.BallCount(State.Get(), ballId)
+end
+
+-- True when the ball can be equipped / thrown right now (Tennis always; consumables while count > 0).
 function State.OwnsBall(ballId: string): boolean
-	local s = State.Get()
-	return ballId == Balls.Default or (s.Balls ~= nil and s.Balls[ballId] == true)
+	return State.BallCount(ballId) > 0
+end
+
+function State.EquippedBallId(): string
+	return State.Get().EquippedBall or Balls.Default
 end
 
 function State.Luck(): (number, { PlayerStats.Source })

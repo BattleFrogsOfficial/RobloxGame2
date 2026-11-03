@@ -16,19 +16,20 @@ local Yards = {}
 local Y = Layout.GroundY
 local T = WorldTheme.Yard
 
--- Yard-local design constants (offsets from the yard centre; all well inside the 110 x 120 plot).
+-- Yard-local design constants (offsets from the yard centre; all inside the 52 x 100 plot).
+-- Spots are 16 apart in a 3 x 4 grid: DogService's roam reach must stay <= 8 studs so neighbours never touch.
 Yards.Local = {
 	FenceInset = 1,
 	FenceHeight = 4,
-	GateWidth = 18,
-	SignBoard = Vector3.new(38, 10, 1.5),
-	SignBottom = 13,
+	GateWidth = 14,
+	SignBoard = Vector3.new(30, 8, 1.5),
+	SignBottom = 11,
 	SpotSize = 7,
-	SpotColsX = { -36, -12, 12, 36 },
-	SpotRowsZ = { 22, 2, -18 }, -- row 1 (spots 1-4) nearest the gate (+Z = street side)
-	PathWidth = 10,
-	Kennel = { X = 32, Z = -44, W = 26, D = 18, H = 10 },
-	Trophy = { X = -34, Z = -44, Size = 10, H = 1.2 },
+	SpotColsX = { -16, 0, 16 },
+	SpotRowsZ = { 30, 13, -4, -21 }, -- row 1 (spots 1-3) nearest the gate (+Z = street side)
+	PathWidth = 8,
+	Kennel = { X = 12, Z = -38, W = 22, D = 14, H = 10 },
+	Trophy = { X = -14, Z = -38, Size = 9, H = 1.2 },
 }
 
 -- Rectangles (minX, maxX, minZ, maxZ) of the yards, in world space. Used by the bounds check docs.
@@ -84,8 +85,8 @@ local function buildYard(parent: Instance, index: number)
 	local plot = Props.Slab(model, "YardPlot", minX, maxX, minZ, maxZ, Y, 1, T.Grass)
 	Props.Tag(plot, "YardPlot", { YardIndex = index })
 
-	-- path from the gate to the middle of the spot grid (decal-thin, walkable)
-	local pathMinZ = cz + L.SpotRowsZ[2]
+	-- path from the gate to the front row of spots (decal-thin, walkable)
+	local pathMinZ = cz + L.SpotRowsZ[1] + L.SpotSize / 2 + 1
 	Props.Slab(model, "Path", cx - L.PathWidth / 2, cx + L.PathWidth / 2, pathMinZ, maxZ, Y + 0.06, 0.06, T.Path)
 
 	-- fence (inset so neighbouring fences never touch the 10-stud hedge gap)
@@ -148,10 +149,9 @@ local function buildYard(parent: Instance, index: number)
 	Props.Slab(model, "TrophyTrim", tx - tr.Size / 2 - 0.5, tx + tr.Size / 2 + 0.5, tz - tr.Size / 2 - 0.5,
 		tz + tr.Size / 2 + 0.5, Y + 0.4, 0.4, T.TrophyTop, WorldTheme.AccentMaterial, false)
 
-	-- a little greenery in the front corners (inside the fence, off the path and grid)
+	-- a little greenery in the front corners (inside the fence, clear of the gate and the spot roam reach)
 	for _, side in { -1, 1 } do
-		Props.Tree(model, Vector3.new(cx + side * 48, Y, maxZ - 9), 0.9, WorldTheme.Plaza.TreeTrunk, WorldTheme.Plaza.TreeLeaf)
-		Props.Bush(model, Vector3.new(cx + side * 49, Y, cz + 2), 0.9, T.Hedge) -- clear of spot roam reach (<= 9.5)
+		Props.Tree(model, Vector3.new(cx + side * 20.5, Y, maxZ - 5.5), 0.6, WorldTheme.Plaza.TreeTrunk, WorldTheme.Plaza.TreeLeaf)
 	end
 	model.PrimaryPart = plot
 end

@@ -1,13 +1,12 @@
 --!strict
 -- The crossbar street: the shared lane every yard gate opens onto. Flat, clear, bold.
--- Dashed centre line, a zebra crossing in front of each gate, and the big title arch where the
--- street meets the plaza (the top of the T's stem).
+-- Dashed centre line and a zebra crossing in front of each gate. The plaza opens off its south side
+-- (the game title now sits on the platform tower, not on an arch).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = Shared:WaitForChild("Config")
 local Layout = require(Config:WaitForChild("Layout")) :: any
-local Game = require(Config:WaitForChild("Game")) :: any
 local WorldTheme = require(Config:WaitForChild("WorldTheme")) :: any
 local Props = require((script.Parent :: Instance):WaitForChild("Props")) :: any
 
@@ -32,9 +31,9 @@ function Street.Build(parent: Instance)
 	-- dashed centre line
 	local dashes = Props.Folder(folder, "CentreLine")
 	local x = s.MinX + 6
-	while x + 10 <= s.MaxX - 6 do
-		Props.Slab(dashes, "Dash", x, x + 10, midZ - 0.6, midZ + 0.6, Y + 0.05, 0.05, T.Line, nil, false)
-		x += 20
+	while x + 8 <= s.MaxX - 6 do
+		Props.Slab(dashes, "Dash", x, x + 8, midZ - 0.6, midZ + 0.6, Y + 0.05, 0.05, T.Line, nil, false)
+		x += 16
 	end
 
 	-- zebra crossing in front of each gate
@@ -42,16 +41,10 @@ function Street.Build(parent: Instance)
 	for i = 1, Layout.Yards.Count do
 		local cx = Layout.Yards.CentersX[i]
 		for k = -2, 2 do
-			local zx = cx + k * 3.5
-			Props.Slab(zebra, "Stripe", zx - 1, zx + 1, s.MinZ + 3, s.MinZ + 13, Y + 0.07, 0.07, T.Curb, nil, false)
+			local zx = cx + k * 3
+			Props.Slab(zebra, "Stripe", zx - 0.9, zx + 0.9, s.MinZ + 2.5, s.MinZ + 9.5, Y + 0.07, 0.07, T.Curb, nil, false)
 		end
 	end
-
-	-- title arch over the junction (pillars sit on the street/plaza boundary, well clear of lanes)
-	local arch = Props.Arch(folder, "TitleArch", Vector3.new(0, Y, s.MaxZ), 100, 34,
-		Color3.fromRGB(255, 255, 255), WorldTheme.Plaza.Leaderboard, Color3.fromRGB(255, 200, 50),
-		string.upper(Game.Name))
-	arch:SetAttribute("Decor", true)
 end
 
 return Street

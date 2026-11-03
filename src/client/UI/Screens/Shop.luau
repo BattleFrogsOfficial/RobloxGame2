@@ -1,6 +1,8 @@
 --!strict
--- Shop panel: Balls, Boosts, Yard (training + slots), Items, Cosmetics, Robux. Prices come from
--- State.Computed().Prices when the server supplies them.
+-- Shop panel: Balls (consumable, repeat purchases), Boosts, Yard (training + slots), Items (Sticky Ball,
+-- Golden Whistle, Treat Pocket, Instant Grow), Cosmetics, Robux. This panel is the only way to buy Yard /
+-- Boost / Item upgrades (they have no world stands). Prices come from State.Computed().Prices when the
+-- server supplies them.
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = Shared:WaitForChild("Config")
 local Util = Shared:WaitForChild("Util")
@@ -21,6 +23,7 @@ local Tabs = require(Components:WaitForChild("Tabs"))
 local Card = require(Components:WaitForChild("Card"))
 local Icon = require(Components:WaitForChild("Icon"))
 local Label = require(Components:WaitForChild("Label"))
+local Button = require(Components:WaitForChild("Button"))
 
 local Shop = {}
 
@@ -88,35 +91,95 @@ function Shop.new(deps: ShopDeps)
 		end
 	end
 
+	-- Balls: every ball but the Tennis Ball is a consumable (one purchase = Uses throws). Each card shows the
+	-- throws you hold ("x3"), the price per throw, a repeatable Buy button and an Equip button while count > 0.
 	local function renderBalls()
-		local s = State.Get()
-		local equipped = s.EquippedBall or Balls.Default
+		local equipped = State.EquippedBallId()
+		local active = State.Ball().Id -- what the next throw uses (Tennis once the equipped ball runs out)
 		for i, id in Balls.Order do
 			local ball = Balls.ById[id]
-			local owned = State.OwnsBall(id)
-			local isEquipped = equipped == id
+			local count = State.BallCount(id)
+			local isActive = active == id
+			local stats = string.format("x%.2f", ball.RangeMult)
+			if ball.Luck > 0 then
+				stats ..= string.format(" +%d%% luck", math.floor(ball.Luck * 100 + 0.5))
+			else
+				stats ..= " range"
+			end
+			if not ball.Consumable then
+				local card = Card.new({
+					Title = ball.Name,
+					Subtitle = stats .. "\nFree, unlimited",
+					Icon = Icon.ForBall(id),
+					Owned = true,
+					Price = if isActive then "Equipped" else "Equip",
+					PricePalette = if isActive then "Slate" else "Sky",
+					LayoutOrder = i,
+					Parent = grid,
+					OnBuy = function()
+						if not isActive then
+							deps.EquipBall(id)
+						end
+					end,
+				})
+				card:SetSelected(isActive)
+				continue
+			end
+			local uses = math.max(1, ball.Uses or 1)
+			local perThrow = ball.Price / uses
+			local p = price("Ball:" .. id, ball.Price)
 			local card = Card.new({
 				Title = ball.Name,
-				Subtitle = string.format("x%.2f range\n+%d%% luck", ball.RangeMult, math.floor(ball.Luck * 100 + 0.5)),
+				Subtitle = stats .. "\n" .. FormatNumber.Money(perThrow) .. "/throw",
 				Icon = Icon.ForBall(id),
-				Owned = owned,
-				Price = if isEquipped then "Equipped" elseif owned then "Equip" else FormatNumber.Money(ball.Price),
-				PricePalette = if isEquipped then "Slate" elseif owned then "Sky" else "Grass",
-				PriceIcon = if owned then nil else "cash",
+				Price = FormatNumber.Money(p),
+				PricePalette = "Grass",
+				PriceIcon = if count > 0 then nil else "cash", -- half-width button when Equip shares the row
 				LayoutOrder = i,
 				Parent = grid,
 				OnBuy = function()
-					if isEquipped then
-						return
-					elseif owned then
-						deps.EquipBall(id)
-					else
-						buy("Ball:" .. id, ball.Name)
-					end
+					buy("Ball:" .. id, ball.Name)
 				end,
 			})
-			if not owned and State.Cash() < ball.Price then
-				card:SetPrice(FormatNumber.Money(ball.Price), false)
+			card:SetSelected(isActive)
+			if State.Cash() < p then
+				card:SetPrice(FormatNumber.Money(p), false)
+			end
+			-- owned count badge in the preview corner
+			Label.Display({
+				Name = "Count",
+				Text = "x" .. FormatNumber.Compact(count),
+				TextSize = Theme.Text.Body,
+				Size = UDim2.fromOffset(56, 22),
+				Position = UDim2.fromOffset(6, 4),
+				XAlign = Enum.TextXAlignment.Left,
+				ZIndex = card.Preview.ZIndex + 2,
+				Parent = card.Preview,
+			})
+			if count > 0 and card.Buy then
+				-- split the bottom row: Buy (left) + Equip / Equipped (right)
+				local pad = Theme.Space.S
+				card.Buy.Root.Size = UDim2.new(0.5, -math.ceil(pad * 1.5), 0, 44)
+				local equipBtn = Button.new({
+					Name = "Equip",
+					Text = if isActive then "On" else "Equip",
+					Palette = if isActive then "Slate" else "Sky",
+					TextSize = Theme.Text.Caption + 2,
+					Size = UDim2.new(0.5, -math.ceil(pad * 1.5), 0, 44),
+					Position = UDim2.new(1, -pad, 1, -pad),
+					AnchorPoint = Vector2.new(1, 1),
+					Shadow = false,
+					ZIndex = card.Buy.Root.ZIndex,
+					Parent = card.Root,
+					OnClick = function()
+						if equipped ~= id then
+							deps.EquipBall(id)
+						end
+					end,
+				})
+				if isActive then
+					equipBtn:SetEnabled(false)
+				end
 			end
 		end
 	end
@@ -192,12 +255,48 @@ function Shop.new(deps: ShopDeps)
 		end
 	end
 
+	-- The puppy an Instant Grow would target: the one with the longest wait left.
+	local function growTarget(): (any, number)
+		local best, bestLeft = nil, 0
+		local now = os.time()
+		for _, d in State.Dogs() do
+			local left = (d.GrownAt or 0) - now
+			if left > bestLeft and not d.Held and not d.PendingSale then
+				best, bestLeft = d, left
+			end
+		end
+		return best, bestLeft
+	end
+
 	local function renderItems()
 		local income = State.Income()
+		-- Sticky Ball (timed catch boost; same purchase as the Boosts tab)
+		local sticky = ShopConfig.Boosts.StickyBall
+		local order = 0
+		if sticky then
+			order += 1
+			local sp = price("Boost:StickyBall", ShopConfig.DynamicPrice(sticky.BaseCost, sticky.IncomeSeconds, income))
+			local card = Card.new({
+				Title = sticky.Name,
+				Subtitle = string.format("+%d%% catch  %s", math.floor(sticky.Amount * 100 + 0.5), FormatNumber.Duration(sticky.Duration)),
+				Icon = "boost_catch",
+				Price = FormatNumber.Money(sp),
+				PriceIcon = "cash",
+				LayoutOrder = order,
+				Parent = grid,
+				OnBuy = function()
+					buy("Boost:StickyBall", sticky.Name)
+				end,
+			})
+			if State.Cash() < sp then
+				card:SetPrice(FormatNumber.Money(sp), false)
+			end
+		end
 		local icons = { GoldenWhistle = "whistle", TreatPocket = "treat" }
 		local blurbs = { GoldenWhistle = "Call back a dog that ran off", TreatPocket = "Second catch try" }
-		for i, id in ShopConfig.ItemOrder do
+		for _, id in ShopConfig.ItemOrder do
 			local it = ShopConfig.Items[id]
+			order += 1
 			local p = price("Item:" .. id, ShopConfig.DynamicPrice(it.BaseCost, it.IncomeSeconds, income))
 			local have = (State.Get()[it.Field] or 0)
 			local card = Card.new({
@@ -206,7 +305,7 @@ function Shop.new(deps: ShopDeps)
 				Icon = icons[id] or "info",
 				Price = FormatNumber.Money(p),
 				PriceIcon = "cash",
-				LayoutOrder = i,
+				LayoutOrder = order,
 				Parent = grid,
 				OnBuy = function()
 					buy("Item:" .. id, it.Name)
@@ -215,6 +314,28 @@ function Shop.new(deps: ShopDeps)
 			if State.Cash() < p or have >= it.Max then
 				card:SetPrice(if have >= it.Max then "Max" else FormatNumber.Money(p), false)
 			end
+		end
+		-- Instant Grow (Robux product; grows the puppy with the longest wait)
+		local grow = Products.DeveloperProducts.InstantGrow
+		if grow then
+			order += 1
+			local target, left = growTarget()
+			local available = grow.Id ~= 0 and target ~= nil
+			Card.new({
+				Title = "Instant Grow",
+				Subtitle = if target then "Grow a puppy now (" .. FormatNumber.Duration(left) .. " left)" else "No puppies to grow",
+				Icon = "timer",
+				Price = if grow.Id == 0 then "Soon" elseif target then "Buy" else "None",
+				PricePalette = if available then "Robux" else "Slate",
+				LayoutOrder = order,
+				Parent = grid,
+				OnBuy = function()
+					local t = growTarget()
+					if grow.Id ~= 0 and t then
+						buy("Product:InstantGrow:" .. tostring(t.Uid), "Instant Grow")
+					end
+				end,
+			})
 		end
 	end
 

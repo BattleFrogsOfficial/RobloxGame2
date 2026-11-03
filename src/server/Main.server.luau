@@ -28,6 +28,7 @@ end
 local Services = script.Parent:WaitForChild("Services")
 local ORDER = {
 	"DataService",
+	"CharacterService",
 	"BroadcastService",
 	"DogService",
 	"BookService",

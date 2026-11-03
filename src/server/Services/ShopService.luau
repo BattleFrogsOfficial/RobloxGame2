@@ -1,5 +1,5 @@
 --!nonstrict
--- Purchases: balls, training upgrades, yard slots, timed boosts (Sticky Ball, Lucky Biscuit),
+-- Purchases: consumable balls (each purchase = Balls.ById[id].Uses throws; Tennis is free), training upgrades, yard slots, timed boosts (Sticky Ball, Lucky Biscuit),
 -- consumables (Golden Whistle, Treat Pocket), cosmetics (Bones), EquipBall, plus Robux developer
 -- products (idempotent ProcessReceipt) and gamepasses. Ids live in Config/Products.luau (0 = disabled).
 -- Paid products that influence random outcomes are refused where PolicyService restricts them.
@@ -47,22 +47,27 @@ end
 ----------------------------------------------------------------------------------------------------
 local handlers: { [string]: (Player, any, string?) -> (boolean, string) } = {}
 
+-- "Ball:<id>": buy one more pack of throws (repeatable) and equip it. The Tennis Ball is free: just equips.
 handlers.Ball = function(player, state, ballId)
 	local ball = ballId and Balls.ById[ballId]
 	if not ball then
 		return false, "Unknown ball"
 	end
-	if state.Balls[ballId] then
-		state.EquippedBall = ballId
-		DataService.Push(player)
+	if not ball.Consumable then
+		state.EquippedBall = ball.Id
 		return true, ball.Name .. " equipped"
+	end
+	local have = PlayerStats.BallCount(state, ball.Id)
+	local uses = math.max(1, math.floor(ball.Uses or 1))
+	if have + uses > Balls.MaxOwned then
+		return false, "You can't carry more"
 	end
 	if not DataService.TrySpendCash(player, ball.Price) then
 		return false, "Need " .. FormatNumber.Money(ball.Price)
 	end
-	state.Balls[ballId] = true
-	state.EquippedBall = ballId
-	return true, "Bought " .. ball.Name .. "!"
+	state.Balls[ball.Id] = have + uses
+	state.EquippedBall = ball.Id
+	return true, ("Bought a %s! (x%d)"):format(ball.Name, have + uses)
 end
 
 handlers.Training = function(player, state)
@@ -310,7 +315,8 @@ function ShopService.Start()
 			return
 		end
 		local state = DataService.Get(player)
-		if state and Balls.ById[ballId] and state.Balls[ballId] then
+		-- refuse a consumable ball with no throws left (the Tennis Ball is always available)
+		if state and Balls.ById[ballId] and PlayerStats.BallCount(state, ballId) > 0 then
 			state.EquippedBall = ballId
 			DataService.Push(player)
 		end

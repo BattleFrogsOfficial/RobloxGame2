@@ -4,25 +4,20 @@ local Training = {}
 
 Training.MaxThrowPower = 2000 -- 2000 x Golden 2.0 = 4000 > field length, so this is never the binding cap
 
+-- One training station in the plaza (TrainingStation-tagged part, StationId = "Main"). Reps come from its
+-- ProximityPrompt or the Train remote. The old Pull-Up Bar / Throwing Machine / Sprint Track were merged:
+-- one free rep of Gain x TrainMult every Cooldown seconds. Pull-Up Bar cadence (0.5 s cooldown, free) with
+-- Gain 1.0 (was 0.5): at a human ~1.6 reps/s that is ~1.6 TP/s, between the old Pull-Up Bar (0.8 TP/s) and
+-- the paid Throwing Machine (3 TP/s) that most players used after 120 ThrowPower.
 Training.Stations = {
-	PullUpBar = {
-		Id = "PullUpBar", Name = "Pull-Up Bar", Gain = 0.5, Cooldown = 0.5, UnlockPower = 0,
+	Main = {
+		Id = "Main", Name = "Training Station", Gain = 1.0, Cooldown = 0.5, UnlockPower = 0,
 		CashPerRepMin = 0, CashPerRepPerPower = 0, -- free
 	},
-	ThrowingMachine = {
-		Id = "ThrowingMachine", Name = "Throwing Machine", Gain = 3, Cooldown = 1.0, UnlockPower = 120,
-		-- cash per rep = max(CashPerRepMin, ThrowPower * CashPerRepPerPower)
-		CashPerRepMin = 5, CashPerRepPerPower = 0.1,
-	},
-	Sprint = {
-		Id = "Sprint", Name = "Sprint Track", Gain = 12, Cooldown = 10, UnlockPower = 0, CashPerRepMin = 0, CashPerRepPerPower = 0,
-		-- A "lap": the player must have moved MinLapStuds (server-sampled path length) since their
-		-- last Sprint rep and at least MinLapSeconds must have passed.
-		MinLapStuds = 220, MinLapSeconds = 10,
-	},
 }
-Training.StationOrder = { "PullUpBar", "ThrowingMachine", "Sprint" }
-Training.InteractRange = 14 -- studs from a TrainingStation part for the Train remote / prompt
+Training.StationOrder = { "Main" }
+Training.DefaultStation = "Main"
+Training.InteractRange = 14 -- studs from the TrainingStation part for the Train remote / prompt
 
 -- Upgrades bought in the shop (itemId "Training"). Level 0 = no upgrades.
 -- Each level does two things: raises the power cap (the gate to the next zone) and multiplies rep gains.

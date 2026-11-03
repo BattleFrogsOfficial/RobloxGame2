@@ -23,7 +23,7 @@ local PlayerStats = require(Util:WaitForChild("PlayerStats"))
 local DataService = {}
 
 local STORE_NAME = "ThrowABallForDogs_Player_v1"
-local CURRENT_VERSION = 1
+local CURRENT_VERSION = 2 -- v2: consumable balls (Balls = { [ballId]: remaining throws })
 local LOAD_ATTEMPTS = 6
 local SAVE_ATTEMPTS = 4
 local MAX_RECEIPTS = 100
@@ -57,7 +57,7 @@ function DataService.DefaultState(): any
 		Cash = Game.StartingCash,
 		Bones = 0,
 		ThrowPower = Game.StartingThrowPower,
-		Balls = { [Balls.Default] = true },
+		Balls = {}, -- [ballId] = remaining throws (consumable balls only; the Tennis Ball is unlimited, never stored)
 		EquippedBall = Balls.Default,
 		SlotCount = Shop.Slots.Start,
 		Dogs = {}, -- { {Uid, DogId, Variant?, BornAt, GrownAt, Displayed?, Locked?, Held?, PendingSale?} }
@@ -92,6 +92,22 @@ end
 -- Migrations[n] upgrades a state at Version n to n + 1. Version 0 = pre-versioned data.
 local Migrations: { [number]: (any) -> () } = {
 	[0] = function(_state) end,
+	-- v1 -> v2: balls became consumables. Old saves held permanent ownership ({[id] = true}); those become
+	-- 0 throws (dropped from the map), the Tennis Ball is no longer stored, and the player re-equips Tennis.
+	[1] = function(state)
+		local old = state.Balls
+		local new = {}
+		if type(old) == "table" then
+			for id, v in old do
+				local ball = Balls.ById[id]
+				if ball and ball.Consumable and type(v) == "number" and v >= 1 then
+					new[id] = v
+				end
+			end
+		end
+		state.Balls = new
+		state.EquippedBall = Balls.Default
+	end,
 }
 
 local function migrate(state: any)
@@ -113,7 +129,19 @@ local function migrate(state: any)
 			state[k] = DataService.DefaultState()[k]
 		end
 	end
-	if not Balls.ById[state.EquippedBall] or not state.Balls[state.EquippedBall] then
+	-- balls: known consumables with a positive whole number of throws only
+	local clean = {}
+	if type(state.Balls) == "table" then
+		for id, v in state.Balls do
+			local ball = Balls.ById[id]
+			local n = tonumber(v)
+			if ball and ball.Consumable and n and n == n and n >= 1 then
+				clean[id] = math.min(Balls.MaxOwned, math.floor(n))
+			end
+		end
+	end
+	state.Balls = clean
+	if not Balls.ById[state.EquippedBall] or PlayerStats.BallCount(state, state.EquippedBall) <= 0 then
 		state.EquippedBall = Balls.Default
 	end
 end

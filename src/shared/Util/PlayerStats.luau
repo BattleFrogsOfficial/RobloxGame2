@@ -106,8 +106,39 @@ function PlayerStats.ActiveBoosts(state: any, ctx: Ctx?): { string }
 	return out
 end
 
+-- Remaining throws of a ball (PlayerState.Balls = { [ballId]: number }). Non-consumables (Tennis) are
+-- always available: math.huge.
+function PlayerStats.BallCount(state: any, ballId: string): number
+	local ball = Balls.ById[ballId]
+	if not ball then
+		return 0
+	end
+	if not ball.Consumable then
+		return math.huge
+	end
+	local n = state.Balls and state.Balls[ballId]
+	if type(n) ~= "number" or n ~= n then
+		return 0
+	end
+	return math.max(0, math.floor(n))
+end
+
+-- The ball the next throw uses: the equipped ball if it has throws left, otherwise the Tennis Ball.
 function PlayerStats.Ball(state: any): any
-	return Balls.ById[state.EquippedBall or Balls.Default] or Balls.ById[Balls.Default]
+	local id = state.EquippedBall or Balls.Default
+	local ball = Balls.ById[id]
+	if ball and PlayerStats.BallCount(state, id) > 0 then
+		return ball
+	end
+	return Balls.ById[Balls.Default]
+end
+
+-- Horizontal throw distance (studs from Layout.ThrowLine.Z). scatterU in [-1, 1] scales Game.Throw.Scatter.
+-- Unchanged by the raised platform: the launch height only changes the flight (Util/BallFlight).
+function PlayerStats.ThrowDistance(throwPower: number, rangeMult: number, quality: number, scatter: number,
+	minDistance: number): number
+	local d = throwPower * rangeMult * quality * (1 + scatter)
+	return math.clamp(d, minDistance, PlayerStats.MaxFieldDistance())
 end
 
 -- Luck for the tier roll (ball + luck boosts + book permanent luck + Lucky Paw + server luck).
@@ -204,6 +235,14 @@ function PlayerStats.Compute(state: any, ctx: Ctx?): { [string]: any }
 	for id, it in Shop.Items do
 		prices["Item:" .. id] = Shop.DynamicPrice(it.BaseCost, it.IncomeSeconds, income)
 	end
+	local ballCounts: { [string]: number } = {}
+	for _, id in Balls.Order do
+		local b = Balls.ById[id]
+		if b.Consumable then
+			prices["Ball:" .. id] = b.Price
+			ballCounts[id] = PlayerStats.BallCount(state, id)
+		end
+	end
 	local level = state.TrainingLevel or 0
 	if level < Training.Upgrades.MaxLevel then
 		prices.Training = Training.UpgradeCost(level + 1)
@@ -241,6 +280,8 @@ function PlayerStats.Compute(state: any, ctx: Ctx?): { [string]: any }
 		TrainMult = Training.Mult(level),
 		PowerCap = Training.PowerCap(level),
 		Prices = prices,
+		BallCounts = ballCounts, -- consumable balls only (Tennis is unlimited)
+		BallId = PlayerStats.Ball(state).Id, -- ball the next throw uses
 		ActiveBoosts = PlayerStats.ActiveBoosts(state, ctx),
 		LuckyStreakArmed = (state.LuckyStreak or 0) >= Rarities.LuckyStreakMisses,
 		PremiumThrowReady = (state.PremiumThrows or 0) > 0,

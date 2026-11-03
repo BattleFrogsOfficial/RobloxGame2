@@ -3,6 +3,8 @@
 -- Another client module (the cutscene) can take over parts of the flow through the returned handle:
 --   ui.Config.PlaceholderCutscene = false   -- the cutscene module will call ui:ShowReveal and fire CutsceneFinished
 --   ui.HUD:SetCharging(true, startClock)   -- if it owns throw input (pass OwnsThrowInput = false)
+-- Started by Main.client.luau (the only client entry), which passes PlaceholderCutscene = false and runs
+-- Controllers/CutsceneController for the thrower's 3D cutscene.
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
@@ -138,15 +140,20 @@ function UI.Start(deps: StartDeps?)
 				return
 			end
 			fire("ChargeBegin")
-			ui.HUD:SetCharging(true, os.clock(), not (State.Get().TutorialDone or false) and Game.Tutorial.Enabled)
+			-- Same period the server uses (ThrowService: tutorial until TutorialThrowDone).
+			local tutorial = Game.Tutorial.Enabled and State.Get().TutorialThrowDone ~= true
+			ui.HUD:SetCharging(true, os.clock(), tutorial)
 		end,
 		OnChargeRelease = function()
+			if not ui.HUD:IsCharging() then
+				return
+			end
 			fire("ChargeRelease")
 			ui.HUD:SetCharging(false)
 			ui.HUD:SetThrowLocked(true, "Fetching...")
 			throwInFlight = "pending"
-			-- Safety: unlock if the server never answers.
-			task.delay(Timers.CutscenePadding + 20, function()
+			-- Safety: unlock if the server refused the throw and no ThrowResult arrives.
+			task.delay(6, function()
 				if throwInFlight == "pending" then
 					throwInFlight = nil
 					ui.HUD:SetThrowLocked(false)
@@ -183,14 +190,9 @@ function UI.Start(deps: StartDeps?)
 	Router.Register("Odds", ui.Odds)
 	Router.Register("Settings", ui.Settings)
 
-	-- Hide the HUD's lower cluster while a modal is open on phones (it would sit under the panel).
+	-- While a modal is open the throw prompt/meter hide and clicks never start a throw.
 	Router.OnChange(function(name)
-		if isTouch then
-			local cluster = ui.HUD.Root:FindFirstChild("ThrowCluster")
-			if cluster then
-				cluster.Visible = name == nil
-			end
-		end
+		ui.HUD:SetSuppressed(name ~= nil)
 	end)
 
 	-- Reveal helper used by the cutscene module too.

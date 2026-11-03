@@ -12,6 +12,7 @@ local Game = require(Config:WaitForChild("Game"))
 local Zones = require(Config:WaitForChild("Zones"))
 local Timers = require(Config:WaitForChild("Timers"))
 local Rarities = require(Config:WaitForChild("Rarities"))
+local Balls = require(Config:WaitForChild("Balls"))
 local FormatNumber = require(Util:WaitForChild("FormatNumber"))
 local Meter = require(Util:WaitForChild("Meter"))
 
@@ -26,7 +27,7 @@ local Icon = require(Components:WaitForChild("Icon"))
 local Label = require(Components:WaitForChild("Label"))
 local Button = require(Components:WaitForChild("Button"))
 local Pill = require(Components:WaitForChild("Pill"))
-local ProgressBar = require(Components:WaitForChild("ProgressBar"))
+local PowerMeter = require(Components:WaitForChild("PowerMeter"))
 local Toast = require(Components:WaitForChild("Toast"))
 
 local HUD = {}
@@ -35,8 +36,8 @@ export type HUDDeps = {
 	Parent: Instance,
 	IsTouch: boolean,
 	Open: (screen: string) -> (), -- router
-	OnChargeBegin: (() -> ())?,
-	OnChargeRelease: (() -> ())?,
+	OnChargeBegin: (() -> ())?, -- first press (only fired on the platform, on your turn, nothing in flight)
+	OnChargeRelease: (() -> ())?, -- second press
 	OwnsThrowInput: boolean?, -- false if another module handles input; the HUD then only displays
 }
 
@@ -45,6 +46,10 @@ export type HUDHandle = {
 	Toasts: Toast.ToastHandle,
 	SetCharging: (self: HUDHandle, on: boolean, startClock: number?, isTutorial: boolean?) -> (),
 	SetThrowLocked: (self: HUDHandle, locked: boolean, reason: string?) -> (),
+	SetSuppressed: (self: HUDHandle, on: boolean) -> (), -- hides throw prompt/meter and ignores input (modal open)
+	IsCharging: (self: HUDHandle) -> boolean,
+	RefreshThrow: (self: HUDHandle) -> (),
+	Meter: PowerMeter.MeterHandle,
 	Broadcast: (self: HUDHandle, payload: any) -> (),
 	Refresh: (self: HUDHandle) -> (),
 	SetBadge: (self: HUDHandle, screen: string, on: boolean) -> (),
@@ -58,6 +63,19 @@ local SIDE_ITEMS = {
 	{ Id = "Odds", Icon = "odds", Caption = "Odds" },
 	{ Id = "Settings", Icon = "settings", Caption = "Options" },
 }
+
+-- Remaining count of a consumable ball. State.BallCount is the contract; older snapshots stored true.
+local function ballCount(id: string): number?
+	local fn = (State :: any).BallCount
+	local n: any = nil
+	if type(fn) == "function" then
+		local ok, v = pcall(fn, id)
+		n = if ok then v else nil
+	else
+		n = (State.Get().Balls or {})[id]
+	end
+	return if type(n) == "number" then n else nil
+end
 
 local function zoneById(id: string): any
 	for _, z in Zones do
@@ -206,49 +224,63 @@ function HUD.new(deps: HUDDeps): HUDHandle
 	end
 
 	-- ---------------------------------------------------------------- bottom-centre: throw cluster
+	-- Bottom to top: reach + catch chips, the prompt row (equipped ball + "Click to throw" or the queue
+	-- line), and the vertical power meter (only while charging). Only shown while the server says the local
+	-- player is on the platform (attribute OnPlatform) and it is their turn (ThrowQueuePos == 1).
+	local meterLen = if touch then 132 else 190
+	local infoH, promptH, gap = 36, 48, Theme.Space.S
 	local cluster: Frame = Make("Frame", {
 		Name = "ThrowCluster",
 		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(clusterW, 150),
+		Size = UDim2.fromOffset(clusterW, infoH + gap + promptH + Theme.Space.M + meterLen + 32),
 		Position = UDim2.new(0.5, 0, 1, -E),
 		AnchorPoint = Vector2.new(0.5, 1),
 		ZIndex = 2,
 		Parent = root,
 	})
 	-- Reach + catch line (two chips side by side)
-	local infoRow: Frame = Make("Frame", { Name = "InfoRow", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 36), ZIndex = 3, Parent = cluster })
+	local infoRow: Frame = Make("Frame", { Name = "InfoRow", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, infoH), Position = UDim2.new(0, 0, 1, 0), AnchorPoint = Vector2.new(0, 1), ZIndex = 3, Parent = cluster })
 	Decor.List(infoRow, Enum.FillDirection.Horizontal, Theme.Space.S, Enum.HorizontalAlignment.Center)
-	local reachChip = Pill.new({ Name = "Reach", Icon = "zone_backyard", Palette = "Paper", Width = if touch then 164 else 190, Height = 36, LayoutOrder = 1, Parent = infoRow })
-	local catchChip = Pill.new({ Name = "Catch", Icon = "paw", Palette = "Paper", Width = if touch then 136 else 160, Height = 36, LayoutOrder = 2, Parent = infoRow })
-	-- Meter
-	local meter = ProgressBar.new({ Name = "Meter", Palette = "Tennis", Size = UDim2.new(1, -40, 0, 26), Position = UDim2.new(0.5, 0, 0, 46), AnchorPoint = Vector2.new(0.5, 0), ZIndex = 3, Label = "Hold to throw", Parent = cluster })
-	meter:SetBand(Game.Meter.GoodMin, 1, Theme.Palette.Grass.Top)
-	local perfectMark: Frame = Make("Frame", {
-		Name = "Perfect",
-		BackgroundColor3 = Theme.Palette.Cash.Bottom,
-		BackgroundTransparency = 0.2,
-		BorderSizePixel = 0,
-		Size = UDim2.new(1 - Game.Meter.PerfectMin, 0, 1, 0),
-		Position = UDim2.fromScale(Game.Meter.PerfectMin, 0),
-		ZIndex = meter.Root.ZIndex + 1,
-		Parent = meter.Root,
-	})
-	perfectMark.Name = "PerfectBand"
-	-- Throw button
+	local reachChip = Pill.new({ Name = "Reach", Icon = "zone_backyard", Palette = "Paper", Width = if touch then 164 else 190, Height = infoH, LayoutOrder = 1, Parent = infoRow })
+	local catchChip = Pill.new({ Name = "Catch", Icon = "paw", Palette = "Paper", Width = if touch then 136 else 160, Height = infoH, LayoutOrder = 2, Parent = infoRow })
+	-- Prompt row: equipped ball chip + the prompt button.
+	local promptRow: Frame = Make("Frame", { Name = "PromptRow", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, promptH), Position = UDim2.new(0, 0, 1, -(infoH + gap)), AnchorPoint = Vector2.new(0, 1), ZIndex = 3, Parent = cluster })
+	Decor.List(promptRow, Enum.FillDirection.Horizontal, Theme.Space.S, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+	local ballChip = Pill.new({ Name = "BallChip", Icon = "ball_tennis", Palette = "Paper", Width = 84, Height = 40, LayoutOrder = 1, Parent = promptRow })
+	local idleText = if touch then "Tap to throw" else "Click to throw"
+	local chargeText = if touch then "Tap to release" else "Click to release"
 	local throwButton = Button.new({
 		Name = "Throw",
-		Icon = "ball_tennis",
-		IconSize = 48,
+		Text = idleText,
 		Palette = "Tennis",
-		Size = UDim2.fromOffset(Theme.Touch.ThrowButton, 64),
-		Position = UDim2.new(0.5, 0, 1, 0),
-		AnchorPoint = Vector2.new(0.5, 1),
+		Size = UDim2.fromOffset(if touch then 180 else 200, promptH),
 		Radius = 16,
+		LayoutOrder = 2,
+		ZIndex = 4,
+		Parent = promptRow,
+	})
+	local waitLabel = Label.Display({
+		Name = "QueueLine",
+		Text = "",
+		TextSize = Theme.Text.Body,
+		Size = UDim2.new(1, 0, 0, 24),
+		Position = UDim2.new(0.5, 0, 1, -(infoH + gap + promptH / 2)),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		XAlign = Enum.TextXAlignment.Center,
+		Visible = false,
 		ZIndex = 3,
 		Parent = cluster,
 	})
-	local throwHint = Label.Display({ Name = "Hint", Text = if deps.IsTouch then "Hold the ball" else "Hold SPACE or the ball", TextSize = Theme.Text.Caption, Size = UDim2.fromOffset(200, 16), Position = UDim2.new(0.5, 0, 0, 74), AnchorPoint = Vector2.new(0.5, 0), XAlign = Enum.TextXAlignment.Center, ZIndex = 3, Parent = cluster })
-	throwHint.Name = "ThrowHint"
+	-- Power meter
+	local meter = PowerMeter.new({
+		Name = "PowerMeter",
+		Length = meterLen,
+		Position = UDim2.new(0.5, 0, 1, -(infoH + gap + promptH + Theme.Space.XS)),
+		AnchorPoint = Vector2.new(0.5, 1),
+		ZIndex = 3,
+		Parent = cluster,
+	})
+	meter.Root.Visible = false
 
 	-- ---------------------------------------------------------------- bottom-right: ticker (desktop only)
 	local ticker: Frame? = nil
@@ -280,6 +312,22 @@ function HUD.new(deps: HUDDeps): HUDHandle
 	local chargeStart = 0
 	local chargePeriod = Game.Meter.Period
 	local locked = false
+	local suppressed = false -- a modal panel is open
+	local frozenUntil = 0 -- keep the released meter on screen briefly
+	local player = Players.LocalPlayer
+
+	local handle = { Root = root, Toasts = toasts, Meter = meter } :: any
+
+	local function onPlatform(): boolean
+		return player ~= nil and player:GetAttribute("OnPlatform") == true
+	end
+	local function queuePos(): number
+		local q = if player then player:GetAttribute("ThrowQueuePos") else nil
+		return if type(q) == "number" then q else 0
+	end
+	local function myTurn(): boolean
+		return onPlatform() and queuePos() == 1
+	end
 
 	local function refreshStatic()
 		local s = State.Get()
@@ -296,12 +344,21 @@ function HUD.new(deps: HUDDeps): HUDHandle
 		catchChip:SetText(FormatNumber.Percent(legendary, 0) .. " catch")
 		local streak = State.LuckyStreak()
 		streakPill:SetText("Streak " .. streak .. "/" .. Rarities.LuckyStreakMisses)
-		if streak >= Rarities.LuckyStreakMisses then
-			Decor.PaletteGradient(streakPill.Root, Theme.Palette.Cash)
+		local streakGradient = streakPill.Root:FindFirstChildOfClass("UIGradient")
+		if streakGradient then
+			local p = if streak >= Rarities.LuckyStreakMisses then Theme.Palette.Cash else Theme.Palette.Slate
+			streakGradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, p.Top), ColorSequenceKeypoint.new(1, p.Bottom) })
 		end
+		-- Equipped ball + remaining count (Tennis is unlimited: icon only).
 		local ball = State.Ball()
-		if throwButton.Icon then
-			Icon.Set(throwButton.Icon, Icon.ForBall(ball.Id))
+		Icon.Set(ballChip.Icon, Icon.ForBall(ball.Id))
+		local count = ballCount(ball.Id)
+		if ball.Id == Balls.Default or count == nil then
+			ballChip:SetText("")
+			ballChip.Root.Size = UDim2.fromOffset(40, 40)
+		else
+			ballChip:SetText("x" .. FormatNumber.Compact(count))
+			ballChip.Root.Size = UDim2.fromOffset(92, 40)
 		end
 		for id, pill in boostChips do
 			pill.Root.Visible = false
@@ -339,15 +396,43 @@ function HUD.new(deps: HUDDeps): HUDHandle
 		bannerTimer.Text = if endsAt then FormatNumber.Duration(endsAt - os.time()) else ""
 	end
 
+	local function renderMeter()
+		local pos = Meter.Position(os.clock() - chargeStart, chargePeriod)
+		meter:SetFraction(pos)
+	end
+
+	-- What the throw cluster shows, from the platform attributes and the throw state.
+	local function refreshThrow()
+		local turn = myTurn()
+		local showPrompt = (turn and not locked) or charging
+		throwButton.Root.Visible = showPrompt
+		ballChip.Root.Visible = showPrompt
+		throwButton:SetText(if charging then chargeText else idleText)
+		throwButton:SetPalette(if charging then "Cash" else "Tennis")
+		local q = queuePos()
+		waitLabel.Visible = onPlatform() and q >= 2 and not charging
+		waitLabel.Text = "Waiting for your turn (#" .. tostring(q) .. ")"
+		meter.Root.Visible = charging or os.clock() < frozenUntil
+		promptRow.Visible = not suppressed
+		waitLabel.Visible = waitLabel.Visible and not suppressed
+		meter.Root.Visible = meter.Root.Visible and not suppressed
+	end
+
 	-- Per-frame: meter sweep, boost countdowns, banner timer.
 	local acc = 0
+	local wasFrozen = false
 	local heartbeat = RunService.Heartbeat:Connect(function(dt)
 		if charging then
-			local pos = Meter.Position(os.clock() - chargeStart, chargePeriod)
-			meter:SetFraction(pos)
-			local _, band = Meter.QualityForPosition(pos)
-			meter:SetLabel(band)
+			renderMeter()
+			if os.clock() - chargeStart > Game.Throw.MaxChargeSeconds and deps.OnChargeRelease then
+				deps.OnChargeRelease() -- the server auto-releases at the same moment
+			end
 		end
+		local frozen = os.clock() < frozenUntil
+		if wasFrozen and not frozen then
+			refreshThrow()
+		end
+		wasFrozen = frozen
 		acc += dt
 		if acc >= 1 then
 			acc = 0
@@ -363,61 +448,92 @@ function HUD.new(deps: HUDDeps): HUDHandle
 		end
 	end)
 
-	local function beginCharge()
-		if locked or charging then
+	-- One press toggles: first press starts the meter (ChargeBegin), the second releases (ChargeRelease).
+	local function press()
+		if suppressed then
 			return
 		end
-		if deps.OnChargeBegin then
-			deps.OnChargeBegin()
-		end
-	end
-	local function releaseCharge()
-		if not charging then
-			return
-		end
-		if deps.OnChargeRelease then
-			deps.OnChargeRelease()
+		if charging then
+			if deps.OnChargeRelease then
+				deps.OnChargeRelease()
+			end
+		elseif myTurn() and not locked then
+			if deps.OnChargeBegin then
+				deps.OnChargeBegin()
+			end
 		end
 	end
 
 	local connections: { RBXScriptConnection } = { heartbeat }
 	if deps.OwnsThrowInput ~= false then
-		throwButton.Root.MouseButton1Down:Connect(beginCharge)
-		throwButton.Root.MouseButton1Up:Connect(releaseCharge)
+		throwButton.Root.Activated:Connect(press)
 		table.insert(connections, UserInputService.InputBegan:Connect(function(input, processed)
-			if processed then
+			if input.KeyCode == Enum.KeyCode.ButtonR2 then
+				press()
+			elseif processed then
 				return
-			end
-			if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonR2 then
-				beginCharge()
+			elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.Space then
+				press()
 			end
 		end))
-		table.insert(connections, UserInputService.InputEnded:Connect(function(input)
-			if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonR2 then
-				releaseCharge()
+		-- Touch: a tap on the world (not a drag, not a GUI button) counts as a click.
+		pcall(function()
+			table.insert(connections, (UserInputService :: any).TouchTapInWorld:Connect(function(_pos: Vector2, processedByUI: boolean)
+				if not processedByUI then
+					press()
+				end
+			end))
+		end)
+	end
+	if player then
+		table.insert(connections, player:GetAttributeChangedSignal("OnPlatform"):Connect(function()
+			if charging and not myTurn() then
+				handle:SetCharging(false)
 			end
+			refreshThrow()
+		end))
+		table.insert(connections, player:GetAttributeChangedSignal("ThrowQueuePos"):Connect(function()
+			if charging and not myTurn() then
+				handle:SetCharging(false)
+			end
+			refreshThrow()
 		end))
 	end
 
 	table.insert(connections, State.Changed:Connect(refreshStatic))
 	table.insert(connections, State.EventsChanged:Connect(refreshBanner))
 
-	local handle = { Root = root, Toasts = toasts } :: any
 	function handle.SetCharging(_, on: boolean, startClock: number?, isTutorial: boolean?)
+		local was = charging
 		charging = on
 		if on then
 			chargeStart = startClock or os.clock()
 			chargePeriod = Meter.Period(isTutorial)
-			Motion.Pulse(throwButton.Root, 1.1)
+			frozenUntil = 0
+			renderMeter()
+			Motion.Pulse(throwButton.Root, 1.06)
 		else
-			meter:SetFraction(0)
-			meter:SetLabel(if locked then "Fetching..." else "Hold to throw")
+			-- Freeze the released value on screen for a moment, then hide.
+			frozenUntil = if was then os.clock() + 0.6 else 0
+			if not was then
+				meter:SetFraction(0)
+			end
 		end
+		refreshThrow()
 	end
-	function handle.SetThrowLocked(_, isLocked: boolean, reason: string?)
+	function handle.SetThrowLocked(_, isLocked: boolean, _reason: string?)
 		locked = isLocked
-		throwButton:SetEnabled(not isLocked)
-		meter:SetLabel(if isLocked then (reason or "Fetching...") else "Hold to throw")
+		refreshThrow()
+	end
+	function handle.SetSuppressed(_, on: boolean)
+		suppressed = on
+		refreshThrow()
+	end
+	function handle.IsCharging(): boolean
+		return charging
+	end
+	function handle.RefreshThrow()
+		refreshThrow()
 	end
 	function handle.Broadcast(_, payload: any)
 		local text = tostring(payload and payload.Text or "")
@@ -453,6 +569,7 @@ function HUD.new(deps: HUDDeps): HUDHandle
 	refreshStatic()
 	refreshBanner()
 	handle:SetCharging(false)
+	refreshThrow()
 	return handle :: HUDHandle
 end
 

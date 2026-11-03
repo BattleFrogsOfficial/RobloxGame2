@@ -1,8 +1,19 @@
 --!nonstrict
--- The throw: ChargeBegin/ChargeRelease timing (server clock only), one throw in flight per player,
--- cooldowns + rate limits, pad presence, distance/landing/zone, the full roll (RollService), commit to
--- data BEFORE any visuals, ThrowResult to every client, cutscene completion (CutsceneFinished or
--- timeout), broadcasts, runaway spawn on a miss and the Golden Whistle recall (UseWhistle).
+-- The throw: ChargeBegin/ChargeRelease timing (server clock only; the client clicks once to start and once
+-- to release), one throw in flight per player, cooldowns + rate limits, the ONE shared throwing platform and
+-- its FIFO queue, distance/landing/zone, consumable balls, the full roll (RollService), commit to data
+-- BEFORE any visuals, ThrowResult to every client, cutscene completion (CutsceneFinished or timeout),
+-- broadcasts, runaway spawn on a miss and the Golden Whistle recall (UseWhistle).
+--
+-- Platform queue: a player is "on the platform" while their root is within Layout.Platform.StandRadius (XZ)
+-- of Layout.Platform.ThrowSpot and at Y >= Layout.ThrowLine.Y - Game.Platform.YTolerance (sampled every
+-- Game.Platform.SampleInterval). Arrivals join the back of the line; position 1 has the turn and is the only
+-- one allowed to ChargeBegin (one throw per turn). Waiting players are moved onto
+-- Layout.Platform.QueueSpots[pos - 1] when they arrive and whenever the line advances; a new turn-holder is
+-- moved onto the ThrowSpot. The turn ends MinSecondsBetweenThrows after the throw finishes (CutsceneFinished
+-- or the server timeout) and the thrower goes to the back; a turn-holder who does not start charging within
+-- Game.Platform.TurnStartSeconds also goes to the back. Leaving the platform (or the server) leaves the line.
+-- Player attributes: "OnPlatform" (boolean), "ThrowQueuePos" (0 = not queued, 1 = your turn, 2+ = waiting).
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -23,6 +34,7 @@ local Odds = require(Util:WaitForChild("Odds"))
 local PlayerStats = require(Util:WaitForChild("PlayerStats"))
 local DogCatalog = require(Util:WaitForChild("DogCatalog"))
 local RateLimiter = require(Util:WaitForChild("RateLimiter"))
+local BallFlight = require(Util:WaitForChild("BallFlight"))
 
 local Services = script.Parent
 local DataService = require(Services:WaitForChild("DataService"))
@@ -31,6 +43,7 @@ local RollService = require(Services:WaitForChild("RollService"))
 local BookService = require(Services:WaitForChild("BookService"))
 local EventService = require(Services:WaitForChild("EventService"))
 local BroadcastService = require(Services:WaitForChild("BroadcastService"))
+local ThrowQueue = require(Services:WaitForChild("ThrowQueue"))
 
 local ThrowService = {}
 
@@ -56,6 +69,21 @@ local lastRelease: { [Player]: number } = {}
 local throws: { [string]: ThrowRec } = {}
 local tokenCounter = 0
 
+-- Current turn (queue position 1). One throw per turn.
+type Turn = { Player: Player, StartedAt: number, Charged: boolean, Throw: ThrowRec?, EndsAt: number? }
+local turn: Turn? = nil
+local queue = ThrowQueue.new()
+local onPlatform: { [Player]: boolean } = {}
+local lastQueuePos: { [Player]: number } = {}
+
+function ThrowService.QueuePosition(player: Player): number
+	return queue:Position(player)
+end
+
+function ThrowService.IsOnPlatform(player: Player): boolean
+	return onPlatform[player] == true
+end
+
 local function zoneById(id: string): any
 	for _, z in Zones do
 		if z.Id == id then
@@ -65,27 +93,93 @@ local function zoneById(id: string): any
 	return Zones[1]
 end
 
-function ThrowService.PadPosition(index: number): Vector3
-	for _, inst in CollectionService:GetTagged("ThrowPad") do
-		if inst:GetAttribute("PadIndex") == index and inst:IsA("BasePart") then
-			return inst.Position
-		end
-	end
-	return Vector3.new(Layout.ThrowLine.PadsX[index] or 0, Layout.GroundY, Layout.ThrowLine.Z)
+----------------------------------------------------------------------------------------------------
+-- Platform geometry (Layout.Platform; falls back to the ThrowPad part / ThrowLine if a field is missing)
+----------------------------------------------------------------------------------------------------
+local function deckY(): number
+	return (Layout.ThrowLine :: any).Y or 40
 end
 
-local function onOwnPad(player: Player, pad: number): boolean
-	if not Game.Throw.RequireOnPad then
-		return true
+local function throwPadPart(): BasePart?
+	for _, inst in CollectionService:GetTagged("ThrowPad") do
+		if inst:IsA("BasePart") then
+			return inst
+		end
 	end
+	return nil
+end
+
+function ThrowService.ThrowSpot(): Vector3
+	local plat = (Layout :: any).Platform
+	if plat and typeof(plat.ThrowSpot) == "Vector3" then
+		return plat.ThrowSpot
+	end
+	local pad = throwPadPart()
+	if pad then
+		return Vector3.new(pad.Position.X, deckY(), pad.Position.Z)
+	end
+	return Vector3.new((Layout.ThrowLine :: any).X or 0, deckY(), Layout.ThrowLine.Z - 8)
+end
+
+local function standRadius(): number
+	local plat = (Layout :: any).Platform
+	if plat and type(plat.StandRadius) == "number" then
+		return plat.StandRadius
+	end
+	local pad = throwPadPart()
+	if pad then
+		return math.max(pad.Size.X, pad.Size.Z) / 2
+	end
+	return 24
+end
+
+local function queueSpot(waitIndex: number): Vector3?
+	local plat = (Layout :: any).Platform
+	local spots = plat and plat.QueueSpots
+	if type(spots) == "table" and #spots > 0 then
+		return spots[math.clamp(waitIndex, 1, #spots)]
+	end
+	local tagged = {}
+	for _, inst in CollectionService:GetTagged("QueueSpot") do
+		local order = inst:GetAttribute("Order")
+		if inst:IsA("BasePart") and type(order) == "number" then
+			tagged[order] = inst.Position
+		end
+	end
+	if #tagged > 0 then
+		return tagged[math.clamp(waitIndex, 1, #tagged)]
+	end
+	return nil
+end
+
+local function rootOf(player: Player): BasePart?
 	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not hrp or not hrp:IsA("BasePart") then
+	if not hrp or not hrp:IsA("BasePart") or (hum and hum.Health <= 0) then
+		return nil
+	end
+	return hrp
+end
+
+-- Player standing on the deck? Also true near their own queue spot, so a spot placed at the deck's edge
+-- never bounces a waiting player out of the line.
+local function isOnPlatform(player: Player): boolean
+	local hrp = rootOf(player)
+	if not hrp then
 		return false
 	end
-	local p = ThrowService.PadPosition(pad)
-	local d = Vector2.new(hrp.Position.X - p.X, hrp.Position.Z - p.Z).Magnitude
-	return d <= Game.Throw.PadRadius
+	local pos = hrp.Position
+	if pos.Y < deckY() - Game.Platform.YTolerance then
+		return false
+	end
+	local spot = ThrowService.ThrowSpot()
+	if Vector2.new(pos.X - spot.X, pos.Z - spot.Z).Magnitude <= standRadius() then
+		return true
+	end
+	local qp = queue:Position(player)
+	local mine = if qp >= 2 then queueSpot(qp - 1) else nil
+	return mine ~= nil and Vector2.new(pos.X - mine.X, pos.Z - mine.Z).Magnitude <= 6
 end
 
 function ThrowService.IsInFlight(player: Player): boolean
@@ -103,6 +197,9 @@ local function finish(rec: ThrowRec)
 	local player = rec.Player
 	if inFlight[player] == rec then
 		inFlight[player] = nil
+	end
+	if turn and turn.Throw == rec and not turn.EndsAt then
+		turn.EndsAt = os.clock() + Game.Throw.MinSecondsBetweenThrows
 	end
 	local r = rec.Result
 	local name = player.DisplayName
@@ -141,15 +238,13 @@ end
 ----------------------------------------------------------------------------------------------------
 local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 	local state = DataService.Get(player)
-	local pad = DogService.GetYardIndex(player)
-	if not state or not pad then
+	if not state then
 		return
 	end
 	local ball = PlayerStats.Ball(state)
 	local meterPos, quality, band = Meter.Evaluate(elapsed, tutorial)
-	local maxField = PlayerStats.MaxFieldDistance()
-	local distance = state.ThrowPower * ball.RangeMult * quality * (1 + rng:Range(-Game.Throw.Scatter, Game.Throw.Scatter))
-	distance = math.clamp(distance, Game.Throw.MinDistance, maxField)
+	local distance = PlayerStats.ThrowDistance(state.ThrowPower, ball.RangeMult, quality,
+		rng:Range(-Game.Throw.Scatter, Game.Throw.Scatter), Game.Throw.MinDistance)
 	local zone
 	if tutorial then
 		zone = zoneById(Game.Tutorial.ForceZone)
@@ -190,6 +285,17 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		table.insert(boosts, "LuckyStreak")
 	end
 	state.LuckyStreak = outcome.NewLuckyStreak
+	-- The throw is accepted: a consumable ball is used up (back to the Tennis Ball at 0).
+	local ballsLeft: number? = nil
+	if ball.Consumable then
+		local left = math.max(0, PlayerStats.BallCount(state, ball.Id) - 1)
+		state.Balls[ball.Id] = if left > 0 then left else nil
+		ballsLeft = left
+		if left <= 0 then
+			state.EquippedBall = Balls.Default
+			BroadcastService.Notify(player, ("That was your last %s: back to the Tennis Ball."):format(ball.Name), "Ball")
+		end
+	end
 	state.Stats.Throws += 1
 	state.Stats.BestDistance = math.max(state.Stats.BestDistance or 0, distance)
 	if tutorial then
@@ -217,13 +323,16 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		state.Stats.Missed += 1
 	end
 
-	local padPos = ThrowService.PadPosition(pad)
-	-- Land inside the clear centre lane (|x - centre| <= FieldWidth/4 - 4): the outer 25% bands hold zone
+	local spot = ThrowService.ThrowSpot()
+	-- Land inside the clear centre lane (|x - centre| <= FieldWidth/4 - 4 = 56): the outer 25% bands hold zone
 	-- decor, distance markers and arch pillars (QA overlap fix; see docs/qa/OVERLAP.md).
 	local fieldCX = (Layout.Field.MinX + Layout.Field.MaxX) / 2
 	local laneHalf = (Layout.Field.MaxX - Layout.Field.MinX) * 0.25 - 4
-	local landX = math.clamp(fieldCX + (padPos.X - fieldCX) * 0.5
+	local landX = math.clamp(fieldCX + (spot.X - fieldCX) * 0.5
 		+ rng:Range(-Game.Throw.LateralScatter, Game.Throw.LateralScatter) * 0.5, fieldCX - laneHalf, fieldCX + laneHalf)
+	-- Raised launch: same horizontal distance, the arc starts on the deck and drops to the field.
+	local launchPos, landPos = BallFlight.Endpoints(spot, deckY(), Layout.ThrowLine.Z, Layout.GroundY, distance, landX)
+	local flightTime = BallFlight.ForThrow(launchPos, landPos).Duration
 	local adult = DogCatalog.AdultIncome(def, outcome.Variant) * PlayerStats.IncomeMult(ctx)
 	local throwId = HttpService:GenerateGUID(false)
 	local now = os.clock()
@@ -232,7 +341,7 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		ThrowId = throwId,
 		ThrowerUserId = player.UserId,
 		ThrowerName = player.DisplayName,
-		PadIndex = pad,
+		PadIndex = 1, -- one shared platform (the "ThrowPad"-tagged deck)
 		Distance = distance,
 		ZoneId = zone.Id,
 		DogId = outcome.DogId,
@@ -252,8 +361,12 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		MeterPos = meterPos,
 		Band = band,
 		BallId = ball.Id,
-		StartPosition = padPos,
-		LandingPosition = Vector3.new(landX, Layout.GroundY, Layout.DistanceToZ(distance)),
+		BallsLeft = ballsLeft, -- remaining throws of a consumable ball (nil for Tennis)
+		LaunchPos = launchPos, -- deck height (Layout.ThrowLine.Y)
+		LandPos = landPos, -- Y = GroundY, Z = ThrowLine.Z + Distance
+		FlightTime = flightTime, -- BallFlight.ForThrow(LaunchPos, LandPos).Duration
+		StartPosition = launchPos, -- legacy names (cutscene contract)
+		LandingPosition = landPos,
 		TreatPocketUsed = outcome.TreatPocketUsed,
 		PremiumThrow = premium,
 		Income = adult, -- adult $/s incl. variant + gamepass mult (end card)
@@ -270,12 +383,12 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		Player = player,
 		Result = result,
 		StartedAt = now,
-		FinishAt = now + cutLen + Timers.CutscenePadding,
-		EarliestFinish = if canSkip then now else now + cutLen * 0.6,
+		FinishAt = now + flightTime + cutLen + Timers.CutscenePadding,
+		EarliestFinish = if canSkip then now + flightTime else now + math.max(cutLen * 0.6, flightTime),
 		Finished = false,
 		Caught = outcome.Caught,
 		Recalled = false,
-		WhistleExpires = now + cutLen + Timers.CutscenePadding + Timers.WhistleWindow,
+		WhistleExpires = now + flightTime + cutLen + Timers.CutscenePadding + Timers.WhistleWindow,
 		Status = status,
 	}
 	inFlight[player] = rec
@@ -300,12 +413,20 @@ local function release(player: Player)
 	if not ok then
 		warn("[ThrowService] resolve error: " .. tostring(err))
 	end
+	local t = turn
+	if t and t.Player == player then
+		local rec = inFlight[player]
+		if ok and rec then
+			t.Throw = rec
+		else
+			t.EndsAt = os.clock() + Game.Throw.MinSecondsBetweenThrows
+		end
+	end
 end
 
 local function beginCharge(player: Player)
 	local state = DataService.Get(player)
-	local pad = DogService.GetYardIndex(player)
-	if not state or not pad then
+	if not state then
 		return
 	end
 	if charges[player] or inFlight[player] then
@@ -314,10 +435,22 @@ local function beginCharge(player: Player)
 	if os.clock() - (lastRelease[player] or -math.huge) < Game.Throw.MinSecondsBetweenThrows then
 		return
 	end
-	if not onOwnPad(player, pad) then
-		BroadcastService.Notify(player, "Stand on your throw pad (#" .. pad .. ") to throw!", "Hint")
+	if not isOnPlatform(player) then
+		BroadcastService.Notify(player, "Walk up onto the throwing platform to throw!", "Hint")
 		return
 	end
+	local pos = queue:Position(player)
+	local t = turn
+	if pos ~= 1 or not t or t.Player ~= player then
+		if pos >= 2 then
+			BroadcastService.Notify(player, ("Wait for your turn: you're #%d in line."):format(pos), "Hint")
+		end
+		return
+	end
+	if t.Charged then
+		return -- one throw per turn
+	end
+	t.Charged = true
 	tokenCounter += 1
 	local token = tokenCounter
 	charges[player] = {
@@ -380,6 +513,102 @@ local function useWhistle(player: Player, throwId: any): (boolean, string)
 end
 
 ----------------------------------------------------------------------------------------------------
+-- Platform queue upkeep
+----------------------------------------------------------------------------------------------------
+local function moveTo(player: Player, spot: Vector3)
+	local char = player.Character
+	local hrp = rootOf(player)
+	if not char or not hrp then
+		return
+	end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local up = if hum then hum.HipHeight + hrp.Size.Y / 2 else 3
+	local at = spot + Vector3.new(0, up + 0.1, 0)
+	char:PivotTo(CFrame.lookAt(at, at + Vector3.new(0, 0, 1))) -- face down the field (+Z)
+end
+
+local function startTurn(player: Player?)
+	turn = if player then { Player = player, StartedAt = os.clock(), Charged = false, Throw = nil, EndsAt = nil } else nil
+end
+
+-- The current turn is over: the thrower goes to the back (stays at 1 when alone) and a fresh turn starts.
+local function endTurn()
+	local t = turn
+	if not t then
+		return
+	end
+	queue:ToBack(t.Player)
+	startTurn(queue:Head())
+end
+
+-- Attributes for everyone + teleports for players whose place in line changed.
+local function commitQueue()
+	if not turn or turn.Player ~= queue:Head() then
+		startTurn(queue:Head())
+	end
+	for _, player in Players:GetPlayers() do
+		local pos = queue:Position(player)
+		local prev = lastQueuePos[player] or 0
+		if player:GetAttribute("OnPlatform") ~= (onPlatform[player] == true) then
+			player:SetAttribute("OnPlatform", onPlatform[player] == true)
+		end
+		if player:GetAttribute("ThrowQueuePos") ~= pos then
+			player:SetAttribute("ThrowQueuePos", pos)
+		end
+		if pos ~= prev then
+			lastQueuePos[player] = pos
+			if pos >= 2 then
+				local spot = queueSpot(pos - 1)
+				if spot then
+					moveTo(player, spot)
+				end
+			elseif pos == 1 and prev >= 2 then
+				moveTo(player, ThrowService.ThrowSpot()) -- your turn: step up to the throw spot
+				BroadcastService.Notify(player, "Your turn! Click to start the throw meter.", "Hint")
+			end
+		end
+	end
+end
+
+local function leaveQueue(player: Player)
+	if queue:Remove(player) then
+		charges[player] = nil -- an unreleased charge is dropped
+		if turn and turn.Player == player then
+			turn = nil
+		end
+	end
+end
+
+local function tickPlatform()
+	for _, player in Players:GetPlayers() do
+		local on = isOnPlatform(player)
+		onPlatform[player] = on
+		local pos = queue:Position(player)
+		if on and pos == 0 and DataService.Get(player) then
+			queue:Join(player)
+		elseif not on and pos > 0 then
+			leaveQueue(player)
+		end
+	end
+	local t = turn
+	if t and t.Player == queue:Head() then
+		local now = os.clock()
+		if t.EndsAt then
+			if now >= t.EndsAt then
+				endTurn()
+			end
+		elseif not t.Charged and not inFlight[t.Player] and not charges[t.Player]
+			and now - t.StartedAt > Game.Platform.TurnStartSeconds then
+			if queue:Count() > 1 then
+				BroadcastService.Notify(t.Player, "You took too long, so you moved to the back of the line.", "Hint")
+			end
+			endTurn()
+		end
+	end
+	commitQueue()
+end
+
+----------------------------------------------------------------------------------------------------
 function ThrowService.Start()
 	local beginLimiter = RateLimiter.new(Game.RateLimits.Charge[1], Game.RateLimits.Charge[2])
 	local releaseLimiter = RateLimiter.new(Game.RateLimits.Charge[1], Game.RateLimits.Charge[2])
@@ -428,6 +657,9 @@ function ThrowService.Start()
 	end
 
 	Players.PlayerRemoving:Connect(function(player)
+		leaveQueue(player)
+		onPlatform[player] = nil
+		lastQueuePos[player] = nil
 		charges[player] = nil
 		lastRelease[player] = nil
 		local rec = inFlight[player]
@@ -442,6 +674,28 @@ function ThrowService.Start()
 		end
 		beginLimiter:Clear(player)
 		releaseLimiter:Clear(player)
+		finishLimiter:Clear(player)
+		whistleLimiter:Clear(player)
+		task.defer(commitQueue)
+	end)
+	Players.PlayerAdded:Connect(function(player)
+		player:SetAttribute("OnPlatform", false)
+		player:SetAttribute("ThrowQueuePos", 0)
+	end)
+	for _, player in Players:GetPlayers() do
+		player:SetAttribute("OnPlatform", false)
+		player:SetAttribute("ThrowQueuePos", 0)
+	end
+
+	-- platform presence + queue (~4x per second)
+	task.spawn(function()
+		while true do
+			task.wait(Game.Platform.SampleInterval)
+			local ok, err = pcall(tickPlatform)
+			if not ok then
+				warn("[ThrowService] platform queue error: " .. tostring(err))
+			end
+		end
 	end)
 
 	-- cutscene timeouts + cleanup of old throw records
