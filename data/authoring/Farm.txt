@@ -1,0 +1,87 @@
+// FARM (450-700 studs) - herders, heelers, curs and livestock guardians.
+# Common
+Border Collie | medium_fluffy | black | white | tuxedo | Can herd sheep, ducks and toddlers with one stare.
+Australian Cattle Dog | medium_lean | blue | tan | ticked | Nips heels, works all day, sleeps on your boots.
+Red Heeler | medium_lean | red | white | ticked | Speckled like a rusty gate and twice as tough.
+Australian Kelpie | medium_lean | black | tan | tan_points | Runs across the backs of sheep to get to the front.
+Cardigan Welsh Corgi | corgi_type | brindle | white | brindle | The corgi with the fox tail.
+Swedish Vallhund | corgi_type | wolf_grey | cream | sable | A viking cattle dog in a compact size.
+Lancashire Heeler | corgi_type@0.75 | black | tan | tan_points | A tiny heeler that bosses the cows around.
+Cowboy Corgi | corgi_type | blue | tan | ticked | Corgi legs, cattle dog spirit.
+Bernese Mountain Dog | giant_fluffy | black | rust | tan_points | Pulls the milk cart and the hearts of everyone.
+Great Pyrenees | giant_fluffy | white | biscuit | eye_patch | Patrols the flock all night. Naps all day.
+Anatolian Shepherd | giant | fawn | black | mask | A calm giant who guards goats from wolves.
+Maremma Sheepdog | large_fluffy | white | cream | none | Lives with the sheep. Thinks it is one.
+Bearded Collie | large_fluffy | grey | white | piebald | A bouncing shaggy rug with a beard.
+Briard | large_fluffy | fawn | tan | none | A heart wrapped in hair.
+Beauceron | large_athletic | black | rust | tan_points | French farm dog with double dewclaws.
+Bouvier des Flandres | large_fluffy | charcoal | black | none | A bearded cattle drover from Flanders.
+Puli | poodle_type@0.9 | black | charcoal | none | A walking mop with a herding instinct.
+Komondor | giant_fluffy | ivory | cream | none | Wears its own dreadlocks as armour.
+Pumi | poodle_type@0.8 | grey | silver | none | Curly-eared herder with a cartoon face.
+Mudi | medium_lean | black | white | blaze | A wavy Hungarian herder full of ideas.
+Croatian Sheepdog | medium_fluffy | black | charcoal | none | A curly black herder from the old valleys.
+Pyrenean Shepherd | medium_fluffy@0.8 | fawn | grey | mask | Small, fast and always on the move.
+Polish Lowland Sheepdog | medium_fluffy | white | grey | piebald | A shaggy herder with a great memory.
+Schapendoes | medium_fluffy | grey | white | none | A Dutch sheepdog that bounces over fences.
+Entlebucher Mountain Dog | medium_stocky | black | tan | tan_points | The smallest Swiss mountain dog, the loudest too.
+Appenzeller Sennenhund | large_athletic | black | white | tuxedo | Curled tail, booming bark, cattle expert.
+Greater Swiss Mountain Dog | giant | black | rust | tan_points | Hauls carts. Carries the snacks.
+Catahoula Leopard Dog | large_athletic | blue | silver | merle | Glass eyes and a patchwork coat.
+Blue Lacy | medium_lean | slate | silver | none | A grey ranch dog from Texas.
+Black Mouth Cur | large_athletic | fawn | black | mask | A loyal ranch dog with a dark muzzle.
+Mountain Cur | large_athletic | brindle | black | brindle | Trees raccoons and guards the homestead.
+Rat Terrier | small_terrier | white | black | piebald | The barn's top mouser.
+Patterdale Terrier | small_terrier | black | charcoal | none | A small black terrier with a big heart.
+Lakeland Terrier | small_terrier | blue | tan | saddle | A wiry fell terrier from the lakes.
+Glen of Imaal Terrier | long_low | wheaten | cream | none | A bowlegged terrier that turned spits in kitchens.
+Welsh Terrier | small_terrier | tan | black | saddle | A wire-coated farm terrier who fears nothing.
+Smithfield | medium_fluffy | white | black | eye_patch | A shaggy drover dog from the old markets.
+English Shepherd | medium_fluffy | sable | white | tuxedo | An all-round farm helper.
+McNab | medium_lean | black | white | socks | A ranch dog bred for the hills.
+Koolie | medium_lean | red | cream | merle | A speckled herder from the outback.
+Belgian Laekenois | large_lean | fawn | black | ticked | The rough-coated Belgian herder.
+Dutch Shepherd | large_athletic | brindle | fawn | brindle | A striped herder that loves a job.
+Picardy Shepherd | large_athletic | grey | fawn | none | A shaggy-browed herder from northern France.
+Danish-Swedish Farmdog | small_terrier | white | tan | piebald | A pint-sized farm helper and ratter.
+Cesky Terrier | long_low | grey | silver | none | A soft-coated terrier built for burrows.
+Spanish Mastiff | giant | red | fawn | none | Walked the sheep across Spain for centuries.
+Cane Corso | giant@1.5 | slate | charcoal | none | A watchful Italian farm guardian.
+Barn Mutt | medium_stocky | red | white | piebald | Sleeps in the hay with the barn cats.
+Haystack Mutt | large_fluffy | wheaten | biscuit | none | Blends perfectly into a haystack.
+Red Merle Aussie | medium_fluffy | liver | cream | merle | A copper-marbled herder with copper eyes.
+Smooth Collie | large_athletic | blue | white | merle | A short-coated collie with long legs.
+Bergamasco Shepherd | large_fluffy | grey | charcoal | none | Felted coat like a wool blanket.
+Miniature American Shepherd | medium_fluffy@0.8 | black | white | merle | A pocket-sized herder.
+Mountain Feist | toy@0.75 | white | tan | eye_patch | A small hunting dog that climbs trees.
+# Uncommon
+Tractor Terrier | small_terrier | #C0392B | black | zigzag | Rides in the tractor seat. Steers poorly.
+Pumpkin Patch Pug | toy | #E67E22 | fawn | leaf_dapple | Found the biggest pumpkin. Cannot move it.
+Hay Bale Heeler | medium_lean | wheaten | blue | checker | Naps on top of the hay stack.
+Cornfield Collie | medium_fluffy | #E8C547 | white | wave_stripes | Gets lost in the corn maze on purpose.
+Chicken Coop Corgi | corgi_type | red | white | polka_dots | Counts the chickens every morning.
+Sunflower Sheltie | medium_fluffy@0.8 | #F2B705 | #6B3E1E | sunburst | Follows the sun like a sunflower.
+Orchard Aussie | medium_fluffy | #B03A2E | white | heart_patch | Herds apples into neat little piles.
+Windmill Whippet | medium_lean | white | #7FA7C9 | zigzag | Races the windmill blades.
+Muddy Boots Mastiff | giant | fawn | mocha | polka_dots | Has tracked mud into every room of the farmhouse.
+Barn Owl Basset | long_low | #E0CBA8 | white | star_freckles | Stays up all night with the owls.
+Piglet Puggle | medium_stocky@0.8 | #F2B8A8 | fawn | heart_patch | Rolls in the mud with the piglets.
+Egg Basket Bichon | small_fluffy | white | #F3E3B5 | star_freckles | Carries the eggs without cracking one.
+Shearing Day Poodle | poodle_type | ivory | #D8CFC0 | frost_tips | Got sheared with the sheep. Looks great.
+# Rare
+Straw Hat Kelpie | medium_lean | red | tan | none | straw_hat | Works the fields from sunup to sundown.
+Cowbell Cattle Dog | medium_lean | blue | white | roan | cowbell | Wears a cowbell so the cows know it is coming.
+Saddlebag Shepherd | large_athletic | tan | black | saddle | saddlebag | Carries the lunch out to the far fields.
+Bandana Aussie | medium_fluffy | blue | tan | merle | bandana | Rodeo ready.
+Lantern Pyrenees | giant_fluffy | white | cream | none | lantern | Walks the fence line every night with a lantern.
+Raincoat Puli | poodle_type | black | #F2C230 | none | raincoat | A soaking-wet mop in a bright yellow raincoat.
+Pie Baker Pumi | poodle_type@0.82 | grey | white | none | chef_hat | Bakes blackberry pie. Eats blackberry pie.
+# Epic
+Baroness Buttercup | large_fluffy | #F5D76E | #FFF6D5 | sunburst | crown | Rules the buttercup meadow with a gentle paw.
+Sheriff Mudpaws | medium_lean | #8C5A3C | #E6C79C | ember_tips | sheriff_star | Keeps the peace between the hens and the foxes.
+Lord Fleeceworth | poodle_type | #F2EEE8 | #B9A7D9 | star_freckles | royal_collar | The fluffiest noble in the county.
+# Legendary
+Honeymead | medium_fluffy | #F2A93B | #FFE3A1 | honeycomb | none | The bees follow her everywhere and never sting.
+Ploughstorm | giant | #4A5568 | #CBD5E0 | storm_cloud | none | Rolls across the fields like a summer thunderstorm.
+# Mythic
+Barnstorm | giant_fluffy@2.1 | #3B3F6B | #F7E27A | thunder_scales | cowbell | wings+horns | A thunderhead bull-hound that ploughs the sky.

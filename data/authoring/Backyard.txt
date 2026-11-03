@@ -1,0 +1,87 @@
+// BACKYARD (0-100 studs) - the dogs everybody already knows. Fences, sprinklers, the grill.
+# Common
+Mutt | medium_lean | tan | white | socks | Nobody knows the recipe. Everybody loves the result.
+Labrador Retriever | large_athletic | yellow_lab | cream | none | Will retrieve anything, including things you did not throw.
+Golden Retriever | large_fluffy | gold | cream | none | A walking sunbeam that sheds.
+Beagle | medium_lean@0.86 | tan | white | saddle | Follows its nose straight into the neighbour's yard.
+Pug | toy@0.7 | fawn | black | mask | Snores louder than the lawnmower.
+Dachshund | long_low | red | mahogany | none | Half a dog high, two dogs long.
+Chihuahua | toy@0.6 | fawn | cream | none | Tiny body, enormous opinions.
+Poodle | poodle_type@1.15 | white | cream | none | Smarter than you. Knows it. Is polite about it.
+Bulldog | medium_stocky | white | fawn | piebald | Built like a footstool, sits like one too.
+Boxer | large_athletic | fawn | white | mask | Greets you by bouncing exactly at face height.
+Pembroke Welsh Corgi | corgi_type | red | white | tuxedo | Short legs, long ambitions, perfect loaf.
+German Shepherd | large_athletic@1.36 | tan | black | saddle | Takes fetch extremely seriously.
+Shih Tzu | small_fluffy | white | gold | piebald | Has a hairdo and a schedule.
+Pomeranian | small_fluffy@0.62 | apricot | cream | none | A dandelion puff with a bark.
+Yorkshire Terrier | small_terrier@0.62 | tan | blue | saddle | Ribbon optional. Attitude included.
+Jack Russell Terrier | small_terrier | white | tan | eye_patch | Runs on springs and pure espresso.
+French Bulldog | medium_stocky@0.76 | fawn | cream | mask | Bat ears tuned to the sound of snacks.
+Rottweiler | large_athletic@1.38 | black | rust | tan_points | A big softie in a security uniform.
+Doberman | large_lean | black | rust | tan_points | Sleek, sharp, and secretly scared of the vacuum.
+Great Dane | giant@1.8 | fawn | black | mask | Thinks it is a lap dog. It is not.
+Cocker Spaniel | medium_fluffy@0.86 | biscuit | cream | none | Ears like curtains, heart like a pillow.
+Maltese | small_fluffy@0.6 | white | cream | none | A cloud that learned to trot.
+Bichon Frise | small_fluffy@0.68 | white | biscuit | eye_patch | Bounces like a dropped marshmallow.
+Basset Hound | long_low@0.9 | tan | white | saddle | Ears touch the ground. Nose does too.
+Boston Terrier | small_terrier@0.8 | black | white | tuxedo | Always dressed for a party.
+Miniature Schnauzer | small_terrier | grey | white | mask | Sports a moustache it is very proud of.
+Cavalier King Charles Spaniel | small_fluffy@0.8 | red | white | blaze | Royal manners, couch potato ambitions.
+Labradoodle | poodle_type | apricot | cream | none | Curly, cheerful and permanently damp.
+Goldendoodle | poodle_type@1.1 | gold | white | blaze | A teddy bear that fetches.
+Cockapoo | poodle_type@0.76 | chocolate | tan | none | Bouncy curls and bottomless enthusiasm.
+Puggle | medium_stocky@0.8 | fawn | black | mask | Pug face, beagle nose, zero chill.
+Border Terrier | small_terrier | grizzle | tan | none | Otter-faced and fence-proof. Mostly.
+West Highland White Terrier | small_terrier@0.72 | white | cream | none | Bright white for exactly four minutes after a bath.
+Lemon Beagle | medium_lean@0.82 | lemon | white | blaze | The palest beagle on the block.
+Chocolate Lab | large_athletic | chocolate | mocha | none | Rich, sweet and very bad for your shoes.
+Black Lab | large_athletic | black | charcoal | none | Disappears at night except for the tail wag.
+Fox Red Lab | large_athletic | fox_red | copper | none | A ginger lab with a fox's grin.
+Patchwork Mutt | medium_stocky | white | black | piebald | Stitched together from the best bits of six breeds.
+Scruffy Mutt | small_terrier | wheaten | grey | ticked | Looks like it just crawled out of the hedge. It did.
+Brindle Boxer | large_athletic | brindle | white | brindle | Tiger stripes, puppy brain.
+Black Pug | toy@0.7 | black | charcoal | none | A small cannonball of snorts.
+Dapple Dachshund | long_low | chocolate | tan | dapple | Spotted sausage, extra relish.
+Wirehaired Dachshund | long_low | boar | tan | ticked | A sausage with eyebrows.
+Longhaired Chihuahua | toy@0.62 | black | tan | tan_points | Fluffy ears, fierce soul.
+Parti Poodle | poodle_type@0.95 | white | black | piebald | A poodle with a paint splash.
+Miniature Poodle | poodle_type@0.8 | grey | silver | none | Fits in a tote bag. Refuses to.
+Muddy Mutt | medium_fluffy | mocha | tan | socks | Has never once arrived home clean.
+Shepherd Mix | medium_lean | tan | black | mask | Part guard dog, part goofball.
+Morkie | small_fluffy@0.6 | tan | silver | tan_points | Maltese fluff meets Yorkie sass.
+Tricolor Corgi | corgi_type | black | tan | tan_points | Three colours, two short legs, one big smile.
+Sable Corgi | corgi_type | sable | cream | sable | Dusted with charcoal like a burnt marshmallow.
+Dorgi | corgi_type@0.78 | red | cream | none | Corgi meets dachshund. Low rider.
+Shichon | small_fluffy@0.66 | white | tan | blaze | Teddy bear cut, every day.
+Harlequin Dane | giant@1.82 | white | black | harlequin | A giant inkblot test that loves you.
+# Uncommon
+Sprinkler Spaniel | medium_fluffy | white | liver | wave_stripes | Chases every arc of the sprinkler, forever.
+Flowerbed Frenchie | medium_stocky@0.78 | cream | #D98BA0 | heart_patch | Digs up the tulips, then poses in them.
+Hammock Hound | large_lean | tan | cream | sunburst | Professional napper. Amateur fetcher.
+Picket Pomeranian | small_fluffy | white | red | checker | Guards the fence from every leaf that blows by.
+Barbecue Beagle | medium_lean | copper | black | ember_tips | Appears the second the grill lid opens.
+Mud Puddle Pug | toy | fawn | mocha | polka_dots | Finds the one puddle in a dry summer.
+Doghouse Dachshund | long_low | chocolate | cream | zigzag | Renovated the doghouse. Mostly with teeth.
+Bird Bath Bichon | small_fluffy | white | #9CC7E0 | frost_tips | Sits in the bird bath. The birds are upset.
+Tomato Patch Terrier | small_terrier | red | #6E9A4A | leaf_dapple | Stole every tomato. Green ones too.
+Tire Swing Shepherd | large_athletic | tan | black | tiger_stripe | Pushes the kids on the swing. With its face.
+Lemonade Lab | large_athletic | lemon | white | star_freckles | Runs the lemonade stand. Drinks the profits.
+Patio Poodle | poodle_type | apricot | white | checker | Lounges on the patio like it owns the house.
+Firefly Corgi | corgi_type | red | #F2E27A | star_freckles | Chases fireflies until the porch light comes on.
+# Rare
+Sunhat Schnauzer | small_terrier | grey | white | mask | straw_hat | Inspects the vegetable garden every morning.
+Bandana Boxer | large_athletic | fawn | white | blaze | bandana | Wears a bandana for every occasion.
+Jingle Beagle | medium_lean | tan | white | ticked | collar_bell | You always know where it is. Always.
+Grill Chef Corgi | corgi_type | sable | white | piebald | chef_hat | Supervises the sausages very closely.
+Tool Belt Terrier | small_terrier | black | tan | tan_points | tool_belt | Fixed the fence. Dug under it. Fixed it again.
+Bow Tie Bulldog | medium_stocky | brindle | white | brindle | bow_tie | Dressed for a garden party nobody planned.
+Slugger Lab | large_athletic | yellow_lab | white | socks | baseball_cap | Catches pop flies. Keeps the ball.
+# Epic
+Sir Spadeworth | medium_stocky | #BFC4CC | #6B7A8F | sunburst | knight_helm | Knight of the vegetable patch, sworn enemy of moles.
+Queen Clover | small_fluffy | #F4F7EE | #7BC67B | leaf_dapple | crown | Rules the lawn from the softest patch of clover.
+Admiral Hosepipe | medium_lean | #4A7FC1 | #F3F7FF | wave_stripes | captain_hat | Commands the garden hose like a flagship.
+# Legendary
+Thornbloom | large_fluffy | #3F7D3A | #E86AA0 | rose_vine | flower_crown | Roses bloom in its coat and wilt when it leaves.
+Sundial | large_athletic | #F4C542 | #FFF3C4 | sunflare | laurel_wreath | Lies in the same sunbeam all day and somehow it follows.
+# Mythic
+Hedge Hydra | giant_fluffy@1.95 | #4E8A3E | #C9E07A | petal_storm | flower_crown | two_heads+leaf_mane | Two heads, one hedge, zero intruders. Grown, not born.

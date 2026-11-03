@@ -1,0 +1,87 @@
+// SNOWY PEAKS (1000-1400 studs) - sled dogs, spitzes, mountain rescuers and high-altitude guardians.
+# Common
+Siberian Husky | large_athletic | grey | white | mask | Talks back. Pulls sleds. Escapes everything.
+Alaskan Malamute | large_fluffy@1.45 | wolf_grey | white | mask | A freight-hauling fluffball.
+Samoyed | large_fluffy | white | cream | none | Smiles so it does not freeze. Probably.
+Saint Bernard | giant_fluffy | red | white | piebald | The original mountain rescue team.
+Greenland Dog | large_athletic | black | white | piebald | An ancient Arctic sled puller.
+Canadian Eskimo Dog | large_fluffy | white | grey | piebald | Strong enough to pull a sled through a blizzard.
+Chinook | large_athletic | fawn | black | mask | A tawny sled dog from New Hampshire.
+Alaskan Husky | large_lean | red | white | mask | A lean racing machine on four paws.
+Seppala Siberian Sleddog | medium_lean | wolf_grey | white | mask | A light, fast distance runner.
+Yakutian Laika | medium_fluffy | white | black | piebald | A friendly Arctic all-rounder.
+Sakhalin Husky | large_athletic | charcoal | cream | sable | A rare island sled dog.
+Tibetan Mastiff | giant_fluffy | black | tan | tan_points | A lion-maned guardian of the mountain monasteries.
+Tibetan Terrier | medium_fluffy@0.82 | grey | white | piebald | Has snowshoe feet for mountain paths.
+Tibetan Spaniel | small_fluffy | gold | black | mask | Sits on the wall and watches the valley.
+Caucasian Shepherd | giant_fluffy | grey | cream | mask | A mountain-sized guardian with a mountain-sized coat.
+Central Asian Shepherd | giant | white | fawn | piebald | Guards flocks on the windswept steppes.
+Leonberger | giant_fluffy | gold | black | mask | A gentle lion of the Alps.
+Pyrenean Mastiff | giant_fluffy | white | grey | eye_patch | A massive, calm mountain guardian.
+Estrela Mountain Dog | large_fluffy@1.5 | fawn | black | mask | A Portuguese mountain herder.
+Akita | large_athletic | red | white | mask | Dignified, loyal and quietly fluffy.
+Hokkaido | medium_lean | sand | white | mask | A tough little bear hunter from the north island.
+Kai Ken | medium_lean | brindle | black | brindle | The tiger dog of the mountains.
+Shikoku | medium_lean | sable | cream | sable | A sesame-coated mountain hunter.
+Japanese Spitz | small_fluffy | white | ivory | none | A snow-white smile.
+American Eskimo Dog | medium_fluffy@0.9 | white | cream | none | A white circus star with a lion ruff.
+Finnish Lapphund | medium_fluffy | black | tan | tan_points | A reindeer herder with spectacles.
+Swedish Lapphund | medium_fluffy | black | charcoal | none | A thick-coated herder from Lapland.
+Lapponian Herder | medium_lean | black | tan | tan_points | Keeps the reindeer in line.
+Norwegian Buhund | medium_lean | wheaten | cream | none | A farm dog of the fjords.
+Icelandic Sheepdog | medium_fluffy@0.85 | tan | white | tuxedo | Greets every visitor with joy.
+Norwegian Lundehund | small_terrier | fawn | white | piebald | Has six toes and climbs sea cliffs.
+Jamthund | large_athletic | wolf_grey | cream | sable | A Swedish moose hunter.
+Norrbottenspets | small_terrier | white | red | piebald | A small spitz from the far north.
+Tatra Shepherd Dog | giant_fluffy | white | ivory | none | A white guardian of the Polish mountains.
+Sarplaninac | large_fluffy | grey | slate | none | A shaggy guardian of the high pastures.
+Karst Shepherd | large_fluffy | slate | grey | mask | A grey guardian from the Slovenian karst.
+Tornjak | giant_fluffy | white | black | piebald | A patched mountain guardian.
+Eurasier | medium_fluffy | red | black | mask | A calm spitz with a teddy-bear face.
+Pomsky | small_fluffy@0.8 | grey | white | mask | A husky that fits in a backpack.
+Agouti Husky | large_athletic | boar | cream | ticked | A wild-coloured husky that looks part wolf.
+Piebald Husky | large_athletic | white | grey | piebald | A patched sled dog.
+Wooly Malamute | large_fluffy | sable | white | mask | A malamute with an extra-thick coat.
+Mountain Mutt | medium_stocky | black | white | tuxedo | Climbed the peak for a snowball.
+Snowdrift Mutt | medium_lean | white | silver | socks | Disappears in the snow.
+White Swiss Shepherd Dog | large_athletic | white | ivory | none | A snow-white shepherd.
+Shorthaired Saint | giant | red | white | piebald | A smooth-coated mountain rescuer.
+Volpino Italiano | small_fluffy@0.66 | red | cream | none | A little spitz from the Italian mountains.
+German Spitz | small_fluffy | black | charcoal | none | A fluffy fox-faced watchdog.
+East Siberian Laika | medium_fluffy | black | white | tuxedo | A taiga hunter.
+Chukotka Sled Dog | large_lean | black | white | tuxedo | An Arctic sled dog of the far east.
+Mackenzie River Husky | large_athletic | tan | white | mask | A powerful freighting husky.
+Cream Corgi | corgi_type | cream | white | none | A snowy corgi.
+Cream Dachshund | long_low | cream | biscuit | none | A pale sausage made for winter.
+Kishu Ken | medium_lean | white | cream | none | A white Japanese hunter of the mountains.
+# Uncommon
+Snowball Samoyed | large_fluffy | white | #CFE8FF | polka_dots | Covered in little snowballs after every walk.
+Sled Team Husky | large_athletic | grey | white | lightning_streak | First in the team, last to stop.
+Icicle Spitz | small_fluffy | white | #A9D6F5 | frost_tips | Grows icicles on its whiskers.
+Avalanche Akita | large_athletic | #E9EEF5 | red | zigzag | Started an avalanche by sneezing.
+Ski Lodge Saint | giant_fluffy | red | white | checker | Naps by the lodge fireplace.
+Hot Cocoa Corgi | corgi_type | chocolate | cream | heart_patch | Warm, sweet and topped with fluff.
+Snowflake Sheltie | medium_fluffy | #DDE8F5 | sable | star_freckles | No two of its freckles are the same.
+Frostbite Malamute | large_fluffy | wolf_grey | #BFE6FF | frost_tips | Tips frozen blue from the wind.
+Snowshoe Lapphund | medium_fluffy | black | #E6F2FF | wave_stripes | Walks across deep snow without sinking.
+Penguin Pomsky | small_fluffy | black | white | tuxedo | Waddles. Slides. Waddles again.
+Yak Trail Terrier | small_terrier | #8A6E4B | cream | tiger_stripe | Hitches rides on the yaks.
+Glacier Greyhound | large_lean | #9FC8E0 | white | frost_tips | Skates across frozen lakes.
+Cliffside Kai | medium_lean | brindle | #D0D8E0 | lightning_streak | Climbs cliffs like a mountain goat.
+# Rare
+Earmuff Eskie | medium_fluffy | white | #E05A7A | none | earmuffs | Keeps its ears toasty.
+Snow Boots Shikoku | medium_lean | sable | white | socks | snow_boots | Prances in its new boots.
+Goggles Malamute | large_fluffy | slate | white | piebald | goggles | Goggles on, ready for the slopes.
+Scarf Saint | giant_fluffy | red | white | blaze | scarf | Wears a long knitted scarf to every rescue.
+Bobble Beanie Husky | large_athletic | black | white | mask | beanie | Bobble on top, attitude underneath.
+Aviator Cap Akita | large_athletic | red | cream | none | aviator_cap | Flies the mountain mail plane.
+Rescue Pack Leonberger | giant_fluffy | gold | black | none | backpack | Carries blankets and cocoa to lost hikers.
+# Epic
+Countess Snowdrop | small_fluffy | #F5FAFF | #9BC9F0 | frost_tips | crystal_tiara | Wears a tiara of frost crystals.
+Captain Avalanche | large_athletic | #DCE9F5 | #3F6E9E | lightning_streak | captain_hat | Leads the sled team through every storm.
+Shogun Snowpaw | medium_lean | #F2F2F2 | #C0392B | tiger_stripe | samurai_helm | Guards the mountain pass in silence.
+# Legendary
+Northlight | large_fluffy | #1B2A4A | #6FFFC0 | aurora_shimmer | none | The northern lights dance across its coat.
+Glacius | giant_fluffy | #BFE6FF | #FFFFFF | ice_glaze | crown | King of the glacier, coat glazed in ice.
+# Mythic
+Blizzardmaw | giant_fluffy@2.15 | #DDEFFF | #6FB7FF | crystal_facets | none | two_heads+crystal_spikes | Two heads, one blizzard. Its howl freezes the sky.

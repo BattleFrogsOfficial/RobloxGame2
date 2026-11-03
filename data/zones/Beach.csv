@@ -1,0 +1,81 @@
+id,zone,rarity,order_in_tier,name,body,scale,coat_primary,coat_secondary,pattern,accessory,vfx,unique_parts,income,flavor
+beach_c01,Beach,Common,1,Newfoundland,giant_fluffy,1.69,#211C17,#3D3733,none,none,none,,16.00,Rescues swimmers whether they need it or not.
+beach_c02,Beach,Common,2,Portuguese Water Dog,poodle_type,1.00,#23181D,#EFEFE2,tuxedo,none,none,,16.06,Webbed feet and a fisherman's work ethic.
+beach_c03,Beach,Common,3,Chesapeake Bay Retriever,large_athletic,1.36,#7E523D,#B58045,none,none,none,,16.12,"Waterproof coat, iron will, soft mouth."
+beach_c04,Beach,Common,4,Nova Scotia Duck Tolling Retriever,medium_fluffy,1.02,#B95627,#F4F2E9,blaze,none,none,,16.18,Lures ducks in by playing on the shore.
+beach_c05,Beach,Common,5,Flat-Coated Retriever,large_fluffy,1.30,#201F1B,#30211E,none,none,none,,16.24,Eternal puppy with a glossy black coat.
+beach_c06,Beach,Common,6,Curly-Coated Retriever,large_athletic,1.24,#703B28,#573822,none,none,none,,16.30,Covered in tight curls that shed water instantly.
+beach_c07,Beach,Common,7,Irish Water Spaniel,poodle_type,1.10,#693E2F,#7E4224,none,none,none,,16.36,"The clown of the spaniels, with a rat tail and a topknot."
+beach_c08,Beach,Common,8,Spanish Water Dog,poodle_type,0.95,#F3EEE5,#5A3620,piebald,none,none,,16.42,"Corded curls, herding brain, loves a swim."
+beach_c09,Beach,Common,9,Barbet,poodle_type,1.05,#C69D67,#EBDAB2,none,none,none,,16.48,A french mud-dog who never met a puddle it disliked.
+beach_c10,Beach,Common,10,Boykin Spaniel,medium_fluffy,1.08,#5A3C1E,#B57F48,none,none,none,,16.54,A little brown spaniel built for small boats.
+beach_c11,Beach,Common,11,American Water Spaniel,medium_fluffy,0.97,#70382C,#5E3C20,none,none,none,,16.60,Curly retriever of the lakes.
+beach_c12,Beach,Common,12,Landseer,giant_fluffy,1.68,#F2F3E2,#1B1B1C,piebald,none,none,,16.66,A black-and-white giant who swims like a ferry.
+beach_c13,Beach,Common,13,Silver Lab,large_athletic,1.30,#B6BAB1,#ADABA5,none,none,none,,16.72,A labrador dipped in moonlight.
+beach_c14,Beach,Common,14,Ibizan Hound,large_lean,1.19,#9F4827,#EFEEE4,piebald,none,none,,16.78,Leaps straight up like a deer to spot rabbits.
+beach_c15,Beach,Common,15,Pharaoh Hound,large_lean,1.24,#B35B2D,#EADBB7,socks,none,none,,16.85,Blushes when it is happy. Truly.
+beach_c16,Beach,Common,16,Cirneco dell'Etna,medium_lean,0.85,#B8854C,#EAD5B8,none,none,none,,16.91,A volcano island hunter with satellite ears.
+beach_c17,Beach,Common,17,Portuguese Podengo,medium_lean,0.97,#C79F63,#F5EFE5,blaze,none,none,,16.97,A rugged little hunter from the coast.
+beach_c18,Beach,Common,18,Coton de Tulear,small_fluffy,0.74,#F2EBE2,#F8F2DD,none,none,none,,17.03,"Fluffy as cotton, bouncy as a beach ball."
+beach_c19,Beach,Common,19,Presa Canario,giant,1.50,#5E4234,#A57C4E,brindle,none,none,,17.09,A calm island guardian with a huge head.
+beach_c20,Beach,Common,20,Ca de Bou,medium_stocky,0.93,#C39A67,#1B181C,mask,none,none,,17.15,A mastiff from the island of Majorca.
+beach_c21,Beach,Common,21,Majorca Shepherd Dog,large_athletic,1.30,#2E241E,#1C1D16,none,none,none,,17.21,Black as volcanic sand and just as tough.
+beach_c22,Beach,Common,22,Canarian Warren Hound,medium_lean,0.98,#A14E24,#F0F3E7,tuxedo,none,none,,17.27,Rabbit hunter of the Canary Islands.
+beach_c23,Beach,Common,23,Peruvian Inca Orchid,medium_lean,1.00,#807474,#D5AA9A,spotted,none,none,,17.33,"Hairless, elegant and warm to cuddle."
+beach_c24,Beach,Common,24,Poi Dog,medium_stocky,0.95,#B9824A,#F4F3E6,socks,none,none,,17.39,An island dog with a laid-back attitude.
+beach_c25,Beach,Common,25,Maltipoo,poodle_type,0.70,#F4F1E9,#E5A96A,none,none,none,,17.45,Maltese charm with poodle curls.
+beach_c26,Beach,Common,26,Sandy Mutt,medium_lean,1.04,#D6BA8F,#F0EFE7,socks,none,none,,17.51,Has sand in places sand should not be.
+beach_c27,Beach,Common,27,Driftwood Mutt,medium_fluffy,1.04,#8B8B89,#D4BA8F,ticked,none,none,,17.57,Washed up one morning and never left.
+beach_c28,Beach,Common,28,Wetterhoun,medium_fluffy,1.08,#201B1C,#F3EFE9,piebald,none,none,,17.63,Frisian otter dog with a curly coat.
+beach_c29,Beach,Common,29,Sao Miguel Cattle Dog,large_athletic,1.29,#5F4234,#CB9761,brindle,none,none,,17.69,A tough cattle dog from the Azores.
+beach_c30,Beach,Common,30,Kintamani,medium_fluffy,1.04,#F5F3E6,#E7D7B6,none,none,none,,17.75,A white island dog that sleeps in the cliffs.
+beach_c31,Beach,Common,31,Thai Ridgeback,medium_lean,0.95,#6A787D,#50545B,none,none,none,,17.81,Has a ridge of hair growing backwards on its back.
+beach_c32,Beach,Common,32,Taiwan Dog,medium_lean,0.95,#624231,#B97D4C,brindle,none,none,,17.87,Agile mountain dog of the island forests.
+beach_c33,Beach,Common,33,Apricot Pug,toy,0.71,#DDA66B,#231818,mask,none,none,,17.93,A peach with a face.
+beach_c34,Beach,Common,34,Chiweenie,toy,0.68,#B5814C,#1E1E1A,tan_points,none,none,,17.99,"Half chihuahua, half dachshund, all bark."
+beach_c35,Beach,Common,35,Australian Terrier,small_terrier,0.79,#6B727D,#B58445,saddle,none,none,,18.05,A tough little digger from down under.
+beach_c36,Beach,Common,36,Silky Terrier,small_terrier,0.66,#6E7482,#BC804B,tan_points,none,none,,18.11,"Silky hair, steely nerves."
+beach_c37,Beach,Common,37,Parson Russell Terrier,small_terrier,0.78,#EFF3EA,#BA8246,blaze,none,none,,18.17,A long-legged terrier built for sprinting.
+beach_c38,Beach,Common,38,Red Merle Corgi,corgi_type,0.92,#70362B,#F1EEE5,merle,none,none,,18.23,Marbled red and cream like a sunset.
+beach_c39,Beach,Common,39,Miniature Dachshund,long_low,0.68,#221E1A,#BC7D4A,tan_points,none,none,,18.29,"Tiny hot dog, giant bark."
+beach_c40,Beach,Common,40,Longhaired Dachshund,long_low,0.83,#9F4C26,#A46632,none,none,none,,18.35,A sausage wearing a fur coat.
+beach_c41,Beach,Common,41,Neapolitan Mastiff,giant,1.62,#6F7983,#4E5158,none,none,none,,18.42,Wrinkles on wrinkles on wrinkles.
+beach_c42,Beach,Common,42,Dudley Lab,large_athletic,1.30,#DCAF75,#D6AA99,none,none,none,,18.48,A yellow lab with a pink nose and a sunny disposition.
+beach_c43,Beach,Common,43,Liver Flat-Coat,large_fluffy,1.42,#683629,#5E3C1E,none,none,none,,18.54,A flat-coat in rich chocolate brown.
+beach_c44,Beach,Common,44,Brown Newfie,giant_fluffy,1.65,#573921,#79563D,none,none,none,,18.60,A teddy bear the size of a sofa.
+beach_c45,Beach,Common,45,Cantabrian Water Dog,poodle_type,1.02,#F6F1E7,#E5DCB7,none,none,none,,18.66,A curly fisherman's dog from northern Spain.
+beach_c46,Beach,Common,46,Murray River Retriever,medium_fluffy,0.98,#7E5A3E,#D5B386,none,none,none,,18.72,A curly brown retriever from Australian rivers.
+beach_c47,Beach,Common,47,Beachcomber Mutt,medium_stocky,1.00,#B58444,#F3F3EA,piebald,none,none,,18.78,"Finds bottles, crabs and lost sandals."
+beach_c48,Beach,Common,48,American Bulldog,large_athletic,1.25,#F1EDE2,#5C4430,eye_patch,none,none,,18.84,"Big, bouncy and built for the farm."
+beach_c49,Beach,Common,49,White Boxer,large_athletic,1.30,#F2EEE3,#C89861,none,none,none,,18.90,A boxer with a snow-white coat.
+beach_c50,Beach,Common,50,Orange Sable Pom,small_fluffy,0.68,#E5A66D,#815330,sable,none,none,,18.96,An orange puffball with dark tips.
+beach_c51,Beach,Common,51,Mal-Shi,small_fluffy,0.70,#F5EDE8,#D0B388,piebald,none,none,,19.02,Maltese meets Shih Tzu. Fluff squared.
+beach_c52,Beach,Common,52,Bull Arab,large_athletic,1.35,#F6EDE9,#6E382B,spotted,none,none,,19.08,An Aussie bush dog with spots and stamina.
+beach_c53,Beach,Common,53,Frenchton,medium_stocky,0.78,#1B1717,#F3EBE6,blaze,none,none,,19.14,"Frenchie face, Boston tux."
+beach_c54,Beach,Common,54,Springador,medium_fluffy,1.03,#1D1718,#F3EFE7,ticked,none,none,,19.20,"Springer energy, lab appetite."
+beach_u01,Beach,Uncommon,1,Surf Corgi,corgi_type,0.96,#9C4723,#4FB3D9,wave_stripes,none,none,,40.00,Rides the waves on a boogie board.
+beach_u02,Beach,Uncommon,2,Tidepool Terrier,small_terrier,0.84,#F6EDEA,#3E9C9C,polka_dots,none,none,,40.67,Pokes every crab in every pool.
+beach_u03,Beach,Uncommon,3,Sandcastle Shih Tzu,small_fluffy,0.75,#D2BA95,#F1F2E4,checker,none,none,,41.33,Builds sandcastles by rolling on them.
+beach_u04,Beach,Uncommon,4,Seashell Sheltie,medium_fluffy,0.82,#F2C9B0,#F2EBE6,sunburst,none,none,,42.00,Collects shells and lines them up on the porch.
+beach_u05,Beach,Uncommon,5,Wave Whippet,medium_lean,1.00,#6FA8DC,#F2EDE9,wave_stripes,none,none,,42.67,Races the waves and always wins.
+beach_u06,Beach,Uncommon,6,Coral Cocker,medium_fluffy,0.86,#F08A70,#E8D4B9,heart_patch,none,none,,43.33,Pink-tinted ears from too much sun.
+beach_u07,Beach,Uncommon,7,Boardwalk Bulldog,medium_stocky,0.98,#C49B63,#C99A6B,checker,none,none,,44.00,Begs for fries at every stall.
+beach_u08,Beach,Uncommon,8,Lighthouse Pointer,large_lean,1.25,#F2ECE3,#D9413A,tiger_stripe,none,none,,44.67,Points out ships on the horizon.
+beach_u09,Beach,Uncommon,9,Sunbather Setter,large_lean,1.30,#D46A3A,#E5D6B2,sunburst,none,none,,45.33,Lies on a towel all day turning a deeper red.
+beach_u10,Beach,Uncommon,10,Sea Spray Schnauzer,small_terrier,0.83,#B8B9B7,#9ED8E8,frost_tips,none,none,,46.00,"Beard always salty, eyebrows always curious."
+beach_u11,Beach,Uncommon,11,Beach Ball Beagle,medium_lean,0.98,#B4804A,#F4F2E9,zigzag,none,none,,46.67,Popped four beach balls before lunch.
+beach_u12,Beach,Uncommon,12,Kelp Retriever,large_athletic,1.34,#4C6B3C,#B7854B,leaf_dapple,none,none,,47.33,Brings back seaweed instead of sticks.
+beach_u13,Beach,Uncommon,13,Sand Dollar Dachshund,long_low,0.90,#D7C293,#F4EBE4,star_freckles,none,none,,48.00,Digs for buried treasure. Finds sand dollars.
+beach_r01,Beach,Rare,1,Lifeguard Lab,large_athletic,1.35,#DBB173,#D9342B,socks,lifeguard_whistle,none,,96.00,On duty from dawn to dusk. No running by the pool.
+beach_r02,Beach,Rare,2,Cool Shades Chihuahua,toy,0.68,#CA9F61,#EAD9B7,none,sunglasses,none,,99.20,Too cool for the beach. Goes anyway.
+beach_r03,Beach,Rare,3,Life Vest Newfie,giant_fluffy,1.74,#221B19,#F28C28,tuxedo,life_vest,none,,102.40,Safety first. Then swimming. Then more swimming.
+beach_r04,Beach,Rare,4,Sailor Schnauzer,small_terrier,0.81,#B2BAB8,#F6F0E3,mask,sailor_cap,none,,105.60,First mate of the harbour ferry.
+beach_r05,Beach,Rare,5,Snorkel Spaniel,medium_fluffy,1.12,#6C3B27,#F5EDE8,ticked,goggles,none,,108.80,Has seen every fish on the reef.
+beach_r06,Beach,Rare,6,Straw Hat Podengo,medium_lean,1.06,#9D4A22,#E6D9B1,none,straw_hat,none,,112.00,Naps under its hat at the beach bar.
+beach_r07,Beach,Rare,7,Pearl Poodle,poodle_type,1.13,#F0F2E6,#E8D6E8,none,pearl_necklace,none,,115.20,Dressed for a yacht party.
+beach_e01,Beach,Epic,1,Captain Kelp,large_fluffy,1.53,#2F6B4F,#9BD48A,wave_stripes,captain_hat,sparkle,,240.00,Sails a raft of seaweed and commands the tides.
+beach_e02,Beach,Epic,2,Duchess Seafoam,poodle_type,1.21,#CDEFEA,#6CC5C0,frost_tips,crystal_tiara,sparkle,,264.00,Wears a tiara of sea glass and never gets wet.
+beach_e03,Beach,Epic,3,Redbeard Rover,medium_stocky,1.15,#C8502E,#F2D6A0,tiger_stripe,pirate_hat,sparkle,,288.00,Buries bones and draws maps to them.
+beach_l01,Beach,Legendary,1,Tidecaller,large_athletic,1.50,#1E5F8C,#9FE3F0,tidal_foam,none,aura,,800.00,Howls at the moon and the tide comes in.
+beach_l02,Beach,Legendary,2,Coralline,small_fluffy,1.01,#FF7F6A,#FFD1C1,coral_reef,pearl_necklace,aura,,960.00,Her coat grows a living reef of pink coral.
+beach_m01,Beach,Mythic,1,Poseidog,giant,2.05,#2B7BA8,#B8F0E8,tidal_foam,trident,full,fins;horns,3200.00,Lord of the seven seas and the one big puddle.

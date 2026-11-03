@@ -1,0 +1,87 @@
+// BEACH (250-450 studs) - water dogs, island hounds and sandy-pawed beach bums.
+# Common
+Newfoundland | giant_fluffy | black | charcoal | none | Rescues swimmers whether they need it or not.
+Portuguese Water Dog | poodle_type | black | white | tuxedo | Webbed feet and a fisherman's work ethic.
+Chesapeake Bay Retriever | large_athletic | mocha | tan | none | Waterproof coat, iron will, soft mouth.
+Nova Scotia Duck Tolling Retriever | medium_fluffy | fox_red | white | blaze | Lures ducks in by playing on the shore.
+Flat-Coated Retriever | large_fluffy | black | seal | none | Eternal puppy with a glossy black coat.
+Curly-Coated Retriever | large_athletic | liver | chocolate | none | Covered in tight curls that shed water instantly.
+Irish Water Spaniel | poodle_type@1.1 | liver | red_brown | none | The clown of the spaniels, with a rat tail and a topknot.
+Spanish Water Dog | poodle_type@0.95 | white | chocolate | piebald | Corded curls, herding brain, loves a swim.
+Barbet | poodle_type@1.05 | fawn | cream | none | A french mud-dog who never met a puddle it disliked.
+Boykin Spaniel | medium_fluffy | chocolate | tan | none | A little brown spaniel built for small boats.
+American Water Spaniel | medium_fluffy | liver | chocolate | none | Curly retriever of the lakes.
+Landseer | giant_fluffy | white | black | piebald | A black-and-white giant who swims like a ferry.
+Silver Lab | large_athletic | silver | smoke | none | A labrador dipped in moonlight.
+Ibizan Hound | large_lean | red | white | piebald | Leaps straight up like a deer to spot rabbits.
+Pharaoh Hound | large_lean | fox_red | cream | socks | Blushes when it is happy. Truly.
+Cirneco dell'Etna | medium_lean@0.85 | tan | cream | none | A volcano island hunter with satellite ears.
+Portuguese Podengo | medium_lean | fawn | white | blaze | A rugged little hunter from the coast.
+Coton de Tulear | small_fluffy | white | ivory | none | Fluffy as cotton, bouncy as a beach ball.
+Presa Canario | giant@1.5 | brindle | fawn_dark | brindle | A calm island guardian with a huge head.
+Ca de Bou | medium_stocky | fawn | black | mask | A mastiff from the island of Majorca.
+Majorca Shepherd Dog | large_athletic | seal | black | none | Black as volcanic sand and just as tough.
+Canarian Warren Hound | medium_lean | red | white | tuxedo | Rabbit hunter of the Canary Islands.
+Peruvian Inca Orchid | medium_lean | skin_grey | skin_pink | spotted | Hairless, elegant and warm to cuddle.
+Poi Dog | medium_stocky | tan | white | socks | An island dog with a laid-back attitude.
+Maltipoo | poodle_type@0.7 | white | apricot | none | Maltese charm with poodle curls.
+Sandy Mutt | medium_lean | sand | white | socks | Has sand in places sand should not be.
+Driftwood Mutt | medium_fluffy | grey | sand | ticked | Washed up one morning and never left.
+Wetterhoun | medium_fluffy | black | white | piebald | Frisian otter dog with a curly coat.
+Sao Miguel Cattle Dog | large_athletic | brindle | fawn | brindle | A tough cattle dog from the Azores.
+Kintamani | medium_fluffy | white | cream | none | A white island dog that sleeps in the cliffs.
+Thai Ridgeback | medium_lean | blue | slate | none | Has a ridge of hair growing backwards on its back.
+Taiwan Dog | medium_lean | brindle | tan | brindle | Agile mountain dog of the island forests.
+Apricot Pug | toy | apricot | black | mask | A peach with a face.
+Chiweenie | toy@0.68 | tan | black | tan_points | Half chihuahua, half dachshund, all bark.
+Australian Terrier | small_terrier | blue | tan | saddle | A tough little digger from down under.
+Silky Terrier | small_terrier@0.66 | blue | tan | tan_points | Silky hair, steely nerves.
+Parson Russell Terrier | small_terrier | white | tan | blaze | A long-legged terrier built for sprinting.
+Red Merle Corgi | corgi_type | liver | white | merle | Marbled red and cream like a sunset.
+Miniature Dachshund | long_low@0.68 | black | tan | tan_points | Tiny hot dog, giant bark.
+Longhaired Dachshund | long_low | red | copper | none | A sausage wearing a fur coat.
+Neapolitan Mastiff | giant@1.62 | blue | slate | none | Wrinkles on wrinkles on wrinkles.
+Dudley Lab | large_athletic | yellow_lab | skin_pink | none | A yellow lab with a pink nose and a sunny disposition.
+Liver Flat-Coat | large_fluffy | liver | chocolate | none | A flat-coat in rich chocolate brown.
+Brown Newfie | giant_fluffy | chocolate | mocha | none | A teddy bear the size of a sofa.
+Cantabrian Water Dog | poodle_type | white | cream | none | A curly fisherman's dog from northern Spain.
+Murray River Retriever | medium_fluffy | mocha | biscuit | none | A curly brown retriever from Australian rivers.
+Beachcomber Mutt | medium_stocky | tan | white | piebald | Finds bottles, crabs and lost sandals.
+American Bulldog | large_athletic | white | brindle | eye_patch | Big, bouncy and built for the farm.
+White Boxer | large_athletic | white | fawn | none | A boxer with a snow-white coat.
+Orange Sable Pom | small_fluffy | apricot | sable | sable | An orange puffball with dark tips.
+Mal-Shi | small_fluffy | white | biscuit | piebald | Maltese meets Shih Tzu. Fluff squared.
+Bull Arab | large_athletic | white | liver | spotted | An Aussie bush dog with spots and stamina.
+Frenchton | medium_stocky@0.78 | black | white | blaze | Frenchie face, Boston tux.
+Springador | medium_fluffy | black | white | ticked | Springer energy, lab appetite.
+# Uncommon
+Surf Corgi | corgi_type | red | #4FB3D9 | wave_stripes | Rides the waves on a boogie board.
+Tidepool Terrier | small_terrier | white | #3E9C9C | polka_dots | Pokes every crab in every pool.
+Sandcastle Shih Tzu | small_fluffy | sand | white | checker | Builds sandcastles by rolling on them.
+Seashell Sheltie | medium_fluffy@0.82 | #F2C9B0 | white | sunburst | Collects shells and lines them up on the porch.
+Wave Whippet | medium_lean | #6FA8DC | white | wave_stripes | Races the waves and always wins.
+Coral Cocker | medium_fluffy@0.86 | #F08A70 | cream | heart_patch | Pink-tinted ears from too much sun.
+Boardwalk Bulldog | medium_stocky | fawn | #C99A6B | checker | Begs for fries at every stall.
+Lighthouse Pointer | large_lean | white | #D9413A | tiger_stripe | Points out ships on the horizon.
+Sunbather Setter | large_lean | #D46A3A | cream | sunburst | Lies on a towel all day turning a deeper red.
+Sea Spray Schnauzer | small_terrier | silver | #9ED8E8 | frost_tips | Beard always salty, eyebrows always curious.
+Beach Ball Beagle | medium_lean | tan | white | zigzag | Popped four beach balls before lunch.
+Kelp Retriever | large_athletic | #4C6B3C | tan | leaf_dapple | Brings back seaweed instead of sticks.
+Sand Dollar Dachshund | long_low | sand | white | star_freckles | Digs for buried treasure. Finds sand dollars.
+# Rare
+Lifeguard Lab | large_athletic | yellow_lab | #D9342B | socks | lifeguard_whistle | On duty from dawn to dusk. No running by the pool.
+Cool Shades Chihuahua | toy | fawn | cream | none | sunglasses | Too cool for the beach. Goes anyway.
+Life Vest Newfie | giant_fluffy | black | #F28C28 | tuxedo | life_vest | Safety first. Then swimming. Then more swimming.
+Sailor Schnauzer | small_terrier | silver | white | mask | sailor_cap | First mate of the harbour ferry.
+Snorkel Spaniel | medium_fluffy | liver | white | ticked | goggles | Has seen every fish on the reef.
+Straw Hat Podengo | medium_lean | red | cream | none | straw_hat | Naps under its hat at the beach bar.
+Pearl Poodle | poodle_type | white | #E8D6E8 | none | pearl_necklace | Dressed for a yacht party.
+# Epic
+Captain Kelp | large_fluffy | #2F6B4F | #9BD48A | wave_stripes | captain_hat | Sails a raft of seaweed and commands the tides.
+Duchess Seafoam | poodle_type | #CDEFEA | #6CC5C0 | frost_tips | crystal_tiara | Wears a tiara of sea glass and never gets wet.
+Redbeard Rover | medium_stocky | #C8502E | #F2D6A0 | tiger_stripe | pirate_hat | Buries bones and draws maps to them.
+# Legendary
+Tidecaller | large_athletic | #1E5F8C | #9FE3F0 | tidal_foam | none | Howls at the moon and the tide comes in.
+Coralline | small_fluffy | #FF7F6A | #FFD1C1 | coral_reef | pearl_necklace | Her coat grows a living reef of pink coral.
+# Mythic
+Poseidog | giant@2.05 | #2B7BA8 | #B8F0E8 | tidal_foam | trident | fins+horns | Lord of the seven seas and the one big puddle.

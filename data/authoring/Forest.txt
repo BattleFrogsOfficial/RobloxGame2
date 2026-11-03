@@ -1,0 +1,87 @@
+// FOREST (700-1000 studs) - scenthounds, coonhounds, pointers, spaniels and woodland spitzes.
+# Common
+Bluetick Coonhound | large_lean | blue | black | ticked | Bays at the moon and at the mailbox.
+Redbone Coonhound | large_lean | red | mahogany | none | A copper hound with a voice like a trumpet.
+Plott Hound | large_lean | brindle | black | brindle | A striped mountain tracker.
+Treeing Walker Coonhound | large_lean | white | tan | saddle | Chases raccoons up trees and waits forever.
+Black and Tan Coonhound | large_lean@1.3 | black | tan | tan_points | Long ears, longer patience.
+American Foxhound | large_lean | tan | white | piebald | Runs all day through the hills.
+English Foxhound | large_athletic | white | tan | saddle | A pack hound who loves company.
+Harrier | medium_lean | tan | white | piebald | A cheerful hare-hunting hound.
+Otterhound | large_fluffy | grizzle | tan | none | A shaggy river hound with webbed feet.
+Norwegian Elkhound | medium_fluffy | grey | black | sable | A viking hunter of moose.
+Karelian Bear Dog | medium_fluffy | black | white | piebald | Small enough to cuddle, brave enough to face a bear.
+Finnish Spitz | medium_fluffy@0.85 | fox_red | cream | none | Barks to point out birds in the treetops.
+West Siberian Laika | medium_fluffy | wolf_grey | white | mask | A taiga hunter with a curled tail.
+Wirehaired Pointing Griffon | large_athletic | grey | liver | roan | A bearded bird dog that loves water.
+German Wirehaired Pointer | large_athletic | liver | white | roan | Wiry coat, bushy eyebrows, tireless.
+German Shorthaired Pointer | large_lean | liver | white | ticked | Points, swims, retrieves, repeats.
+Drever | long_low | tan | white | piebald | A short-legged Swedish deer tracker.
+Hanoverian Scenthound | large_athletic | red | black | mask | Follows a trail days old.
+Bavarian Mountain Hound | medium_lean | red | black | mask | A mountain tracker with a wrinkled brow.
+Slovensky Kopov | medium_lean | black | rust | tan_points | A black-and-tan forest hound.
+Irish Wolfhound | giant@1.85 | wolf_grey | grey | none | The tallest dog in the forest and the gentlest.
+Scottish Deerhound | giant@1.7 | slate | silver | none | A rough-coated greyhound of the highlands.
+Gordon Setter | large_lean | black | rust | tan_points | A black-and-tan setter of the Scottish moors.
+Large Munsterlander | large_fluffy | white | black | roan | A black-and-white feathered gundog.
+Small Munsterlander | medium_fluffy | white | liver | roan | A versatile little pointer.
+Kooikerhondje | medium_fluffy@0.85 | white | fox_red | piebald | Waves its tail to lure ducks. Has earrings.
+German Spaniel | medium_fluffy | liver | white | ticked | A hardy spaniel that flushes from dense cover.
+Drentsche Patrijshond | large_athletic | white | liver | piebald | A Dutch partridge dog.
+Stabyhoun | medium_fluffy | black | white | ticked | A Frisian farm and forest helper.
+Clumber Spaniel | long_low@0.95 | white | lemon | eye_patch | A heavy, gentle spaniel that ambles.
+Sussex Spaniel | long_low | red_brown | chocolate | none | A golden-liver spaniel that hums as it hunts.
+Field Spaniel | medium_fluffy | liver | mocha | none | A calm spaniel with a silky coat.
+Grand Basset Griffon Vendeen | long_low | white | tan | saddle | A tall-for-a-basset bearded hound.
+Petit Basset Griffon Vendeen | long_low@0.78 | white | grizzle | piebald | Happy, scruffy and always busy.
+Basset Fauve de Bretagne | long_low | copper | tan | none | A wire-haired fawn hound from Brittany.
+Lagotto Romagnolo | poodle_type | biscuit | white | roan | Sniffs out truffles in the oak woods.
+Pudelpointer | large_athletic | liver | chocolate | none | Poodle brains, pointer nose.
+Bracco Italiano | large_lean | white | copper | spotted | A noble Italian pointer with droopy lips.
+Spinone Italiano | large_fluffy | white | copper | roan | A bearded pointer with soulful eyes.
+Irish Red and White Setter | large_lean | white | red | piebald | Patched in red like autumn leaves.
+Hamiltonstovare | medium_lean | tan | black | saddle | A handsome Swedish tricolour hound.
+Finnish Hound | medium_lean@1.05 | tan | white | saddle | Hunts hares in the snowy pines.
+Schillerstovare | medium_lean | red | black | saddle | A fast Swedish hound with a black saddle.
+Tyrolean Hound | medium_lean | red | white | blaze | An alpine tracker from Tyrol.
+Jagdterrier | small_terrier | black | tan | tan_points | A small, fierce hunting terrier.
+Alpine Dachsbracke | long_low | red | black | mask | A low-slung mountain tracker.
+Norfolk Terrier | small_terrier@0.66 | grizzle | tan | none | A drop-eared terrier, fearless and friendly.
+Irish Terrier | small_terrier | red | red_brown | none | A red-haired daredevil.
+Kerry Blue Terrier | poodle_type | blue | slate | none | Born black, turns blue as it grows.
+Mossy Mutt | medium_stocky | boar | grizzle | ticked | Rolled in moss and liked it.
+Timber Mutt | large_athletic | wolf_grey | tan | sable | A logging camp regular.
+Czechoslovakian Wolfdog | large_athletic | wolf_grey | cream | mask | Looks like a wolf, acts like a puppy.
+Hovawart | large_fluffy | black | gold | tan_points | A courtyard guardian from old German farms.
+Wirehaired Vizsla | large_athletic | copper | rust | none | A bearded copper gundog.
+# Uncommon
+Toadstool Terrier | small_terrier | #C0392B | white | polka_dots | Spotted like the mushrooms it should not eat.
+Pine Needle Pointer | large_lean | #2E5E3A | tan | leaf_dapple | Points at every pine cone that falls.
+Fern Spaniel | medium_fluffy | #5C8A3A | cream | leaf_dapple | Hides in ferns and pops out to say hi.
+Birchbark Beagle | medium_lean | white | black | tiger_stripe | Striped like the birch trees.
+Campfire Coonhound | large_lean | #B8562A | #F2B04A | ember_tips | Sits by the campfire for marshmallows.
+Owl Hoot Hound | large_athletic | #8A6E4B | cream | star_freckles | Hoots back at the owls.
+Glowworm Laika | medium_fluffy | wolf_grey | #D4F27A | star_freckles | Lights up the trail at night. Somehow.
+Mossy Log Dachshund | long_low | #6B7F3A | mocha | leaf_dapple | Hides in hollow logs.
+Creek Springer | medium_fluffy | liver | #8FC1D9 | wave_stripes | Jumps in every creek on the trail.
+Bramble Bulldog | medium_stocky | brindle | #6E3B5C | zigzag | Bulldozes through the blackberry brambles.
+Thicket Pug | toy | fawn | #3E5B2E | tiger_stripe | Camouflaged in the bushes, snoring.
+Woodsmoke Wolfhound | giant | smoke | charcoal | wave_stripes | Smells like a campfire, always.
+Berry Bush Bichon | small_fluffy | white | #7A3B8F | polka_dots | Stained purple from eating berries.
+# Rare
+Lantern Coonhound | large_lean | red | cream | none | lantern | Leads the night hike with a swinging lantern.
+Backpack Basset | long_low | tan | white | piebald | backpack | Carries trail mix. Low to the ground.
+Ranger Hat Elkhound | medium_fluffy | wolf_grey | cream | none | ranger_hat | A forest ranger with a curled tail.
+Beanie Spinone | large_fluffy | copper | white | ticked | beanie | Ready for chilly mornings in the woods.
+Leaf Wreath Lagotto | poodle_type | biscuit | #6E8B3D | none | leaf_wreath | Wears a crown of oak leaves.
+Hoodie Hovawart | large_fluffy | black | gold | none | hoodie | Hood up, ready for the trail.
+Monocle Munster | medium_fluffy | white | liver | spotted | monocle | Inspects every leaf very closely.
+# Epic
+Hermit Mossbeard | large_fluffy | #4F6B3A | #C9D8A0 | leaf_dapple | wizard_hat | Lives in a hollow tree and brews herbal tea.
+Baron Bramblethorn | medium_lean | #5B2E4A | #D7A6C9 | zigzag | royal_collar | Owns all the blackberry bushes. Shares none.
+Lady Fernwhistle | small_terrier | #6FA35A | #F4EBD0 | star_freckles | crystal_tiara | Whistles and the ferns uncurl.
+# Legendary
+Mossmantle | giant_fluffy | #3D5A2E | #9CC36B | moss_velvet | none | A coat so mossy that birds nest in it.
+Emberwood | large_athletic | #5A2E1A | #FF8A3D | flame_lick | none | Glows like the last embers of a campfire.
+# Mythic
+Elderbark | giant@2.1 | #4A3A28 | #A8E6A0 | bark_rings | lantern | antlers+ghost_tail | The oldest spirit of the forest, wearing antlers of living wood.
