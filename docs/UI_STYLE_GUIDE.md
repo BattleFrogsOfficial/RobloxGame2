@@ -118,7 +118,7 @@ token pair. Nothing is flat-coloured except text and strokes.
   multiple.
 - Palette per icon: at most 6 colours + a 1 px Ink outline on the silhouette. Light source top-left, one
   highlight pixel row. Icons are drawn as objects, never as glyphs or letters.
-- Set (v1): cash, bone, throw_power, ball_tennis, ball_rubber, ball_frisbee, ball_glow, ball_golden, shop,
+- Set (v1): cash, bone, throw_power, ball_tennis, ball_rubber, ball_flying_disc, ball_glow, ball_golden, shop,
   dog, book, odds, settings, close, check, lock, arrow_left, arrow_right, luck, sticky, whistle, treat,
   trophy, timer, squirrel, paw, star, kennel, slot, boost_luck, boost_catch, walk, mute, music, info.
 

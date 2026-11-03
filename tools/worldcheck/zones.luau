@@ -13,7 +13,7 @@
 --     which must clear 30 studs, and invisible non-colliding non-queryable particle volumes)
 --   * the part budget (<= 350 per zone, <= 3000 for the field)
 --   * the required ParticleEmitters (snowfall, fireflies, stars + debris, sparkles)
---   * no text outside the arch boards, distance markers and the field-end backdrop
+--   * no text outside the zone-name arch boards (distance markers and the field-end backdrop are blank)
 -- Usage (from the repo root):  lune run tools/worldcheck/zones.luau     -> exit 1 on any failure
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -499,13 +499,11 @@ for _, p in parts(fieldFolder) do
 	end
 end
 
--- text only on arch boards, distance markers and the field end
+-- text only on the zone-name arch boards
 for _, d in fieldFolder:GetDescendants() do
 	if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-		local ok = ancestorWith(d, "BoundaryKind") ~= nil or d:FindFirstAncestor("DistanceMarkers") ~= nil
-			or d:FindFirstAncestor("FieldEnd") ~= nil
-		if not ok then
-			fail("text", d:GetFullName() .. " carries text outside an arch / marker")
+		if ancestorWith(d, "BoundaryKind") == nil then
+			fail("text", d:GetFullName() .. " carries text outside a zone arch board")
 		end
 	end
 end

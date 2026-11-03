@@ -118,12 +118,11 @@ local function buildYard(parent: Instance, index: number)
 		{ LabelName = "OwnerLabel", PixelsPerStud = 16, TextColor = T.SignText })
 	board.Name = "YardSign"
 	Props.Tag(board, "YardSign", { YardIndex = index })
-	-- yard number medallion on top of the sign
-	local medal = Props.Part({ Parent = model, Name = "YardNumber", Size = Vector3.new(5, 5, 1),
+	-- yard colour medallion on top of the sign (no number: no world text)
+	Props.Part({ Parent = model, Name = "YardNumber", Size = Vector3.new(5, 5, 1),
 		CFrame = CFrame.lookAt(Vector3.new(cx, fy + L.SignBottom + L.SignBoard.Y + 2.8, gz),
 			Vector3.new(cx, fy + L.SignBottom + L.SignBoard.Y + 2.8, maxZ + 10)),
 		Color = color, Material = WorldTheme.AccentMaterial })
-	Props.Label(medal, tostring(index), { PixelsPerStud = 30, TextColor = Color3.new(1, 1, 1) })
 
 	-- dog spots: white rim + grass-light pad. Thin (Size.Y <= 4) so DogService stands dogs on top.
 	local spots = Props.Folder(model, "DogSpots")

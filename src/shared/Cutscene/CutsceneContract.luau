@@ -44,6 +44,9 @@ export type ThrowResult = {
 	BallId: string?,
 	StartPosition: Vector3?,
 	LandingPosition: Vector3?,
+	LaunchPos: Vector3?, -- ball leaves the hand on the raised deck (Y = 44)
+	LandPos: Vector3?, -- ball lands on the field (Y = 0)
+	FlightTime: number?, -- = Util/BallFlight.ForThrow(LaunchPos, LandPos).Duration (server-timed)
 	TreatPocketUsed: boolean?,
 	Income: number?, -- adult $/s incl. variant + gamepass mult
 	IncomeNow: number?,
@@ -106,12 +109,14 @@ local function rarityIndex(r: string): number
 	return table.find(Rarities.Order, r) or 1
 end
 
--- Ball flight time from distance (used by the throw visual AND the suspense beat so they line up).
+-- Fallback ball flight time from distance, only used when a ThrowResult carries no FlightTime. Real throws
+-- pass result.FlightTime (= Util/BallFlight.ForThrow(LaunchPos, LandPos).Duration) to Timing() so the
+-- suspense beat lasts exactly as long as the ball that BallFlight.client.luau flies.
 function CutsceneContract.FlightTime(distance: number): number
 	return math.clamp(0.7 + distance / 1800, 0.7, 2.2)
 end
 
-function CutsceneContract.Timing(rarity: string, hasVariant: boolean, distance: number?): Timing
+function CutsceneContract.Timing(rarity: string, hasVariant: boolean, distance: number?, flightTime: number?): Timing
 	local total = (Timers.Cutscene :: any)[rarity] or 3
 	local shares = CutsceneContract.Shares[rarity] or CutsceneContract.Shares.Common
 	local variantShare = if hasVariant then shares.RevealVariant else 0
@@ -120,7 +125,8 @@ function CutsceneContract.Timing(rarity: string, hasVariant: boolean, distance: 
 	local function share(name: string): number
 		return (shares[name] + spare * shares[name] / rest) * total
 	end
-	local flight = CutsceneContract.FlightTime(distance or 0)
+	local flight = if type(flightTime) == "number" and flightTime > 0 then flightTime
+		else CutsceneContract.FlightTime(distance or 0)
 	local t: Timing = {
 		Total = 0,
 		Flight = flight,

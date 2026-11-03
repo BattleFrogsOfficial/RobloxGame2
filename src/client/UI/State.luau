@@ -18,7 +18,7 @@ State.Changed = Signal.new() -- (snapshot, previous)
 State.Snapshot = nil :: any
 State.Previous = nil :: any
 
--- Local-only settings (persisted client-side; server-affecting ones also go through SetSetting if present).
+-- Local-only settings (persisted client-side; TreatPocketMode / KeepDupes are mirrored from PlayerState.Settings and sent via DogAction).
 State.Settings = {
 	Music = true,
 	Sfx = true,
@@ -39,6 +39,18 @@ State.EventsChanged = Signal.new()
 function State.Set(snapshot: any)
 	State.Previous = State.Snapshot
 	State.Snapshot = snapshot
+	-- The server owns TreatPocketMode / KeepDupes (PlayerState.Settings); mirror them into the local settings.
+	local server = type(snapshot) == "table" and snapshot.Settings
+	if type(server) == "table" then
+		if type(server.TreatPocketMode) == "string" then
+			State.Settings.TreatPocketMode = server.TreatPocketMode
+		end
+		if type(server.KeepDupes) == "table" then
+			for tier, keep in server.KeepDupes do
+				State.Settings.KeepDupes[tier] = keep == true
+			end
+		end
+	end
 	State.Changed:Fire(snapshot, State.Previous)
 end
 

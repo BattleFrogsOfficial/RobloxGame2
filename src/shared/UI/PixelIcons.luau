@@ -116,7 +116,7 @@ PixelIcons.Icons = {
 		"......kwwk......",
 		".......kk.......",
 	},
-	ball_frisbee = {
+	ball_flying_disc = {
 		"................",
 		"................",
 		"................",
@@ -979,7 +979,7 @@ PixelIcons.ZoneIcon = {
 PixelIcons.BallIcon = {
 	Tennis = "ball_tennis",
 	Rubber = "ball_rubber",
-	Frisbee = "ball_frisbee",
+	FlyingDisc = "ball_flying_disc",
 	Glow = "ball_glow",
 	Golden = "ball_golden",
 } :: { [string]: string }

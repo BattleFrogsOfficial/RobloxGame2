@@ -175,9 +175,10 @@ function Props.Label(part: BasePart, text: string, o: LabelOpts?): TextLabel
 end
 
 -- Free-standing sign: board (facing `dir`, horizontal) on two posts. `bottomY` = board bottom height.
--- Returns the board part (tag it) and its TextLabel.
+-- Returns the board part (tag it) and its TextLabel (nil when `text` is nil or "": a blank board).
+-- World text rule: only zone-name arch boards, yard owner signs and the kennel count carry text.
 function Props.Sign(parent: Instance, name: string, footCenter: Vector3, dir: Vector3, boardSize: Vector3,
-	bottomY: number, boardColor: Color3, trimColor: Color3, text: string, labelOpts: LabelOpts?): (Part, TextLabel)
+	bottomY: number, boardColor: Color3, trimColor: Color3, text: string?, labelOpts: LabelOpts?): (Part, TextLabel?)
 	local model = Props.Model(parent, name)
 	local flat = Vector3.new(dir.X, 0, dir.Z).Unit
 	local right = Vector3.new(-flat.Z, 0, flat.X)
@@ -194,7 +195,7 @@ function Props.Sign(parent: Instance, name: string, footCenter: Vector3, dir: Ve
 		end
 	end
 	model.PrimaryPart = board
-	local label = Props.Label(board, text, labelOpts)
+	local label = if text and text ~= "" then Props.Label(board, text, labelOpts) else nil
 	return board, label
 end
 

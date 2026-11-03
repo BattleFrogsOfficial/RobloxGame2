@@ -160,7 +160,7 @@ krrrrrrrrrrrRRRk
 .....kkkkkk.....
 """)
 
-icon("ball_frisbee", """
+icon("ball_flying_disc", """
 ................
 ................
 ................
@@ -970,7 +970,7 @@ ZONE_ICON = {
     "Forest": "zone_forest", "SnowyPeaks": "zone_snow", "CityRooftops": "zone_city",
     "SpaceStation": "zone_space", "MythicMeadow": "zone_mythic",
 }
-BALL_ICON = {"Tennis": "ball_tennis", "Rubber": "ball_rubber", "Frisbee": "ball_frisbee", "Glow": "ball_glow",
+BALL_ICON = {"Tennis": "ball_tennis", "Rubber": "ball_rubber", "FlyingDisc": "ball_flying_disc", "Glow": "ball_glow",
              "Golden": "ball_golden"}
 
 

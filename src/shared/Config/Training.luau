@@ -5,10 +5,8 @@ local Training = {}
 Training.MaxThrowPower = 2000 -- 2000 x Golden 2.0 = 4000 > field length, so this is never the binding cap
 
 -- One training station in the plaza (TrainingStation-tagged part, StationId = "Main"). Reps come from its
--- ProximityPrompt or the Train remote. The old Pull-Up Bar / Throwing Machine / Sprint Track were merged:
--- one free rep of Gain x TrainMult every Cooldown seconds. Pull-Up Bar cadence (0.5 s cooldown, free) with
--- Gain 1.0 (was 0.5): at a human ~1.6 reps/s that is ~1.6 TP/s, between the old Pull-Up Bar (0.8 TP/s) and
--- the paid Throwing Machine (3 TP/s) that most players used after 120 ThrowPower.
+-- ProximityPrompt or the Train remote: one free rep of Gain x TrainMult every Cooldown seconds (0.5 s).
+-- At a human ~1.6 reps/s that is ~1.6 TP/s before upgrades (it replaced three earlier stations).
 Training.Stations = {
 	Main = {
 		Id = "Main", Name = "Training Station", Gain = 1.0, Cooldown = 0.5, UnlockPower = 0,
@@ -23,12 +21,12 @@ Training.InteractRange = 14 -- studs from the TrainingStation part for the Train
 -- Each level does two things: raises the power cap (the gate to the next zone) and multiplies rep gains.
 Training.Upgrades = {
 	MaxLevel = 29, -- = #Caps - 1
-	MultBase = 1.03, -- TrainMult = MultBase ^ level (keeps the "fill to the cap" grind ~20-70 s of pull-ups per level)
+	MultBase = 1.03, -- TrainMult = MultBase ^ level (keeps the "fill to the cap" grind ~20-70 s of reps per level)
 	BaseCost = 50, -- level 1 costs $50 (= starter cash: first training purchase in the FTUE)
 	CostGrowth = 2.6, -- cost(level) = BaseCost * CostGrowth ^ (level - 1)
 	-- Power cap (balance pass, docs/qa/BALANCE.md): training reps cannot raise ThrowPower above
 	-- Caps[level + 1]. Without a cap ThrowPower grew linearly with play time (zone distances are linear
-	-- too), so free pull-ups alone cleared the whole field within minutes. With the cap, cash (= dogs)
+	-- too), so free reps alone cleared the whole field within minutes. With the cap, cash (= dogs)
 	-- gates each zone and reps are the short grind that fills the cap. Comments: zone reached by a
 	-- median (~0.72 quality) throw at that cap with the ball a typical player owns by then.
 	Caps = {

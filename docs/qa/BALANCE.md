@@ -1,5 +1,10 @@
 # Balance QA (Concern 3: gameplay is balanced)
 
+> **Historical.** This balance pass predates the plaza redesign (one ball shop, one platform, one training
+> station, consumable balls). The client files it names (ThrowController, ShopController) were replaced by
+> `src/client/UI/Screens/HUD.luau` and `Shop.luau`. Current values live in `src/shared/Config/` and
+> `docs/DESIGN.md`; re-run `python3 tools/balance_sim.py` for current numbers.
+
 Tool: `python3 tools/balance_sim.py [--runs N] [--hours H] [--quick]`. It parses the real
 `src/shared/Config/*.luau` and `data/zones/*.csv` on every run, mirrors `Util/Odds`, `Util/Meter`,
 `RollService`, `TrainingService`, `ShopService`, `DogService` and `EventService` maths, and simulates a
@@ -24,7 +29,7 @@ pull-ups gave linear ThrowPower growth and the x1.5-per-level training mult made
 | Config/Training.luau | PullUp Gain 1 -> 0.5; Machine Gain 4 -> 3 and CashPerRepPerPower 0.25 -> 0.1; Sprint 12 (kept) | Pull-up 0.8 TP/s, Sprint ~0.87 TP/s (free, needs laps), Machine 3 TP/s (paid speed-up). |
 | server/Services/TrainingService.luau | Gain clamps to `PowerCap(level)`; the message "Power cap N reached: buy a Training upgrade" | Enforces the cap. |
 | Util/PlayerStats.luau | `Computed.PowerCap`; posted luck/catch include a banked **premium throw** (Golden-ball luck, +10% catch unless Sticky Ball) | The odds panel and catch chips did not match what ThrowService rolls when a premium throw is spent automatically. |
-| client ThrowController / ShopController | HUD "Power X/cap"; Training tab shows cap now -> next | Makes the cap visible. |
+| client HUD / Shop screens (`src/client/UI/Screens`) | HUD "Power X/cap"; Training tab shows cap now -> next | Makes the cap visible. |
 | Config/Balls.luau | Flying Disc 25K -> 50K, Glow 2.5M -> 5M, Golden 250M -> 3B (range/luck unchanged) | Balls land at ~3 m / 14 m / 1 h / 3 h. |
 | Config/Shop.luau | Slot `CostGrowth` 2.5 -> 4.5 | Slots grew to 100 within 30 min. Now ~45 by 1 h and ~95 by 30 h. |
 | Config/Shop.luau | Whistle IncomeSeconds 600 -> 300, Treat Pocket 300 -> 120, `DefaultTreatPocketMode` "Always" -> "EpicPlus" | "Always" wasted pockets on Commons. Both consumables are now worth carrying. |

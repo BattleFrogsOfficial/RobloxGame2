@@ -9,7 +9,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = Shared:WaitForChild("Config")
 local Layout = require(Config:WaitForChild("Layout")) :: any
-local Game = require(Config:WaitForChild("Game")) :: any
 local WorldTheme = require(Config:WaitForChild("WorldTheme")) :: any
 local Props = require((script.Parent :: Instance):WaitForChild("Props")) :: any
 
@@ -37,13 +36,12 @@ local function buildTower(f: Instance, minX: number, maxX: number, minZ: number,
 	for _, y in { 10, 22, 34 } do
 		Props.Slab(f, "TowerBand", minX - 0.3, maxX + 0.3, minZ - 0.3, maxZ, y + 0.6, 1.2, T.TowerBand, nil, false)
 	end
-	-- game title on both side faces
+	-- coloured panel on both side faces (no world text)
 	for _, side in { -1, 1 } do
 		local x = if side < 0 then minX - 0.45 else maxX + 0.45
 		local pos = Vector3.new(x, 27.5, (minZ + maxZ) / 2)
-		local board = Props.Part({ Parent = f, Name = "TitleBoard", Size = Vector3.new(maxZ - minZ - 4, 7, 0.4),
+		Props.Part({ Parent = f, Name = "TitleBoard", Size = Vector3.new(maxZ - minZ - 4, 7, 0.4),
 			CFrame = CFrame.lookAt(pos, pos + Vector3.new(side, 0, 0)), Color = T.TowerSign })
-		Props.Label(board, string.upper(Game.Name), { PixelsPerStud = 10 })
 	end
 end
 
@@ -103,7 +101,7 @@ local function buildDeck(f: Instance)
 		T.ThrowSpotRing, nil, false)
 	local spot = Props.Slab(f, "ThrowSpot", ts.X - h, ts.X + h, ts.Z - h, ts.Z + h, deckTop + 0.12, 0.12, T.ThrowSpot,
 		WorldTheme.AccentMaterial, false)
-	Props.Label(spot, "THROW", { Face = Enum.NormalId.Top, PixelsPerStud = 20 })
+	local _ = spot -- the bright spot + ring mark it; no world text
 
 	-- queue markers
 	local q = Platform.QueueSize / 2
@@ -111,7 +109,6 @@ local function buildDeck(f: Instance)
 		local marker = Props.Slab(f, "QueueSpot" .. i, p.X - q, p.X + q, p.Z - q, p.Z + q, deckTop + 0.1, 0.1, T.QueueSpot,
 			nil, false)
 		Props.Tag(marker, "QueueSpot", { Order = i })
-		Props.Label(marker, tostring(i), { Face = Enum.NormalId.Top, PixelsPerStud = 24, TextColor = T.QueueText })
 	end
 
 	-- visible low railings (front, sides, back beside the ramp opening)

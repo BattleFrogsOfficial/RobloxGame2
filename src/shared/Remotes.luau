@@ -15,8 +15,10 @@
 -- ShopPurchase       RemoteFunction C->S (itemId) -> (ok, msg)
 -- EquipBall          RemoteEvent    C->S (ballId)                 refused for a consumable ball with 0 throws left
 -- Train              RemoteEvent    C->S (stationId)              one training rep; the only station is "Main"
--- DogAction          RemoteFunction C->S (action: "Keep"|"Sell"|"Display"|"Kennel", dogUid) -> (ok, msg)
--- ClaimDailyWalk     RemoteFunction C->S () -> (ok, msg)
+-- DogAction          RemoteFunction C->S (action: "Keep"|"Sell"|"Display"|"Kennel"|"Auto"|"Lock", dogUid) -> (ok, msg)
+--                                   also the server-side settings: ("SetTreatPocketMode", "Always"|"EpicPlus"|"Off"),
+--                                   ("SetKeepDupes", "<Rarity>=true|false"); echoed back in PlayerState.Settings
+-- ClaimDailyWalk     RemoteFunction C->S () -> (ok, msg)          the HUD's "Claim daily walk" banner
 -- ClaimBookReward    RemoteFunction C->S (zoneId, milestone) -> (ok, msg)
 -- Broadcast          RemoteEvent    S->C ({Kind, Text, Rarity?, Variant?, Global: boolean})
 -- EventState         RemoteEvent    S->All ({Kind: "Squirrel"|"RunawayDog"|"DailyWalk", Active, EndsAt, Data})

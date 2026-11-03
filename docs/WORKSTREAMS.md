@@ -1,30 +1,28 @@
 # Workstreams (who owns what)
 
-Two sessions build this game in parallel. To keep merges clean, each owns a set of paths. Touch another
+Sessions build this game in parallel. To keep merges clean, each owns a set of paths. Touch another
 session's paths only through a PR note.
 
 | Area | Paths | Owner |
 |---|---|---|
-| Design doc, balance, roster, server services, world builder, cutscene | `docs/DESIGN.md`, `data/**`, `tools/roster.py`, `src/server/**` (except ZoneDressing), `src/client/Cutscene/**` | Session A (Claude Code, daytime) |
-| HUD / UI, pixel icons, UI layout checker | `src/client/UI/**`, `src/client/UIBootstrap.client.luau`, `src/shared/UI/**`, `src/shared/Config/Icons.luau`, `assets/icons/**`, `tools/icons.py`, `tools/uicheck/**`, `docs/UI_STYLE_GUIDE.md` | Session B (overnight) |
-| Ball visuals and zone set dressing | `src/shared/Ball/**`, `src/server/World/ZoneDressing/**`, `src/shared/Config/WorldTheme.luau`, `docs/WORLD_ART.md` | Session B |
-| Tests and CI | `tests/**`, `.github/workflows/**`, `tools/install-tools.sh` | Session B |
-| Store presence | `docs/STORE_PRESENCE.md`, `assets/store/**` | Session B |
+| Design doc, balance, roster, server services, world builder, cutscene | `docs/DESIGN.md`, `docs/WORLD.md`, `data/**`, `tools/roster.py`, `tools/balance_sim.py`, `tools/world_bounds.py`, `tools/worldcheck/**`, `src/server/**`, `src/shared/Cutscene/**`, `src/client/Controllers/**`, `src/client/BallFlight.client.luau`, `src/client/ZoneAmbience.client.luau` | Session A |
+| HUD / UI, pixel icons, UI layout checker | `src/client/UI/**`, `src/client/Main.client.luau`, `src/shared/UI/**`, `src/shared/Config/Icons.luau`, `assets/icons/**`, `tools/icons.py`, `tools/uicheck/**`, `docs/UI_STYLE_GUIDE.md`, `docs/qa/hud/**` | Session B |
+| Shared maths and configs | `src/shared/Config/**`, `src/shared/Util/**`, `src/shared/Remotes.luau`, `tools/tests/**` | Either, with a note in the PR |
 
-Integration points Session A needs to know about:
+Integration points:
 
-- `src/client/UIBootstrap.client.luau` starts the UI. If the cutscene controller wants the UI handle, call
-  `require(Client.UI).Start{ PlaceholderCutscene = false }` yourself and set the attribute
-  `UIStartedElsewhere = true` on the Client folder (or delete the bootstrap script).
-- With `PlaceholderCutscene = true` (default) the UI shows the end card `Timers.Cutscene[rarity]` seconds
-  after `ThrowResult` and fires `CutsceneFinished` itself. The cutscene module should set it to `false`
-  and call `ui:ShowReveal(result, { OnClose = ... })` then `ui:FinishThrow(throwId)` at the end of its own
-  sequence.
-- The HUD owns throw input (Space / gamepad R2 / the ball button) and fires `ChargeBegin` /
-  `ChargeRelease`. Pass `OwnsThrowInput = false` to `UI.Start` if the input lives elsewhere, then drive
-  `ui.HUD:SetCharging(true, os.clock(), isTutorial)` / `SetCharging(false)` / `SetThrowLocked(bool)`.
-- Settings that live on the server (`TreatPocketMode`, `KeepDupes`) are sent through a `SetSetting`
-  RemoteFunction `(key, value)` **if it exists** under `ReplicatedStorage.Remotes`. It is not in
-  `Remotes.luau` yet; add it there and handle it in DataService when convenient.
-- Icons: `tools/icons.py` is the only source. After uploading PNGs from `assets/icons/`, paste ids into
-  `src/shared/Config/Icons.luau`; nothing else changes.
+- `src/client/Main.client.luau` is the only client entry script. It starts the UI with
+  `require(Client.UI).Start{ PlaceholderCutscene = false }`, then `Controllers/CutsceneController` and
+  `Controllers/WorldController` with the UI handle. `BallFlight.client.luau` (renders every thrown ball) and
+  `ZoneAmbience.client.luau` (per-zone colour grading) are standalone LocalScripts.
+- `CutsceneController` plays the thrower's cutscene through `src/shared/Cutscene/CutsceneContract.luau`
+  (without the cutscene's own end card), then calls `ui:ShowReveal(result, { OnClose = ... })` and
+  `ui:FinishThrow(throwId)` and fires `CutsceneFinished`. The cutscene draws no ball of its own; it follows
+  the same arc (`Util/BallFlight.ForThrow(result.LaunchPos, result.LandPos)`) and waits `result.FlightTime`.
+- The HUD owns throw input (`UI/Screens/HUD.luau` + `UI/Components/PowerMeter.luau`): the prompt and the
+  vertical meter only show while the `OnPlatform` attribute is true and `ThrowQueuePos == 1`. First click /
+  tap / Space / gamepad R2 fires `ChargeBegin`, the second fires `ChargeRelease`.
+- Server-side settings (`TreatPocketMode`, `KeepDupes`) go through the `DogAction` remote
+  (`SetTreatPocketMode`, `SetKeepDupes "<Rarity>=true|false"`); the client mirrors `PlayerState.Settings`.
+- Icons: `tools/icons.py` is the only source (it writes `assets/icons/` and `src/shared/UI/PixelIcons.luau`).
+  After uploading PNGs, paste ids into `src/shared/Config/Icons.luau`; nothing else changes.

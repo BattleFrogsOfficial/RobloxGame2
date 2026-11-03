@@ -1,5 +1,5 @@
 --!nonstrict
--- Yards and owned dogs: yard/pad assignment (1-6) on join, YardSign owner text, slots + held dogs,
+-- Yards and owned dogs: yard assignment (1-6) on join, YardSign owner text, slots + held dogs,
 -- adding/selling dogs, dupe auto-sell (with a short Keep window), puppy -> adult growth, the 1 s
 -- income tick, offline earnings (capped), the top-12 roaming display on DogSpots and the kennel sign.
 local CollectionService = game:GetService("CollectionService")

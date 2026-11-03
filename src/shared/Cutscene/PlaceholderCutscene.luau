@@ -5,7 +5,10 @@
 --      PlaceholderCutscene.Play(input: CutsceneContract.Input) -> CutsceneContract.Handle
 -- ===========================================================================================
 -- Thrower: letterboxed camera tweens + DogFactory rig + DogAnimator poses, beats in contract order:
---   1 Suspense (ball flight + distance/zone callout + rustling bush; rarity NOT shown)
+--   1 Suspense (camera follows the ball's arc + distance/zone callout + rustling bush; rarity NOT shown).
+--     The ball itself is drawn ONLY by src/client/BallFlight.client.luau (for everyone); this module draws no
+--     ball. It solves the same arc (Util/BallFlight.ForThrow(LaunchPos, LandPos)) for the camera and waits
+--     result.FlightTime before the callouts so they land with the ball.
 --   2 RevealDog (dog pops in, name + rarity banner in the rarity colour)
 --   3 RevealVariant (VariantFX applied + badge) — only if the dog has a variant
 --   4 Catch (leap -> catch + wag, or fumble -> bolts off toward the plaza)
@@ -23,8 +26,9 @@ local Util = Shared:WaitForChild("Util")
 local Rarities = require(Config:WaitForChild("Rarities"))
 local Layout = require(Config:WaitForChild("Layout"))
 local Zones = require(Config:WaitForChild("Zones"))
-local Balls = require(Config:WaitForChild("Balls"))
 local Timers = require(Config:WaitForChild("Timers"))
+local Game = require(Config:WaitForChild("Game"))
+local BallFlight = require(Util:WaitForChild("BallFlight"))
 local DogCatalog = require(Util:WaitForChild("DogCatalog"))
 local FormatNumber = require(Util:WaitForChild("FormatNumber"))
 local DogFolder = Shared:WaitForChild("Dog")
@@ -130,15 +134,18 @@ local function placeOnGround(model: Model, pos: Vector3, yaw: number)
 	model:PivotTo(model:GetPivot() + Vector3.new(0, pos.Y - bottom, 0))
 end
 
+-- Same endpoints (and fallbacks) as src/client/BallFlight.client.luau, so the camera follows the rendered ball.
 local function positions(result: Contract.ThrowResult): (Vector3, Vector3)
-	-- One shared raised platform: the ball leaves the deck (ThrowLine.Y) and lands on the field (GroundY).
-	local r = result :: any
-	local x = Layout.ThrowLine.X or 0
-	local start = r.LaunchPos or result.StartPosition or Vector3.new(x, Layout.ThrowLine.Y or Layout.GroundY, Layout.ThrowLine.Z)
-	local landing = r.LandPos
-		or result.LandingPosition
-		or Vector3.new(x, Layout.GroundY, Layout.DistanceToZ(result.Distance))
-	return start, landing
+	local start = result.LaunchPos
+	local landing = result.LandPos
+	if typeof(start) ~= "Vector3" then
+		local spot = Layout.Platform.ThrowSpot
+		start = Vector3.new(spot.X, spot.Y + Game.Throw.LaunchHeight, spot.Z)
+	end
+	if typeof(landing) ~= "Vector3" then
+		landing = Vector3.new((start :: Vector3).X, Layout.GroundY, Layout.DistanceToZ(result.Distance))
+	end
+	return start :: Vector3, landing :: Vector3
 end
 
 local function throwerName(result: Contract.ThrowResult): string
@@ -198,10 +205,12 @@ local function runThrower(input: Contract.Input, handle: Contract.Handle)
 	local result = input.Result
 	local player = Players.LocalPlayer
 	local def = DogCatalog.Get(result.DogId) or { Id = result.DogId, Name = result.DogName or "Dog", Rarity = result.Rarity }
-	local timing = Contract.Timing(result.Rarity, result.Variant ~= nil, result.Distance)
+	local start, landing = positions(result)
+	local arc = BallFlight.ForThrow(start, landing)
+	local flightTime = if type(result.FlightTime) == "number" and result.FlightTime > 0 then result.FlightTime else arc.Duration
+	local timing = Contract.Timing(result.Rarity, result.Variant ~= nil, result.Distance, flightTime)
 	local color = tierColor(result.Rarity)
 	local zone = zoneById[result.ZoneId]
-	local start, landing = positions(result)
 	local cleanup: { () -> () } = {}
 	local camera = workspace.CurrentCamera
 	local savedType = camera.CameraType
@@ -266,10 +275,23 @@ local function runThrower(input: Contract.Input, handle: Contract.Handle)
 	local phase = "Suspense"
 
 	-- 1. SUSPENSE ------------------------------------------------------------------------------
+	-- chase camera on the shared arc (no ball here: BallFlight.client.luau renders it)
 	camera.CFrame = CFrame.lookAt(start + Vector3.new(0, 10, -24), start + Vector3.new(0, 4, 40))
-	camTo(CFrame.lookAt(ground + Vector3.new(0, 22, -38), ground), timing.Flight, Enum.EasingStyle.Quad)
 	callout.Text = "Throw!"
-	skipped = hold(handle, timing.Flight)
+	-- same network catch-up as BallFlight.client.luau so the camera and the rendered ball stay in step
+	local sent = tonumber(result.ServerTime)
+	local lag = if sent then math.clamp(workspace:GetServerTimeNow() - sent, 0, math.min(0.5, timing.Flight)) else 0
+	local flightT0 = os.clock() - lag
+	local chase = RunService.RenderStepped:Connect(function()
+		local t = math.min(os.clock() - flightT0, timing.Flight)
+		local k = if timing.Flight > 0 then t / timing.Flight else 1
+		local ballPos = arc.Position(t * arc.Duration / math.max(timing.Flight, 1e-3))
+		local back = (start + Vector3.new(0, 10, -24)):Lerp(ground + Vector3.new(0, 22, -38), k)
+		local eye = back:Lerp(ballPos + Vector3.new(0, 14, -34), math.clamp(k * 1.5, 0, 1))
+		camera.CFrame = CFrame.lookAt(eye, ballPos)
+	end)
+	skipped = hold(handle, timing.Flight - lag)
+	chase:Disconnect()
 	if not skipped then
 		callout.Text = ("%d studs!"):format(math.floor(result.Distance))
 		pop(callout)
@@ -369,18 +391,8 @@ local function runThrower(input: Contract.Input, handle: Contract.Handle)
 		big.Text = ""
 		callout.Text = ("Catch chance %s"):format(FormatNumber.Percent(result.CatchChance, 0))
 		callout.TextColor3 = WHITE
-		local ballDef = Balls.ById[result.BallId or Balls.Default] or Balls.ById[Balls.Default]
-		local headPart = m:FindFirstChild("Head", true) :: BasePart?
-		local headPos = if headPart then headPart.Position else focus + Vector3.new(0, dogSize.Y * 0.4, -dogSize.Z * 0.4)
-		local ball = new("Part", { Name = "CutsceneBall", Shape = Enum.PartType.Ball, Size = Vector3.one * 0.9 * math.max(1, fullScale * 0.8),
-			Anchored = true, CanCollide = false, CanQuery = false, Color = ballDef.Color, Material = Enum.Material.SmoothPlastic,
-			CFrame = CFrame.new(headPos + Vector3.new(0, 12, -6)), Parent = workspace })
-		table.insert(cleanup, function()
-			ball:Destroy()
-		end)
+		-- No second ball: the thrown ball (BallFlight.client.luau) rests at the landing spot for the whole cutscene.
 		local fall = timing.Catch * 0.35
-		TweenService:Create(ball, TweenInfo.new(fall, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-			{ CFrame = CFrame.new(headPos + Vector3.new(0, dogSize.Y * 0.4, 0)) }):Play()
 		task.spawn(function()
 			a:PlayOnce("leap", math.min(0.9, fall * 1.6))
 		end)
@@ -401,13 +413,6 @@ local function runThrower(input: Contract.Input, handle: Contract.Handle)
 				skipped = hold(handle, 0.4) or skipped
 			end
 			if result.Caught then
-				local snout = m:FindFirstChild("Nose", true) :: BasePart?
-				if snout then
-					ball.CFrame = CFrame.new(snout.Position + Vector3.new(0, -0.2, -0.3))
-					new("WeldConstraint", { Part0 = snout, Part1 = ball, Parent = ball })
-					ball.Anchored = false
-					ball.Massless = true
-				end
 				big.Text = "CAUGHT!"
 				big.TextColor3 = Color3.fromRGB(120, 255, 140)
 				pop(big)
@@ -421,9 +426,7 @@ local function runThrower(input: Contract.Input, handle: Contract.Handle)
 				end)
 				skipped = hold(handle, timing.Catch - fall) or skipped
 			else
-				-- fumble -> ball bounces away -> dog bolts toward the plaza (-Z)
-				TweenService:Create(ball, TweenInfo.new(0.6, Enum.EasingStyle.Bounce),
-					{ CFrame = CFrame.new(ground + Vector3.new(4, ball.Size.Y / 2, 3)) }):Play()
+				-- fumble -> dog bolts toward the plaza (-Z)
 				big.Text = "FUMBLE!"
 				big.TextColor3 = Color3.fromRGB(255, 110, 110)
 				pop(big)
@@ -531,7 +534,7 @@ end
 
 local function runSpectator(input: Contract.Input, handle: Contract.Handle)
 	local result = input.Result
-	local timing = Contract.Timing(result.Rarity, result.Variant ~= nil, result.Distance)
+	local timing = Contract.Timing(result.Rarity, result.Variant ~= nil, result.Distance, result.FlightTime)
 	local length = math.max(2.5, timing.Total * Contract.SpectatorLengthMult)
 	local large = Contract.IsLarge(result.Rarity)
 	local color = tierColor(result.Rarity)

@@ -108,7 +108,9 @@ local function play(result: any)
 			local hop = TweenService:Create(ball, TweenInfo.new(0.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out),
 				{ CFrame = CFrame.new(rest + Vector3.new(0, 0, 2)) })
 			hop:Play()
-			task.delay(2.5, function()
+			-- rest on the field until the thrower's cutscene is over (its catch beat plays beside it)
+			local restSeconds = math.max(2.5, (tonumber(result.CutsceneSeconds) or 0) + 1)
+			task.delay(restSeconds, function()
 				ball:Destroy()
 			end)
 		end

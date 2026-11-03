@@ -48,6 +48,14 @@ roblox.implementMethod("Instance", "WaitForChild", function(self, name)
 	return c
 end)
 
+-- the world is built on the server
+roblox.implementMethod("RunService", "IsServer", function()
+	return true
+end)
+roblox.implementMethod("RunService", "IsClient", function()
+	return false
+end)
+
 local dm = roblox.Instance.new("DataModel")
 local Workspace = dm:GetService("Workspace")
 local ReplicatedStorage = dm:GetService("ReplicatedStorage")
@@ -250,6 +258,10 @@ if NO_FIELD then
 	WorldBuilder.SkipSteps.Field = true
 end
 WorldBuilder.RunCheck = false -- we run it below and report it ourselves
+-- the client's zone colour grading must survive the server's Lighting.Apply (it adopts effects by name only)
+local clientCC = roblox.Instance.new("ColorCorrectionEffect")
+clientCC.Name = "ZoneAmbienceCC"
+clientCC.Parent = LightingService
 local okBuild, map = pcall(WorldBuilder.Build)
 if not okBuild then
 	print("FATAL: WorldBuilder.Build errored: " .. tostring(map))
@@ -357,9 +369,34 @@ end
 ----------------------------------------------------------------------------------------------------
 -- 1. WorldCheck
 ----------------------------------------------------------------------------------------------------
+if clientCC.Name ~= "ZoneAmbienceCC" or clientCC.Parent ~= LightingService then
+	fail("Lighting.Apply renamed or moved the client's ZoneAmbienceCC")
+end
+if LightingService:FindFirstChildOfClass("Atmosphere") == nil then
+	fail("Lighting.Apply created no Atmosphere (haze)")
+end
+
 local violations = WorldCheck.Check(map)
 for _, v in violations do
 	fail("WorldCheck: " .. v)
+end
+
+-- World text rule: the only text in the world is on the zone-name arch boards (BoundaryKind "Arch"), the
+-- yard owner signs (OwnerLabel) and the kennel count (CountLabel).
+for _, d in map:GetDescendants() do
+	if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+		local allowed = d.Name == "OwnerLabel" or d.Name == "CountLabel"
+		local a = d.Parent
+		while not allowed and a and a ~= map do
+			if a:GetAttribute("BoundaryKind") == "Arch" then
+				allowed = true
+			end
+			a = a.Parent
+		end
+		if not allowed then
+			fail("world text outside an arch board / yard sign / kennel count: " .. d:GetFullName() .. " = " .. tostring(d.Text))
+		end
+	end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -586,6 +623,51 @@ if F.Walls then
 			if lo > r.lo or hi < r.hi then
 				fail(("walls/%s does not span the map (%s..%s needed, has %s..%s)"):format(name, fmt(r.lo), fmt(r.hi), fmt(lo), fmt(hi)))
 			end
+		end
+	end
+	-- the field aprons must run under the walls: sample the apron's outer edge along both sides; every sample
+	-- has to sit inside a wall part (else a strip of bare underlay would show between apron and cliff foot)
+	if F.Field then
+		local apronEdge = 0
+		for _, d in F.Field:GetDescendants() do
+			if d:IsA("BasePart") and (d.Name == "ApronW" or d.Name == "ApronE") then
+				local b = Bounds(d)
+				apronEdge = math.max(apronEdge, math.abs(b.MinX), math.abs(b.MaxX))
+			end
+		end
+		local function covered(x, z)
+			local pt = roblox.Vector3.new(x, Layout.GroundY + 0.5, z)
+			for _, w in wallParts do
+				local bx = w.Box
+				if x >= bx.MinX - 1 and x <= bx.MaxX + 1 and z >= bx.MinZ - 1 and z <= bx.MaxZ + 1 then
+					local lp = w.Part.CFrame:PointToObjectSpace(pt)
+					local h = w.Part.Size / 2
+					if math.abs(lp.X) <= h.X and math.abs(lp.Y) <= h.Y and math.abs(lp.Z) <= h.Z then
+						return true
+					end
+				end
+			end
+			return false
+		end
+		local bare = 0
+		local firstBare = nil
+		local z = Layout.Field.MinZ + 5
+		while z < Layout.Field.MaxZ do
+			for _, side in { -1, 1 } do
+				if not covered(side * (apronEdge - 0.5), z) then
+					bare += 1
+					firstBare = firstBare or ("x %s z %s"):format(fmt(side * apronEdge), fmt(z))
+				end
+			end
+			z += 10
+		end
+		note(("walls: apron outer edge |x| = %s (wall inner line %s); %d edge samples not under a wall"):format(
+			fmt(apronEdge), fmt(minInner), bare))
+		if apronEdge <= minInner then
+			fail(("field apron stops at |x| %s, short of the closest wall face %s: a bare strip shows"):format(fmt(apronEdge),
+				fmt(minInner)))
+		elseif bare > 0 then
+			fail(("apron outer edge is not hidden under a wall at %d samples (first: %s)"):format(bare, firstBare))
 		end
 	end
 	-- walls vs everything else (except the ground underlay / clouds of the outskirts)

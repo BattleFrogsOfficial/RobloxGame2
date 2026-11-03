@@ -70,7 +70,7 @@ local function buildShop(parent: Instance)
 	Props.Part({ Parent = m, Name = "ShopSignTrim", Size = Vector3.new(S.Width + 1, 6, 0.5),
 		CFrame = CFrame.lookAt(boardPos + Vector3.new(0, 0, 0.4), boardPos + Vector3.new(0, 0, -1)),
 		Color = colors[1], Material = WorldTheme.AccentMaterial })
-	Props.Label(board, "BALL SHOP", { PixelsPerStud = 20 })
+	local _ = board -- blank coloured board (no world text)
 
 	-- display balls on the counter
 	local ballColors = { Color3.fromRGB(210, 240, 60), Color3.fromRGB(255, 90, 90), Color3.fromRGB(80, 170, 255),
@@ -108,7 +108,7 @@ local function buildTraining(parent: Instance)
 
 	-- ball throwing machine at the back right, aimed down the field
 	local mx, mz = c.X + 6, c.Z + half - 5
-	Props.Block(m, "MachineBody", Vector3.new(6, 5, 5), CFrame.new(mx, Y + 2.7, mz), T.Equipment, nil, true)
+	Props.Block(m, "StationBody", Vector3.new(6, 5, 5), CFrame.new(mx, Y + 2.7, mz), T.Equipment, nil, true)
 	Props.Block(m, "Hopper", Vector3.new(5, 2, 4), CFrame.new(mx, Y + 6, mz), T.EquipmentAccent)
 	Props.Part({ Parent = m, Name = "Tube", Shape = Enum.PartType.Cylinder, Size = Vector3.new(4, 2.2, 2.2),
 		CFrame = CFrame.new(mx, Y + 4, mz - 3) * CFrame.Angles(0, math.pi / 2, 0) * CFrame.Angles(0, 0, math.rad(15)),
@@ -117,14 +117,14 @@ local function buildTraining(parent: Instance)
 		Props.Ball(m, "Ball", Vector3.new(mx + (k - 1) * 1.3, Y + 7.4, mz + (k - 1) * 1.1), 1.1, Color3.fromRGB(210, 240, 60))
 	end
 
-	-- sprint lane: three cones along the front of the mat
+	-- three agility cones along the front of the mat
 	for k = -1, 1 do
 		Props.Cylinder(m, "Cone", Vector3.new(c.X + k * 7, Y + 0.2, c.Z - half + 3), 2, 1.4, Color3.fromRGB(255, 140, 40))
 	end
 
 	-- sign across the back edge, facing the street (-Z)
 	Props.Sign(m, "TrainingSign", Vector3.new(c.X, Y, c.Z + half + 1), Vector3.new(0, 0, -1), Vector3.new(20, 4, 0.6),
-		10, T.ShopSign, T.EquipmentAccent, "TRAINING", { PixelsPerStud = 24 })
+		10, T.ShopSign, T.EquipmentAccent, nil) -- blank board (no world text)
 end
 
 local function buildLawn(parent: Instance)

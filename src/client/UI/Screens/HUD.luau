@@ -39,6 +39,7 @@ export type HUDDeps = {
 	OnChargeBegin: (() -> ())?, -- first press (only fired on the platform, on your turn, nothing in flight)
 	OnChargeRelease: (() -> ())?, -- second press
 	OwnsThrowInput: boolean?, -- false if another module handles input; the HUD then only displays
+	ClaimDailyWalk: (() -> ())?, -- clicking the "Claim daily walk" banner
 }
 
 export type HUDHandle = {
@@ -191,6 +192,22 @@ function HUD.new(deps: HUDDeps): HUDHandle
 	local bannerIcon = Icon.new({ Name = "squirrel", Size = 32, Position = UDim2.new(0, Theme.Space.S, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), ZIndex = 5, Parent = banner })
 	local bannerText = Label.Display({ Name = "Text", Text = "", TextSize = Theme.Text.Body, Size = UDim2.new(1, -120, 1, 0), Position = UDim2.fromOffset(Theme.Space.S + 32 + Theme.Space.S, 0), ZIndex = 5, Parent = banner })
 	local bannerTimer = Label.Display({ Name = "Timer", Text = "", TextSize = Theme.Text.Body, Size = UDim2.fromOffset(64, 44), Position = UDim2.new(1, -Theme.Space.M, 0, 0), AnchorPoint = Vector2.new(1, 0), XAlign = Enum.TextXAlignment.Right, ZIndex = 5, Parent = banner })
+	-- the banner is clickable only while it shows the daily walk (claims it through deps.ClaimDailyWalk)
+	local bannerKind: string? = nil
+	local bannerHit: TextButton = Make("TextButton", {
+		Name = "Hit",
+		Text = "",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 6,
+		Active = false,
+		Parent = banner,
+	})
+	bannerHit.Activated:Connect(function()
+		if bannerKind == "DailyWalk" and deps.ClaimDailyWalk then
+			deps.ClaimDailyWalk()
+		end
+	end)
 	local toasts = Toast.new(root, bannerPos + UDim2.fromOffset(0, 44 + Theme.Space.S), bannerAnchor, if touch then 2 else 3, touch)
 	toasts.Root.Size = UDim2.fromOffset(bannerW, toasts.Root.Size.Y.Offset)
 
@@ -373,6 +390,9 @@ function HUD.new(deps: HUDDeps): HUDHandle
 	local function refreshBanner()
 		local ev = State.Server.Events
 		local show: any = ev.Squirrel or ev.RunawayDog or ev.DailyWalk
+		bannerKind = if show then show.Kind else nil
+		bannerHit.Active = bannerKind == "DailyWalk"
+		bannerHit.AutoButtonColor = false
 		if not show then
 			banner.Visible = false
 			return
@@ -389,7 +409,7 @@ function HUD.new(deps: HUDDeps): HUDHandle
 			bannerGradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Theme.Palette.Danger.Top), ColorSequenceKeypoint.new(1, Theme.Palette.Danger.Bottom) })
 		else
 			Icon.Set(bannerIcon, "walk")
-			bannerText.Text = "Daily walk ready"
+			bannerText.Text = "Claim daily walk"
 			bannerGradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Theme.Palette.Grass.Top), ColorSequenceKeypoint.new(1, Theme.Palette.Grass.Bottom) })
 		end
 		local endsAt = tonumber(show.EndsAt)

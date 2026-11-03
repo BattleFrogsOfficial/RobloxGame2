@@ -89,7 +89,6 @@ WorldTheme.Platform = {
 	ThrowSpot = rgb(255, 90, 90),
 	ThrowSpotRing = rgb(255, 255, 255),
 	QueueSpot = rgb(70, 160, 255),
-	QueueText = rgb(255, 255, 255),
 }
 
 -- World walls (Walls.luau): stepped cliff / hedge faces around the whole map. Each zone's wall is built
@@ -118,7 +117,6 @@ WorldTheme.Field = {
 	DistanceLine = rgb(255, 255, 255),
 	MarkerPost = rgb(255, 255, 255),
 	MarkerBoard = rgb(40, 40, 60),
-	MarkerText = rgb(255, 255, 255),
 	ArchPillar = rgb(255, 255, 255),
 	ArchBoard = rgb(40, 40, 60),
 	EndWall = rgb(255, 255, 255),

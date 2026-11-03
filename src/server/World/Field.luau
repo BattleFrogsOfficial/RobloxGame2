@@ -1,7 +1,7 @@
 --!strict
 -- The fetch-field stem: 9 ZoneBand floors by distance band (Zones.luau), each with its own ground material
 -- and colour, themed apron strips outside the field, a zone-name arch + a themed gate (Kit.Gate) at each band
--- start, distance lines + DistanceMarker signs every 100 studs, and a backdrop at the far end. Each zone's
+-- start, distance lines + blank DistanceMarker boards every 100 studs, and a backdrop at the far end. Each zone's
 -- decorations, landmark and particles come from Zones/<ZoneId>.luau. The centre lane (|x| <= Kit.LaneHalf)
 -- only ever holds flat (<= 1 stud), non-colliding dressing; nothing at all crosses it above that.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -114,8 +114,7 @@ local function buildMarkers(parent: Instance)
 		Props.Slab(folder, "Line" .. d, F.MinX, F.MaxX, z - 0.6, z + 0.6, Y + 0.05, 0.05, T.DistanceLine, nil, false)
 		for _, side in { -1, 1 } do
 			local board = Props.Sign(folder, "Marker" .. d, Vector3.new(Kit.CenterX + side * Kit.MarkerX, Y, z),
-				Vector3.new(0, 0, -1), Vector3.new(10, 5, 0.8), 2.5, T.MarkerBoard, T.MarkerPost, tostring(d),
-				{ PixelsPerStud = 20, TextColor = T.MarkerText })
+				Vector3.new(0, 0, -1), Vector3.new(10, 5, 0.8), 2.5, T.MarkerBoard, T.MarkerPost, nil) -- no world text
 			Props.Tag(board, "DistanceMarker", { Distance = d })
 		end
 		d += Kit.MarkerEvery
@@ -126,14 +125,11 @@ local function buildEnd(parent: Instance)
 	local F = Layout.Field
 	local m = Props.Model(parent, "FieldEnd")
 	local z = F.MaxZ
-	local width = Kit.ApronHalf * 2
-	local wall = Props.Block(m, "Backdrop", Vector3.new(width, 36, 4), CFrame.new(Kit.CenterX, Y + 18, z + 2), T.EndWall)
+	local width = Kit.BackdropHalf * 2
+	Props.Block(m, "Backdrop", Vector3.new(width, 36, 4), CFrame.new(Kit.CenterX, Y + 18, z + 2), T.EndWall)
 	Props.Block(m, "BackdropTrim", Vector3.new(width, 3, 4), CFrame.new(Kit.CenterX, Y + 36, z + 2),
 		ZonesCfg[#ZonesCfg].Theme.Accent, WorldTheme.AccentMaterial)
-	local label = Props.Label(wall, tostring(math.floor(Layout.Field.MaxZ - Layout.ThrowLine.Z)) .. "! THE EDGE OF THE MAP ... FOR NOW", { PixelsPerStud = 4,
-		TextColor = Color3.fromRGB(150, 110, 210), StrokeColor = Color3.new(1, 1, 1) })
-	label.Size = UDim2.fromScale(0.5, 0.5)
-	label.Position = UDim2.fromScale(0.25, 0.25)
+	-- no text on the backdrop (world text rule: only the zone arch boards, yard owner signs and kennel count)
 end
 
 function Field.Build(parent: Instance)

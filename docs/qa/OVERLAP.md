@@ -1,5 +1,10 @@
 # QA: Nothing overlaps
 
+> **Historical.** This overlap pass predates the plaza redesign: the six pads, the leaderboard board and the
+> three training stations it mentions no longer exist (one raised platform with a ramp, one ball shop, one
+> training station). The current checks are `python3 tools/world_bounds.py`, `lune run tools/worldcheck/run.luau`
+> and `lune run tools/worldcheck/zones.luau`.
+
 Final QA pass, concern 1. To re-run the checks: `python3 tools/world_bounds.py` (now 7,710 checks) and `python3 tools/roster.py check`.
 Both pass.
 

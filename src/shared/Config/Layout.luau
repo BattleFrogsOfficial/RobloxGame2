@@ -15,7 +15,7 @@
 --               │      │
 --               │FIELD │                stem X -120..120 (ground Y = 0), 9 zone bands by distance
 --   Z 3260      └──────┘
---   Scenery walls (200+ studs tall) enclose everything at |X| >= 240, Z <= -180 and Z >= 3310.
+--   Scenery walls (200+ studs tall) enclose everything at |X| >= 236, Z <= -180 and Z >= 3310.
 local Layout = {}
 
 Layout.GroundY = 0

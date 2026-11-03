@@ -9,17 +9,17 @@
 ## Contents
 
 1. Overview & pillars
-2. The world: T-shaped map and the 6-player server
+2. The world: compact T map, one shared platform, 6-player server
 3. Core loop
 4. Throw and meter maths
-5. Zones
+5. Zones (nine distinct biomes)
 6. Roll pipeline and odds tables
 7. Variants
 8. Loss, near-miss and runaway design
 9. Lucky Streak
 10. Protection items
-11. Ball tiers
-12. Training
+11. Balls (consumable)
+12. Training (one station)
 13. Economy and the income formula
 14. Timers (puppy growth, daily walk, squirrel, offline)
 15. Kennel Book and rewards
@@ -29,7 +29,7 @@
 19. FTUE: the first two minutes
 20. CUTSCENE CONTRACT (placeholder; TBD items for the user)
 21. Tech architecture
-22. Data storage
+22. Data storage (schema v2)
 23. Live-ops ideas
 24. Risks
 25. Appendix: config file index
@@ -50,61 +50,74 @@
 | 2 | **Skill in, luck out** | The throw itself is skill: you time a meter, and a better release goes further and reaches richer zones. What comes back is luck, and every odd is posted in-game. |
 | 3 | **Losses sting but are fair** | A missed catch shows you exactly what you lost, then the dog runs into the plaza where everyone can see it. The visible Lucky Streak and the pre-bought protection items stop a loss from feeling like a scam. |
 | 4 | **Your yard is your trophy case** | Dogs roam your yard, earn money and grow from puppy to adult. The Kennel Book is a permanent record of everything you have ever caught. |
-| 5 | **Social, not competitive-toxic** | 6 players share a plaza and see each other's throws, runaways, squirrel chases and broadcasts. There is no PvP stealing. |
+| 5 | **Social, not competitive-toxic** | 6 players share a plaza and one throwing platform (they queue for it), and see each other's throws, runaways, squirrel chases and broadcasts. There is no PvP stealing. |
 
 **Explicit non-goals (v1):** no rebirth system, no hunger or care meters, no trading, no PvP stealing, no auto-throw.
 
 ---
 
-## 2. The world: T-shaped map and the 6-player server
+## 2. The world: compact T map, one shared platform, 6-player server
 
-The source of truth is `src/shared/Config/Layout.luau`. Units are studs. Origin is the centre of the T junction. +Z runs down the stem, away from the yards, and the ground top is Y = 0.
+The source of truth is `src/shared/Config/Layout.luau` (module-level detail: `docs/WORLD.md`). Units are studs. Origin is the centre of the T junction, +Z runs down the stem away from the yards, and the ground top is Y = 0 everywhere except the platform deck (Y = 40).
 
 ```
- Z -200 ┌──Y1──┬──Y2──┬──Y3──┬──Y4──┬──Y5──┬──Y6──┐   crossbar: 6 player yards (110 x 120 each)
- Z  -80 ├──────────────── STREET ─────────────────┤   X -380..380
- Z  -40       └──── PLAZA / DOG PARK HUB ────┘         X -120..120: spawn, shops, training, leaderboard
- Z   60             [ THROW LINE: 6 pads ]             pads at X -75,-45,-15,15,45,75
-                    │                    │
-                    │     FETCH FIELD    │             stem X -120..120, 9 zone bands
- Z 3260             └────────────────────┘
+ Z -180  ~~~~~~~~~~~~~~ scenery wall ~~~~~~~~~~~~~~
+ Z -154 ┌Y1┬Y2┬Y3┬Y4┬Y5┬Y6┐   6 player pens (yards) 52 x 100, centres X -140..140, gates face the street
+ Z  -54 ├──── STREET ─────┤   X -170..170
+ Z  -34     └─ PLAZA ─┘       X -60..60: ONE ball shop (west), ONE training area (east), 2 spawns,
+             │ ramp │         runaway lawn + squirrel loop; a ~30 deg ramp runs up the middle
+ Z   34      [DECK  ]         ONE raised throwing platform, deck top Y = 40 (X -18..18, Z 34..60)
+ Z   60  ===throw line===     front edge of the deck = distance 0
+             │      │
+             │FIELD │         stem X -120..120, 9 zone bands by distance
+ Z 3260      └──────┘
+ Z 3310  ~~~ scenery wall ~~~ side walls from |X| 236 outward, all >= 200 studs tall
 ```
 
 | Area | Bounds / values | Contents (world tags) |
 |------|-----------------|-----------------------|
-| Yards (crossbar) | 6 yards, centres X = -300, -180, -60, 60, 180, 300; CenterZ -140; size 110 x 120; gates open south onto the street | `YardPlot`, `YardSign` (OwnerLabel), `DogSpot` x12, kennel building with `KennelSign` (CountLabel), `TrophySpot` |
-| Street | X -380..380, Z -80..-40 | Walkway between the yards and the plaza. Decoration only. |
-| Plaza / dog park hub | X -120..120, Z -40..60 | `PlazaSpawn`, `ShopStand` x4 (Balls, Boosts, Yard, Cosmetics), `TrainingStation` x3 (PullUpBar, ThrowingMachine, Sprint), `Leaderboard`, `RunawayArea`, `SquirrelPath` waypoints |
-| Throw line | Z = 60, 6 pads of 20 x 1 x 12 | `ThrowPad` (PadIndex 1-6). Pad *i* belongs to the owner of yard *i*. |
-| Fetch field (stem) | X -120..120, Z 60..3260 | `ZoneBand` (ZoneId) x9, `DistanceMarker` (Distance) signs |
+| Pens / yards (crossbar) | 6 yards 52 x 100, centres X = -140, -84, -28, 28, 84, 140; CenterZ -104; 4-stud hedge gaps; gates open south onto the street | `YardPlot`, `YardSign` (OwnerLabel), `DogSpot` x12, kennel with `KennelSign` (CountLabel), `TrophySpot` |
+| Street | X -170..170, Z -54..-34 | Walkway between the yards and the plaza. |
+| Plaza | X -60..60, Z -34..60 | `PlazaSpawn` x2, **one** `ShopStand` (ShopId `"Balls"`, at `Layout.Shop`), **one** `TrainingStation` (StationId `"Main"`, at `Layout.Training`), `RunawayArea` lawn, `SquirrelPath` waypoints (`Order`) |
+| Throwing platform | `Layout.Platform`: deck 36 x 26, top Y = 40, front edge on the throw line (Z = 60); ramp 12 wide from (0, 0, -34) to (0, 40, 34) | `ThrowPad` (PadIndex 1 = the deck), marked throw spot at (0, 40, 56), `QueueSpot` x5 (`Order` 1-5) beside it |
+| Fetch field (stem) | X -120..120, Z 60..3260; themed aprons out to \|X\| 266 (they run under the walls) | `ZoneBand` (ZoneId) x9, a zone-name arch + themed gate at each band start, `DistanceMarker` (Distance) boards every 100 studs |
+| Scenery walls | \|X\| >= 236, Z <= -180, Z >= 3310; >= 200 studs tall | Stepped cliff / hedge tiers coloured by the zone they border; non-colliding scenery |
 
-**Feel target:** a compact social hub with one very long "how far can you throw" runway, in the spirit of the classic throw-and-collect T layout. The yards and the plaza fit on one screen. Looking down the stem you should see the far zones as themed silhouettes so you have something to aspire to. Theme colours come from `Zones.luau` `Theme` and `src/shared/Config/WorldTheme.luau`.
+**Feel target:** a compact social hub with one very long "how far can you throw" runway. Every walk between a yard gate, the platform, the shop and the training area is at most 300 studs (under 10 s at WalkSpeed 32; `tools/worldcheck/run.luau` measures it). From the deck you look down the stem over nine distinct biomes that fade into an `Atmosphere` haze; the tall themed walls mean the horizon is never flat ground. Colours come from `Zones.luau` `Theme` and `src/shared/Config/WorldTheme.luau`.
 
-**Server size:** public servers hold **6 players**, one yard and one throw pad each. **"Max players = 6" is a Studio Game Settings value** (Game Settings → Places → Max Players). It cannot be set from code, so it must be set by hand before publishing. On join the server gives the player the lowest free yard index. That yard and its pad are theirs until they leave, when the yard is cleared and the `YardSign` resets.
+**Movement:** every character spawns with WalkSpeed 32 and JumpPower 60 (`Config/Game.luau` `WalkSpeed` / `JumpPower`, applied by `CharacterService` on every spawn).
 
-**World tags contract** (created by the world builder `src/server/World/**`, consumed by services and the client): `YardPlot`, `YardSign`, `DogSpot`, `KennelSign`, `TrophySpot`, `ThrowPad`, `TrainingStation`, `ShopStand`, `Leaderboard`, `PlazaSpawn`, `RunawayArea`, `SquirrelPath`, `ZoneBand`, `DistanceMarker`. The attributes are listed in the build brief. Services must look things up by tag and attribute, never by instance path.
+**No text in the world** except the zone name on each zone arch board, the yard owner signs and the kennel count. Shop, training area, platform, queue spots, distance markers and the field end are blank, colour-coded boards; the UI carries all other text.
+
+**Server size:** public servers hold **6 players**, one yard each, all sharing the one throwing platform. **"Max players = 6" is a Studio Game Settings value** (Game Settings → Places → Max Players). It cannot be set from code, so it must be set by hand before publishing. On join the server gives the player the lowest free yard index. That yard is theirs until they leave, when it is cleared and the `YardSign` resets.
+
+**Platform queue:** a player is *on the platform* while their root is within `Layout.Platform.StandRadius` (XZ) of the throw spot and no lower than the deck minus `Game.Platform.YTolerance`. Players join a FIFO queue as they arrive (`ThrowQueue`). Position 1 has the turn and is moved onto the throw spot; the others are moved onto the queue spots in order. Each turn is one throw. The turn ends `Game.Throw.MinSecondsBetweenThrows` after that throw finishes, and the thrower goes to the back. A turn-holder who does not start within `Game.Platform.TurnStartSeconds` (15 s) also goes to the back, and walking off the platform leaves the line. The server publishes the player attributes `OnPlatform` (boolean) and `ThrowQueuePos` (0 = not queued, 1 = your turn, 2+ = place in line).
+
+**World tags contract** (created by `src/server/World/**`, consumed by services and the client): `YardPlot`, `YardSign`, `DogSpot`, `KennelSign`, `TrophySpot`, `ThrowPad`, `QueueSpot`, `TrainingStation`, `ShopStand`, `PlazaSpawn`, `RunawayArea`, `SquirrelPath`, `ZoneBand`, `DistanceMarker`. Services look things up by tag and attribute, never by instance path. `src/server/World/WorldCheck.luau` checks after every build that each tagged part sits on its ground (the deck for `ThrowPad` / `QueueSpot`), that spawn volumes are clear and that the tag counts match.
 
 ---
 
 ## 3. Core loop
 
 ```
- ┌─► Stand on your pad ─► Hold to charge ─► Release on the meter ─► Ball flies (distance)
+ ┌─► Walk up the ramp ─► Queue on the platform ─► Your turn: "Click to throw"
  │                                                              │
- │                                                     lands in a zone band
+ │          click: the vertical meter starts (0-100) ─► click again to release
+ │                                                              │
+ │     equipped consumable ball used up (back to Tennis at 0) ─► ball arcs from the deck (Y 44) to the field
  │                                                              │
  │          server rolls: breed (tier -> dog) -> variant -> catch (all before any visuals)
  │                                                              │
- │                         Cutscene: suspense -> dog+rarity -> variant -> catch/fumble -> end card
+ │                         Cutscene: suspense -> dog+rarity -> variant -> catch/fumble -> reveal card
  │                                   │                                      │
- │                            CAUGHT: dog to yard                MISSED: runs into plaza 60s
+ │                            CAUGHT: dog to your pen            MISSED: runs into the plaza 60 s
  │                            (puppy, 20% income, grows)         (whistle prompt if owned)
  │                                   │
- │                     $/s accrues ─► buy balls / training / slots / boosts
+ │          $/s accrues ─► buy balls (per throw) / training / slots / boosts in the shop panel
  └──────────────── ThrowPower up, better ball ─► reach further zones ◄──┘
 ```
 
-**Session rhythm:** throws take about 3-20 s including the cutscene. Training reps fill the gaps between throws. Every 15 min a squirrel event pulls everyone into the plaza. The daily walk is a once-a-day reason to come back. Puppy growth is a "come back later" reason.
+**Session rhythm:** a throw takes about 3-20 s including the cutscene, then the next player in line throws. Training reps at the one training station fill the gaps between turns. Every 15 min a squirrel event pulls everyone into the plaza. The daily walk is a once-a-day reason to come back. Puppy growth is a "come back later" reason.
 
 ---
 
@@ -112,10 +125,11 @@ The source of truth is `src/shared/Config/Layout.luau`. Units are studs. Origin 
 
 ### 4.1 Input and authority
 
-1. The client presses throw (mouse, touch or gamepad button) and fires `ChargeBegin()`. The server records `t0 = os.clock()` for that player. The player must be on their own pad, must not be mid-throw and must not be in a cooldown.
-2. The client shows a meter that sweeps 0 → 1 → 0. It is a **deterministic triangle wave with period P = 1.6 s**, driven locally from the same start moment.
-3. On release the client fires `ChargeRelease()` with **no payload**. The server computes `elapsed = os.clock() - t0` and derives the meter position itself. **The client never sends a position or a distance.**
-4. If the server gets no release within `MaxChargeSeconds` (proposed 6 s), it auto-releases at the current position. This stops "hold forever" stalling and simple macros.
+1. **The throw UI is hidden unless you are on the platform.** While `OnPlatform` is true and `ThrowQueuePos == 1`, the HUD shows the equipped ball and a **"Click to throw"** prompt ("Tap to throw" on touch). Waiting players see their place in line instead.
+2. **Click once** (mouse button 1, tap, Space or gamepad R2) to start: the client fires `ChargeBegin()` and the server records `t0 = os.clock()`. The server accepts it only from the player at queue position 1 who is on the platform, not mid-throw, not in a cooldown, and who has not thrown this turn.
+3. The **vertical power meter** (`src/client/UI/Components/PowerMeter.luau`) appears and fills and empties with the live value in numbers (0-100, ticks at 0/25/50/75/100). It is a **deterministic triangle wave with period P = 1.6 s** (`Util/Meter.luau`), driven locally from the same start moment.
+4. **Click again** to release: the client fires `ChargeRelease()` with **no payload**. The server computes `elapsed = os.clock() - t0` and derives the meter position itself. **The client never sends a position or a distance.**
+5. If the server gets no release within `MaxChargeSeconds` (6 s), it auto-releases at the current position. This stops stalling and simple macros. The meter and prompt also hide while a panel (shop, book, settings) is open.
 
 Latency mostly cancels out, because both events take roughly the same one-way delay to arrive. Jitter (± tens of ms) is the residual error, and the sweet-spot width is tuned to tolerate about 60 ms of it (see Risks).
 
@@ -144,27 +158,31 @@ scatter  ~ Uniform(-0.02, +0.02)   -- server-side only (proposed)
 Distance = clamp(Distance, 5, Layout.Field.MaxZ - Layout.ThrowLine.Z)   -- 5 .. 3200
 ```
 
-The small scatter means a player standing on a zone boundary sometimes lands either side, so "barely missed the next zone" moments happen naturally. The landing point is `Z = Layout.DistanceToZ(Distance)` with a small random X inside the field. The zone is the `Zones` entry where `MinDistance ≤ Distance < MaxDistance`. The last zone includes 3200.
+The small scatter means a player standing on a zone boundary sometimes lands either side, so "barely missed the next zone" moments happen naturally. The landing point is `Z = Layout.DistanceToZ(Distance)` with a small random X inside the clear centre lane (|x| ≤ 56). The zone is the `Zones` entry where `MinDistance ≤ Distance < MaxDistance`. The last zone includes 3200.
+
+**Distance is horizontal** and measured from the throw line (the deck's front edge), so raising the platform did not change any distance or zone. The deck only changes the flight: the ball leaves the hand at `LaunchPos = ThrowSpot + (0, Game.Throw.LaunchHeight, 0)` (Y = 44) and lands at `LandPos = (landX, 0, ThrowLine.Z + Distance)`. `src/shared/Util/BallFlight.luau` solves a true ballistic parabola between the two (flight time `0.7 + d/1800` s clamped to 0.7-2.2 s, apex `0.22 × d` clamped to 15-260 studs above the launch). The server times the throw with it and sends `LaunchPos`, `LandPos` and `FlightTime` in `ThrowResult`; every client draws the ball on that same arc (`src/client/BallFlight.client.luau`) and the cutscene camera follows it.
 
 ---
 
-## 5. Zones
+## 5. Zones (nine distinct biomes)
 
-Source: `src/shared/Config/Zones.luau`. There are 9 zones by distance band, and BaseIncome is ×4 per zone.
+Source: `src/shared/Config/Zones.luau` (bands, income, theme colours); look: `src/server/World/Field.luau` + `src/server/World/Zones/<ZoneId>.luau`; ambience: `src/client/ZoneAmbience.client.luau`. There are 9 zones by distance band, and BaseIncome is ×4 per zone.
 
-| # | ZoneId | Name | Distance (studs) | BaseIncome $/s | Dogs (C/U/R/E/L/M) | Target first-reach time* |
-|---|--------|------|------------------|----------------|--------------------|-------------------------|
-| 1 | Backyard | Backyard | 0 – 100 | 1 | 54/13/7/3/2/1 | 0 min (spawn) |
-| 2 | Park | Park | 100 – 250 | 4 | 54/13/7/3/2/1 | ~3 min |
-| 3 | Beach | Beach | 250 – 450 | 16 | 54/13/7/3/2/1 | ~15 min |
-| 4 | Farm | Farm | 450 – 700 | 64 | 54/13/7/3/2/1 | ~45 min |
-| 5 | Forest | Forest | 700 – 1000 | 256 | 54/13/7/3/2/1 | ~2 h |
-| 6 | SnowyPeaks | Snowy Peaks | 1000 – 1400 | 1,024 | 54/13/7/3/2/1 | ~5 h |
-| 7 | CityRooftops | City Rooftops | 1400 – 1900 | 4,096 | 54/13/7/3/2/1 | ~10 h |
-| 8 | SpaceStation | Space Station | 1900 – 2500 | 16,384 | 54/13/7/3/2/1 | ~20 h |
-| 9 | MythicMeadow | Mythic Meadow | 2500 – 3200 | 65,536 | **53**/13/7/3/2/**2** | ~40 h+ |
+| # | ZoneId | Name | Distance (studs) | BaseIncome $/s | Dogs (C/U/R/E/L/M) | Look (ground · props · landmark) |
+|---|--------|------|------------------|----------------|--------------------|----------------------------------|
+| 1 | Backyard | Backyard | 0 – 100 | 1 | 54/13/7/3/2/1 | mown lawn · picket fences, kennels, flower beds, toys · stacked doghouse tower |
+| 2 | Park | Park | 100 – 250 | 4 | 54/13/7/3/2/1 | park grass + paths · trees, benches, lamps, duck pond, fountain · clock tower (no numerals) |
+| 3 | Beach | Beach | 250 – 450 | 16 | 54/13/7/3/2/1 | sand + sea strips · palms, umbrellas, sand castles, lifeguard tower · lighthouse |
+| 4 | Farm | Farm | 450 – 700 | 64 | 54/13/7/3/2/1 | tilled ground · barn, silo, crop rows, hay bales, scarecrows, tractor · windmill |
+| 5 | Forest | Forest | 700 – 1000 | 256 | 54/13/7/3/2/1 | dark grass + leaf litter · dense pines, logs, mushrooms, fireflies · giant tree |
+| 6 | SnowyPeaks | Snowy Peaks | 1000 – 1400 | 1,024 | 54/13/7/3/2/1 | snow · snowy pines, drifts, ice rocks, snowmen, snowfall · mountain peak |
+| 7 | CityRooftops | City Rooftops | 1400 – 1900 | 4,096 | 54/13/7/3/2/1 | concrete roof deck · AC units, water towers, blank neon billboards · stepped skyscraper |
+| 8 | SpaceStation | Space Station | 1900 – 2500 | 16,384 | 54/13/7/3/2/1 | diamond-plate deck · modules, solar arrays, dishes, domes, stars · rocket on its pad |
+| 9 | MythicMeadow | Mythic Meadow | 2500 – 3200 | 65,536 | **53**/13/7/3/2/**2** | pastel glacier ground · crystals, giant flowers, floating islets · crystal spire |
 
-\*These are pacing targets for the balance pass, not values in code. They are reached through ThrowPower and ball tier (sections 11 and 12).
+Every zone has its own ground material and colour, a zone-name arch plus a themed gate at its start, 15-30 decorations in the outer 25% of the field on each side (the centre lane |x| < 60 stays clear for the ball and the dogs), one landmark at the field edge, particles where it fits, and a matching section of the scenery walls. When the camera is over a zone (the cutscene flies into it), `ZoneAmbience.client.luau` tweens Lighting (ClockTime, Ambient), the Atmosphere colour and a client-only `ZoneAmbienceCC` colour correction toward that zone's preset (e.g. sunset Farm, dusk City, night Space, violet Meadow), and back to the server's defaults over the platform, plaza and yards. `tools/worldcheck/zones.luau` checks each zone.
+
+First-reach pacing (median F2P, `tools/balance_sim.py`): Farm ~45 min, Snowy Peaks ~2 h, City Rooftops ~3 h, Space Station ~7 h, Mythic Meadow ~16 h. These are simulation results, not values in code; they come from ThrowPower and the ball tiers (sections 11 and 12).
 
 Total roster: **720 base dogs** (9 × 80). Mythic Meadow trades one Common for a second Mythic, so it still has 80 dogs. The roster is generated by `tools/roster.py` into `src/shared/Data/Dogs.luau`, with the source data in `data/**`.
 
@@ -280,7 +298,7 @@ A loss must feel **dramatic, readable and recoverable**. It must never feel like
 
 ## 10. Protection items
 
-Protection is always **bought beforehand** from the Boosts shop stand or the HUD shop. It never comes from a popup during a loss.
+Protection is always **bought beforehand** in the shop panel (Boosts / Items tabs). It never comes from a popup during a loss.
 
 | Item | Type | Effect | Acts on | Where tuned |
 |------|------|--------|---------|-------------|
@@ -292,41 +310,45 @@ Protection is always **bought beforehand** from the Boosts shop stand or the HUD
 Rules:
 - **Luck boosts act on the breed (tier) roll only. Catch boosts act on the catch roll only.** They never cross over.
 - Every active boost shows as a HUD chip with a countdown and is listed in `ThrowResult.Boosts`.
-- Treat Pocket has a player toggle (default on) so players can save them for Legendary+ (proposed option: "Only use on Epic+").
+- Treat Pocket has a player setting with three modes, `Always`, `EpicPlus` (default) and `Off` (`Shop.TreatPocketModes`). It is stored server-side in `Settings.TreatPocketMode` and changed from the Settings panel through `DogAction("SetTreatPocketMode", mode)`.
 - The whistle is validated server-side: the throw must be the player's own missed throw, it must be inside the window, they must own whistles, and it is single-use per throw. It goes through the `UseWhistle` RemoteFunction.
 
 ---
 
-## 11. Ball tiers
+## 11. Balls (consumable)
 
-Balls are **permanent owned tiers**. You buy one once, then equip any you own (`EquipBall`). **[tunable: Config/Balls.luau]** (values after the balance pass, see docs/qa/BALANCE.md):
+**Every ball except the Tennis Ball is consumable: one purchase = one throw** (`Uses = 1`). The Tennis Ball is free, unlimited and always available. **[tunable: Config/Balls.luau]**
 
-| Ball | RangeMult | Luck shift | Price (proposed) | Unlock feel |
-|------|-----------|------------|------------------|-------------|
-| Tennis | 1.00 | 0 | free | starter |
-| Rubber | 1.25 | +0.10 | $500 | Park → Beach (~3 min) |
-| Flying Disc | 1.50 | +0.20 | $50,000 | Beach → Farm (~15 min) |
-| Glow | 1.75 | +0.35 | $5M | Farm → Forest/Snowy (~1 h) |
-| Golden | 2.00 | +0.50 | $3B | Snowy → City and beyond (~3 h) |
+| Ball | Id | RangeMult | Luck shift | Price per throw | Consumable |
+|------|----|-----------|------------|-----------------|------------|
+| Tennis Ball | `Tennis` | 1.00 | 0 | free | no (unlimited) |
+| Rubber Ball | `Rubber` | 1.25 | +0.10 | $50 | yes, 1 throw |
+| Flying Disc | `FlyingDisc` | 1.50 | +0.20 | $500 | yes, 1 throw |
+| Glow Ball | `Glow` | 1.75 | +0.35 | $10,000 | yes, 1 throw |
+| Golden Ball | `Golden` | 2.00 | +0.50 | $250,000 | yes, 1 throw |
 
-To reach Mythic Meadow (2,500 studs) with a Golden ball on a Perfect throw needs ThrowPower ≥ 1,250. With a Tennis ball it needs 2,500, so the balls matter.
+- **Buying:** in the shop panel's Balls tab (`ShopPurchase("Ball:<id>")`), or from the ball shop counter in the plaza, whose prompt opens that tab. Each purchase adds `Uses` throws to `PlayerState.Balls[id]` (capped at `Balls.MaxOwned` = 9,999) and equips that ball. Purchases repeat: buy five Glow Balls to get five Glow throws.
+- **Equipping:** `EquipBall(id)` equips any ball you have throws of; the server refuses a consumable with 0 left. `ShopPurchase("Ball:Tennis")` / `EquipBall("Tennis")` always works.
+- **Using up:** when a throw is accepted (on release), the equipped consumable is used up: its count drops by 1. At 0 the entry is removed, `EquippedBall` falls back to `Tennis` and the player gets a notice ("That was your last Glow Ball: back to the Tennis Ball."). `ThrowResult.BallId` is the ball that was thrown and `BallsLeft` the throws left of it.
+- **Showing it:** the HUD's throw prompt shows the equipped ball's icon and the "xN" count, and each shop card shows the count you hold. `PlayerStats.Ball(state)` (the ball the next throw uses) is the one source for both the server and the UI.
+- To reach Mythic Meadow (2,500 studs) with a Golden Ball on a Perfect throw needs ThrowPower ≥ 1,250; with a Tennis Ball it needs 2,500. So balls stay the "big throw" decision: a Golden throw costs $250,000 each, and players spend them on the throws that matter. In the balance sim a player who never buys balls stalls at Farm.
 
 ---
 
-## 12. Training
+## 12. Training (one station)
 
 ThrowPower is the grind stat. It is permanent, never resets (there is no rebirth) and is saved in `PlayerState.ThrowPower`. **[tunable: Config/Training.luau]**
 
-| Station (`StationId`) | Interaction | Gain per rep (proposed) | Cost | Server cooldown |
-|-----------------------|-------------|-------------------------|------|-----------------|
-| PullUpBar | click / tap reps | +0.5 × TrainMult | free | 0.5 s |
-| ThrowingMachine | timed rep (mini meter) | +3 × TrainMult | cash per rep, scales with ThrowPower | 1.0 s |
-| Sprint | run a lap around the plaza track, checkpoints validated by the server | +12 × TrainMult | free | per lap |
+There is **one training station** in the plaza: the `TrainingStation`-tagged mat at `Layout.Training`, StationId `"Main"`.
 
-- Starting ThrowPower is 60 (proposed). That gives a Tennis-ball Backyard throw of up to 60 studs, and Park becomes reachable after a few minutes of reps or with a Rubber ball.
-- Training upgrades (cash, `Training.UpgradeCost`: $50 × 2.6^(level-1)) do two things: raise the **power cap** (`Training.Upgrades.Caps`, 100 at level 0 up to 2,000 at level 29) and multiply rep gains (`TrainMult` = 1.03^level). Reps cannot push ThrowPower past the cap, so each upgrade is the gate to the next zone and reps are the short grind (~20-70 s of pull-ups) that fills it. Without the cap, free pull-ups alone cleared the whole field within minutes (balance pass, docs/qa/BALANCE.md). The HUD shows "Power X/cap" while below the cap.
+| Station (`StationId`) | Interaction | Gain per rep | Cost | Server cooldown |
+|-----------------------|-------------|--------------|------|-----------------|
+| Main ("Training Station") | its ProximityPrompt "Train" (press E / tap), or the `Train("Main")` remote, within `InteractRange` (14 studs) | +1.0 × TrainMult | free | 0.5 s |
+
+- Starting ThrowPower is 60 (`Game.StartingThrowPower`). That gives a Tennis-ball Backyard throw of up to 60 studs, and Park becomes reachable after a few minutes of reps or with a Rubber Ball.
+- **Training upgrades are kept** (shop panel → Yard tab, `ShopPurchase("Training")`, `Training.UpgradeCost`: $50 × 2.6^(level-1), 29 levels). Each level does two things: raises the **power cap** (`Training.Upgrades.Caps`, 100 at level 0 up to 2,000 at level 29) and multiplies rep gains (`TrainMult` = 1.03^level). Reps cannot push ThrowPower past the cap, so each upgrade is the gate to the next zone and reps are the short grind (~20-70 s of reps per level) that fills it. The HUD shows "Power X/cap" while below the cap.
 - The first training purchase is part of the FTUE (section 19).
-- Anti-autofarm: see section 21.4.
+- Anti-autofarm: reps stop crediting after `Game.AfkSeconds` (15 min) without movement; see section 21.4.
 
 ---
 
@@ -359,11 +381,11 @@ The server ticks income once per second. It adds up all owned dogs, not only the
 
 ### 13.3 Sinks
 
-Balls, training upgrades, extra yard slots (geometric price), cosmetics (Bones only) and timed boosts (cash versions of Sticky Ball and Lucky Biscuit priced in $, proposed, so non-payers have access too).
+Consumable balls (paid per throw, section 11), training upgrades, extra yard slots (geometric price), cosmetics (Bones only) and timed boosts (cash versions of Sticky Ball and Lucky Biscuit priced in $, so non-payers have access too). All of them are bought in the shop panel (tabs Balls, Boosts, Yard, Items, Style, Robux); the plaza's one ball shop counter opens it on the Balls tab.
 
 ### 13.4 Second currency: Bones
 
-Bones are earned only from squirrel events, the daily walk and Kennel Book milestones. They are spent only on cosmetics (collars, hats, yard decor and pad trails), so they never buy power.
+Bones are earned only from squirrel events, the daily walk and Kennel Book milestones. They are spent only on cosmetics (collars, hats, yard decor and paw-print trails), so they never buy power.
 
 ---
 
@@ -386,7 +408,7 @@ Bones are earned only from squirrel events, the daily walk and Kennel Book miles
 
 ### 14.2 Daily walk
 
-You claim it once per UTC day at the plaza's walk sign (`ClaimDailyWalk`). The reward is a cash bonus (proposed: 10 minutes of current income, minimum $100), some Bones, and **one free premium throw**: the next throw counts as having a Golden-ball luck shift plus Sticky Ball for that throw. `LastDailyWalk` stores the UTC day number. `EventState{Kind="DailyWalk"}` lights the sign when it is available.
+You claim it once per UTC day by clicking the "Claim daily walk" banner at the top of the HUD (`ClaimDailyWalk`). The reward is a cash bonus (proposed: 10 minutes of current income, minimum $100), some Bones, and **one free premium throw**: the next throw counts as having a Golden-ball luck shift plus Sticky Ball for that throw. `LastDailyWalk` stores the UTC day number. `EventState{Kind="DailyWalk"}` shows the banner when it is available.
 
 ### 14.3 Squirrel event
 
@@ -419,9 +441,9 @@ On join, `min(now - lastSeen, 2 h) × current $/s × 0.5` (50% rate after the ba
 
 ## 16. Yards, slots, render cap and dupes
 
-- **Slots:** a yard starts with **10 slots** (`SlotCount`). More can be bought at the Yard shop stand for cash at geometric prices (proposed), and the Extra Slots gamepass adds slots too. A full yard means a new catch prompts "Yard full: Sell a dog or buy a slot". In the meantime the new dog is held in the kennel and does not earn until a slot is freed. It is never lost.
+- **Slots:** a yard starts with **10 slots** (`SlotCount`). More can be bought in the shop panel's Yard tab for cash at geometric prices (`Shop.Slots`), and the Extra Slots gamepass adds slots too. A full yard means a new catch prompts "Yard full: Sell a dog or buy a slot". In the meantime the new dog is held in the kennel and does not earn until a slot is freed. It is never lost.
 - **Render cap:** at most **12 dogs roam** the yard (`Layout.Yards.MaxRoamingDogs`), one per `DogSpot` (SpotIndex 1-12). The player chooses which via `DogAction(Display)`; by default the 12 with the highest $/s are shown. The rest live in the **kennel building**, whose `KennelSign.CountLabel` shows "Kennel: N". Kennelled dogs still earn. This cap exists for performance only.
-- **Dupes:** if you catch a DogId+Variant you already own, it **auto-sells** for `SellValue` (proposed: 120 s of its adult income) unless you set **Keep** for that rarity (Settings: Keep dupes of Rare+ etc.) or press Keep on the end card. It is still recorded in the book. `DogAction(Sell)` sells a dog manually at the same price.
+- **Dupes:** if you catch a DogId+Variant you already own, it **auto-sells** for `SellValue` (proposed: 120 s of its adult income) unless you set **Keep** for that rarity (Settings panel; stored server-side in `Settings.KeepDupes` and changed through `DogAction("SetKeepDupes", "<Rarity>=true|false")`) or press Keep on the end card. It is still recorded in the book. `DogAction(Sell)` sells a dog manually at the same price.
 - **Owner sign:** `YardSign.OwnerLabel` shows the owner's display name and total $/s.
 
 ---
@@ -439,7 +461,7 @@ On join, `min(now - lastSeen, 2 h) × current $/s × 0.5` (50% rate after the ba
 - Sent through the `Broadcast` remote with `{Kind, Text, Rarity?, Variant?, Global}`. The text is coloured by rarity in a top-centre ticker and the chat system channel.
 - Cross-server uses `MessagingService` topic `ThrowABallForDogs_Broadcast` (proposed). It is throttled to stay well under the MessagingService publish limits: at most one publish per server per 2 s, and excess is queued and dropped after 30 s.
 - Spectators see every other player's throw as a **park-view banner** (section 20.5), so the server feels alive.
-- The plaza `Leaderboard` (SurfaceGui `List`) ranks players in the server by total $/s, with optional rarest catch.
+- There is no in-world leaderboard board. `leaderstats` (Income $/s, Cash) show in the Roblox player list (`LeaderboardService`); global boards are a v1.1 idea.
 
 ---
 
@@ -477,12 +499,12 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 
 | Time | Beat | Notes |
 |------|------|-------|
-| 0:00 | Spawn at `PlazaSpawn`. The camera pans down the stem to show the far zones, then back to the player. Arrow to your pad. | The yard is auto-assigned and the YardSign shows your name. |
-| 0:10 | **Tutorial throw:** "Hold … release in the green!" The meter slows to half speed for this throw only, client and server alike (`IsTutorial`). | Server forces Backyard, a Common and **a guaranteed catch**. |
+| 0:00 | Spawn at a `PlazaSpawn` at the foot of the ramp. Arrow up the ramp to the throwing platform. | The yard is auto-assigned and the YardSign shows your name. |
+| 0:10 | On the deck (queue if others are there). **Tutorial throw:** "Click to throw", then click again near the top of the meter. The meter runs at half speed for this throw only, client and server alike (`IsTutorial`). | Server forces Backyard, a Common and **a guaranteed catch**. |
 | 0:20 | **Cutscene** (Common length, ~2 s) → end card "+$1/s". | It cannot be skipped this first time. |
 | 0:30 | Guide arrow to your yard. The puppy appears at a DogSpot, a "+$" floater appears, and a tooltip explains puppy → adult (Common: 5 min). | |
-| 0:50 | "Throw again!" Second throw with normal odds and normal meter. The catch chance line on the HUD is highlighted. | |
-| 1:20 | Cash ≥ the first training upgrade price (seeded starter cash $50, proposed). Arrow to the PullUpBar → **first training purchase** → ThrowPower increases and the reach line updates. | |
+| 0:50 | "Throw again!" Second turn (back of the line if others are queued) with normal odds and normal meter. The catch chance line on the HUD is highlighted. | |
+| 1:20 | Cash ≥ the first training upgrade price (starter cash $50). Arrow to the training station → a few reps, then the shop panel's Yard tab → **first training purchase** → the power cap rises and the reach line updates. | Starter cash could instead buy one Rubber Ball throw; the guide points at training first. |
 | 1:50 | Tooltips for the odds panel, Lucky Streak and Kennel Book, then `TutorialDone = true`. | Each tooltip is shown once. |
 
 ---
@@ -498,19 +520,19 @@ Cutscene.Play(result: ThrowResult, opts: { IsThrower: boolean, IsSpectator: bool
 -- Handle: { Finished: RBXScriptSignal-like (fires once), Skip: () -> (), CanSkip: () -> boolean }
 ```
 
-`ThrowResult` (from `Remotes.luau`): `ThrowId, ThrowerUserId, PadIndex, Distance, ZoneId, DogId, Rarity, Variant?, Caught, CatchChance, Boosts, LuckyStreakTriggered, WhistleOwned, WhistleCount, IsTutorial`.
+`ThrowResult` (from `Remotes.luau`): `ThrowId, ThrowerUserId, PadIndex (always 1), Distance, ZoneId, DogId, Rarity, Variant?, Caught, CatchChance, Boosts, LuckyStreakTriggered, WhistleOwned, WhistleCount, IsTutorial`, plus `BallId`, `BallsLeft`, `LaunchPos`, `LandPos`, `FlightTime` (section 4.4), `Income`, `DogUid`, `Status`, `CanSkip`, `CutsceneSeconds`.
 
-The cutscene **only displays**. It never rolls, never changes state and never decides the outcome. When the thrower's cutscene finishes, the client fires `CutsceneFinished(throwId)`. The server does not wait on it to save anything; it only uses it to unlock the next throw early. Its own timeout is the rarity length + 5 s.
+The cutscene **only displays**. It never rolls, never changes state and never decides the outcome. When the thrower's cutscene finishes, the client fires `CutsceneFinished(throwId)`. The server does not wait on it to save anything; it only uses it to unlock the next throw early. Its own timeout is the flight time + the rarity length + `Timers.CutscenePadding` (8 s).
 
 ### 20.2 Required beats (in order)
 
-1. **Suspense:** the ball flies and lands, with distance and zone callouts. The rarity is **not yet known** to the viewer. Optional teaser (rarity-coloured light leak) is TBD.
+1. **Suspense:** the ball flies and lands, with distance and zone callouts. The rarity is **not yet known** to the viewer. The ball itself is drawn only by `src/client/BallFlight.client.luau` (for everyone); the cutscene draws no ball of its own. Its camera follows the same arc (`BallFlight.ForThrow(LaunchPos, LandPos)`) and the callouts wait `FlightTime` so they land with the ball. Optional teaser (rarity-coloured light leak) is TBD.
 2. **Reveal dog + rarity:** the dog rig (built via `DogFactory`) appears with its name and a rarity banner in the rarity colour.
 3. **Reveal variant badge**, if there is one. `VariantFX` applies to the rig.
 4. **Catch beat**, which branches:
    - *Caught:* jump → catch → tail wag (Lucky-Streak flourish if `LuckyStreakTriggered`, treat toss if a Treat Pocket saved it).
    - *Missed:* fumble → runs off toward the plaza.
-5. **End card:** dog, name, rarity colour, variant badge and **multiplied $/s** (adult value, with "puppy: 20% for now" subtext). On a miss: "Ran off!" plus the Lucky Streak meter, plus the whistle prompt if `WhistleOwned` ("Use Golden Whistle? (N left)").
+5. **End card** (the UI's Reveal card, `src/client/UI/Screens/Reveal.luau`): dog, name, rarity colour, variant badge and **multiplied $/s** (adult value, with "puppy: 20% for now" subtext). On a miss: "Ran off!" plus the Lucky Streak meter, plus the whistle prompt if `WhistleOwned` ("Use Golden Whistle? (N left)").
 
 ### 20.3 Timing per rarity (target total length; **[tunable: cutscene config]**)
 
@@ -526,7 +548,7 @@ The cutscene **only displays**. It never rolls, never changes state and never de
 ### 20.4 Skippability
 
 - **Commons:** skippable from the **4th Common cutscene onward**, so the first 3 Commons always play. The count is kept per player.
-- Uncommon and Rare: skippable (proposed; TBD with the user).
+- Uncommon and Rare: not skippable in v1 (TBD-5 with the user).
 - **Epic, Legendary, Mythic: never skippable.**
 - Skipping jumps straight to the end card. It never skips the whistle prompt.
 
@@ -542,7 +564,7 @@ Other players get a **camera-less popup / park-view banner**: a small card near 
 
 - **TBD-1** Camera style: follow the ball, cut to a fixed field camera, or a stylised "TV replay"?
 - **TBD-2** Should the suspense beat tease the rarity (light colour, sound) or stay neutral until the reveal?
-- **TBD-3** Does the dog run *to the player* on the pad, or does the reveal happen at the landing spot?
+- **TBD-3** Does the dog run *to the player* on the platform, or does the reveal happen at the landing spot (current placeholder)?
 - **TBD-4** Music and SFX direction per rarity.
 - **TBD-5** Uncommon/Rare skip rules.
 - **TBD-6** Should Mythics get per-dog bespoke beats (wings unfurl, extra heads bark)?
@@ -565,30 +587,32 @@ Other players get a **camera-less popup / park-view banner**: a small card near 
 
 ### 21.2 Modules
 
-**Server (`src/server/**`)**
-- `DataService`: load/save, session lock, autosave.
-- `YardService`: assign yards and pads, dog spots, kennel count, trophy.
-- `ThrowService`: charge timing, meter, distance, zone.
-- `RollService`: tier, dog, variant, catch, Treat Pocket, Lucky Streak.
-- `EconomyService`: income tick, offline, sell.
-- `TrainingService`, `ShopService` / `ProductService` (`ProcessReceipt`), `BoostService`.
-- `TimerService`: growth, daily walk.
-- `EventService`: squirrel, runaway dogs.
-- `BroadcastService`: server + MessagingService.
-- `BookService`, `LeaderboardService`.
-- `World/**`: the world builder that creates the tagged parts (D workstream).
+**Server (`src/server/`)** — `Main.server.luau` creates the remotes, builds the world, then starts the services in this order:
+- `DataService`: load/save, session lock, autosave, migrations (schema v2), live attributes.
+- `CharacterService`: WalkSpeed 32 / JumpPower 60 on every spawn.
+- `BroadcastService`: server + MessagingService announcements.
+- `DogService`: yard assignment, dogs, slots, dupes, growth, income tick, offline earnings, yard display, kennel sign, `DogAction` (incl. `SetKeepDupes` / `SetTreatPocketMode`).
+- `BookService`: Kennel Book, milestones, trophies, variant badges.
+- `EventService`: squirrel, runaway dogs, daily walk.
+- `ThrowService`: platform presence + queue, charge timing, meter, distance, ball use-up, landing / flight (`BallFlight`), roll, `ThrowResult`, cutscene finish, Golden Whistle. Uses `ThrowQueue` (pure FIFO, Lune-tested) and `RollService` (pure rolls: tier, dog, variant, catch, Treat Pocket, Lucky Streak).
+- `ShopService`: cash / Bones purchases (balls, training, slots, boosts, items, cosmetics), `EquipBall`, `ProcessReceipt`, game passes.
+- `TrainingService`: the one station ("Main"), prompt + `Train` remote, power cap, AFK cut-off.
+- `LeaderboardService`: `leaderstats` only.
+- `World/**`: the world builder (`WorldBuilder`, `Platform`, `Plaza`, `Yards`, `Field`, `Zones/*`, `Walls`, `Lighting`, `WorldCheck`; see `docs/WORLD.md`).
 
-**Shared**
-- `Config/*`: Layout, Zones, Rarities, Game, Balls, Training, Shop, Timers, Products, WorldTheme.
+**Shared (`src/shared/`)**
+- `Config/*`: Layout, Zones, Rarities, Game, Balls, Training, Shop, Timers, Products, WorldTheme, Icons.
 - `Data/Dogs.luau`: generated roster.
-- `Dog/`: `DogFactory`, `BodyTypes`, `VariantFX`.
-- `Cutscene/`: contract + placeholder.
-- `Util/`: number formatting, RNG, rate limiter, signal.
-- `Remotes.luau`.
+- `Dog/`: `DogFactory`, `BodyTypes`, `DogAnimator`, `VariantFX`.
+- `Cutscene/`: `CutsceneContract` + `PlaceholderCutscene`.
+- `Util/`: `BallFlight` (the throw arc), `Meter`, `PlayerStats` (derived stats incl. `Ball` / `BallCount`), `Odds`, `DogCatalog`, `FormatNumber`, `Rng`, `RateLimiter`, `Signal`, `Table`.
+- `UI/PixelIcons.luau` (generated by `tools/icons.py`), `Remotes.luau`.
 
-**Client (`src/client/**`)**
-- HUD: cash, $/s, Bones, ThrowPower, reach + catch line, Lucky Streak, boost chips, odds panel, shop, Kennel Book, settings.
-- Throw meter, cutscene player, spectator banners, broadcast ticker, yard dog renderer (via `DogFactory`), FTUE guide.
+**Client (`src/client/`)**
+- `Main.client.luau`: the only entry script. Starts the UI, then `Controllers/CutsceneController` (thrower cutscene → Reveal card → `CutsceneFinished`) and `Controllers/WorldController` (yard / runaway dog animation, shop counter prompt).
+- `UI/`: `init.luau` (wires remotes), `State`, `Router`, `Theme`, `Motion`, `Make`; `Screens/` HUD (currencies, boost chips, Lucky Streak, event banner, throw prompt + `Components/PowerMeter` vertical meter, queue line), Shop, Dogs, Book, Odds, Settings, Reveal, Spectator; `Components/` (Button, Card, Panel, Tabs, VirtualGrid, Toast, Icon, …).
+- `BallFlight.client.luau`: renders every thrown ball on the server-timed arc.
+- `ZoneAmbience.client.luau`: per-zone lighting ambience (section 5).
 
 **Dog visuals are data.** There is one shared quadruped rig with 14 body types (toy, small_terrier, long_low, small_fluffy, corgi_type, medium_lean, medium_stocky, medium_fluffy, large_lean, large_athletic, large_fluffy, giant, giant_fluffy, poodle_type). Each dog is defined by body + scale + two coat colours + pattern + accessory + vfx tier, plus unique parts for Mythic. Rarity visual budget:
 
@@ -605,42 +629,43 @@ Variants are applied at runtime by `VariantFX`.
 
 ### 21.3 Server authority
 
-- Every outcome is decided on the server: distance, zone, dog, variant, catch, income, purchases and timers.
-- The client receives state through `RequestState` (snapshot) and `StateUpdate` (full snapshot after any change; can be optimised to deltas later).
-- The client may predict UI only, such as the meter animation.
+- Every outcome is decided on the server: distance, zone, dog, variant, catch, ball use-up, income, purchases and timers.
+- The client receives state through `RequestState` (snapshot) and `StateUpdate` (full snapshot after any change; can be optimised to deltas later), plus the player attributes `OnPlatform` / `ThrowQueuePos`.
+- The client may predict UI only, such as the meter animation and the ball arc.
 - The RNG is `Random.new()` per server. Seeds are never exposed.
-- Every remote validates argument types, enum values (ballId, stationId, itemId, action), ownership (dogUid belongs to the caller) and context (on own pad, in range of the station or shop stand, using `ShopStand`/`TrainingStation` positions).
+- Every remote validates argument types, enum values (ballId, stationId, itemId, action), ownership (dogUid belongs to the caller) and context (on the platform with the turn, in range of the training station).
 
-### 21.4 Rate limits and anti-autofarm (proposed; `src/shared/Util` RateLimiter, values in Config/Game.luau)
+### 21.4 Rate limits and anti-autofarm (`src/shared/Util/RateLimiter.luau`, values in Config/Game.luau `RateLimits`)
 
 | Remote | Limit |
 |--------|-------|
-| ChargeBegin / ChargeRelease | 1 throw in flight; next throw allowed after the cutscene finishes or times out; hard min 2 s between throws |
-| Train | per-station cooldown (0.5–1 s); max 3 req/s |
+| ChargeBegin / ChargeRelease | one throw per turn; 1 throw in flight; hard min 2 s release → next ChargeBegin; 2 req/s |
+| Train | 0.5 s station cooldown; 3 req/s |
 | ShopPurchase, DogAction, UseWhistle, Claim* | 5 req/s, token bucket |
 | EquipBall | 2 req/s |
 | RequestState | 1 per 5 s |
 
 Anti-autofarm measures:
-- Throws need physical presence on your own pad.
+- Throws need physical presence on the platform and the turn; an idle turn-holder goes to the back after 15 s.
 - Release timing is human-scale. If the release-timing variance is near zero over 50 throws (a perfectly periodic macro), soft-flag it and add meter jitter for that player (proposed).
-- Training reps stop crediting after **15 min with no movement or camera input** (AFK).
-- Sprint laps are checked with server-validated checkpoints and a minimum lap time.
+- Training reps stop crediting after **15 min with no movement** (AFK).
 - Income itself is idle by design, so autofarming the throw is the only thing worth stopping.
 - Every rejection is counted. Repeated violations are logged (analytics) but never auto-banned in v1.
 
 ---
 
-## 22. Data storage
+## 22. Data storage (schema v2)
 
-- **DataStore:** `ThrowABallForDogs_Player_v1`, key `u_<UserId>`, with session locking: a lock field with JobId and timestamp, taken over if stale for more than 10 min. The ProfileService pattern is implemented in-house with no external dependency.
-- **Schema** = `PlayerState` (see `Remotes.luau`) + `LastSeen`, `CommonCutscenesSeen`, `Settings` (KeepDupes per rarity, TreatPocket mode), `Titles`, `Version` (for migrations).
-- **Dogs:** an array of `{Uid, DogId, Variant?, BornAt, GrownAt, Displayed}`. Uid is a GUID. Store `DogId`, never computed income, so tuning income re-prices everyone automatically.
+- **DataStore:** `ThrowABallForDogs_Player_v1`, key `u_<UserId>`, record `{ Data = PlayerState, Lock = { JobId, Time }? }`, with session locking taken over if stale for more than 10 min. The ProfileService pattern is implemented in-house with no external dependency.
+- **Schema version 2** (`Version = 2`). `PlayerState` (see `Remotes.luau`): `Cash, Bones, ThrowPower, Balls, EquippedBall, SlotCount, Dogs, Book, BookRewards, Boosts, Whistles, TreatPockets, LuckyStreak, LastDailyWalk, TutorialDone, TutorialThrowDone, TrainingLevel, PermanentLuck, PremiumThrows, Settings { KeepDupes, TreatPocketMode }, Cosmetics, Titles, EquippedTitle, Trophies, VariantBadges, CommonCutscenesSeen, Stats, Receipts, LastSeen`.
+- **Balls (v2):** `Balls = { [ballId] = remaining throws }` for consumable balls only (whole numbers ≥ 1, ≤ 9,999; absent = 0). The Tennis Ball is never stored. `EquippedBall` must name a ball with throws left, else it is reset to `Tennis` on load.
+- **Migration v1 → v2:** v1 saves held permanent ownership `{ [ballId] = true }`. Those entries become 0 throws (dropped), the Tennis Ball entry is removed and `EquippedBall` is reset to `Tennis`. Everything else carries over; missing keys are filled from the defaults (`Table.Reconcile`) and bad numbers are sanitised. Migrations run in order from the stored `Version` (0 = pre-versioned).
+- **Dogs:** an array of `{Uid, DogId, Variant?, BornAt, GrownAt, Displayed, …}`. Uid is a GUID. Store `DogId`, never computed income, so tuning income re-prices everyone automatically.
 - **Book:** `{[DogId] = {Variants}}`. That is at most 720 keys plus variant lists, comfortably under the 4 MB key limit.
-- **Saves** happen on autosave every 60 s, on leave and on `BindToClose`, with retry and exponential backoff. A save right after Legendary+ catches and any Robux purchase is proposed.
+- **Saves** happen on autosave every 60 s, on leave and on `BindToClose`, with retry and exponential backoff, plus right after a Legendary+ throw and any Robux purchase.
 - **Receipts:** `ProcessReceipt` records `PurchaseId` in the profile's `Receipts` (last 100) before granting, and returns `PurchaseGranted` only after a successful save. This makes grants idempotent.
 - **Leaderboards (global, optional v1.1):** OrderedDataStore for total caught and best $/s.
-- Studio: `CutsceneTestMode` and a `Game.luau → UseMockData` flag (proposed) skip DataStores when API access is off.
+- Studio: `Game.UseMockData` (or no API access) uses an in-memory mock store.
 
 ---
 
@@ -677,15 +702,16 @@ Anti-autofarm measures:
 
 | File | Owns | Owner workstream |
 |------|------|------------------|
-| `src/shared/Config/Layout.luau` | world coordinates, pads, yards, render cap | shared contract |
+| `src/shared/Config/Layout.luau` | world coordinates: yards, street, plaza, throw line (Y 40), platform (deck, throw spot, queue spots, ramp), shop + training positions, field, render cap | shared contract |
 | `src/shared/Config/Zones.luau` | 9 zones, distance bands, BaseIncome, theme colours | shared contract |
 | `src/shared/Config/Rarities.luau` | tier odds, catch, IncomeMult, PerZone, variants, LuckyStreakMisses | shared contract |
 | `src/shared/Remotes.luau` | remote names + payload shapes | shared contract |
-| `src/shared/Config/Game.luau` | Name, meter/quality bands, luck formula & caps, rate limits, CutsceneTestMode | C1 server |
-| `src/shared/Config/Balls.luau` | ball RangeMult, luck shift, price | C1 server |
-| `src/shared/Config/Training.luau` | stations, gains, cooldowns, start ThrowPower, upgrades | C1 server |
+| `src/shared/Config/Game.luau` | Name, WalkSpeed / JumpPower, meter/quality bands, throw (LaunchHeight, scatter), platform queue (StandRadius tolerance, TurnStartSeconds), luck caps, rate limits, CutsceneTestMode | C1 server |
+| `src/shared/Config/Balls.luau` | ball RangeMult, luck shift, price per purchase, Consumable / Uses, MaxOwned | C1 server |
+| `src/shared/Config/Training.luau` | the one station ("Main"): gain, cooldown, range; upgrades (cost, mult, power caps) | C1 server |
 | `src/shared/Config/Shop.luau` | in-game shop items, prices, boost effects, slot prices | C1 server |
 | `src/shared/Config/Timers.luau` | growth times, daily walk, squirrel cadence, runaway seconds, offline cap | C1 server |
 | `src/shared/Config/Products.luau` | gamepass & dev product IDs → effects | C1 server |
-| `src/shared/Config/WorldTheme.luau` | materials and colours for the world builder | D world |
+| `src/shared/Config/WorldTheme.luau` | materials and colours for the world builder: plaza, platform, walls (per zone), field, lighting + Atmosphere haze | D world |
+| `src/shared/Config/Icons.luau` | uploaded pixel-icon asset ids (icons are generated by `tools/icons.py`) | UI |
 | `src/shared/Data/Dogs.luau` | the 720-dog roster (generated) | A roster |

@@ -135,6 +135,12 @@ function UI.Start(deps: StartDeps?)
 			Router.Open(screen)
 		end,
 		OwnsThrowInput = d.OwnsThrowInput,
+		ClaimDailyWalk = function()
+			task.spawn(function()
+				local ok, msg = invoke("ClaimDailyWalk")
+				toast(msg or (if ok then "Daily walk claimed!" else "Not ready yet"), "walk", if ok then "Cash" else "Danger")
+			end)
+		end,
 		OnChargeBegin = function()
 			if throwInFlight then
 				return
@@ -175,12 +181,21 @@ function UI.Start(deps: StartDeps?)
 		return invoke("ClaimBookReward", zoneId, m)
 	end, Toast = toast, OnClose = Router.Close })
 	ui.Odds = Odds.new({ Parent = root, OnClose = Router.Close })
+	-- Server-side settings go through the existing DogAction remote (DogService handles SetTreatPocketMode and
+	-- SetKeepDupes "<Rarity>=true|false"); the next StateUpdate echoes them back into State.Settings.
 	ui.Settings = Settings.new({ Parent = root, OnClose = Router.Close, SetServerSetting = function(key, value)
-		local folder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-		local r = folder and folder:FindFirstChild("SetSetting")
-		if r and r:IsA("RemoteFunction") then
-			pcall(r.InvokeServer, r, key, value)
-		end
+		task.spawn(function()
+			if key == "TreatPocketMode" and type(value) == "string" then
+				invoke("DogAction", "SetTreatPocketMode", value)
+			elseif key == "KeepDupes" and type(value) == "table" then
+				local server = (State.Get().Settings or {}).KeepDupes or {}
+				for tier, keep in value do
+					if (server[tier] == true) ~= (keep == true) then
+						invoke("DogAction", "SetKeepDupes", ("%s=%s"):format(tostring(tier), tostring(keep == true)))
+					end
+				end
+			end
+		end)
 	end })
 	ui.Reveal = Reveal.new(root)
 	ui.Spectator = Spectator.new(root, isTouch)

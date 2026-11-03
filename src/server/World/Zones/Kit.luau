@@ -25,7 +25,11 @@ local F = Layout.Field
 Kit.FieldHalf = (F.MaxX - F.MinX) / 2 -- 120
 Kit.CenterX = (F.MaxX + F.MinX) / 2 -- 0
 Kit.LaneHalf = Kit.FieldHalf * 0.5 -- 60: centre 50% clear, outer 25% each side for decor
-Kit.ApronHalf = Kit.FieldHalf + 100 -- 220: themed ground strip outside the field
+-- 266: themed ground strip outside the field. It runs 30 studs past the scenery walls' inner line (Walls.InnerX
+-- = 236) so its outer edge is always hidden under a cliff / hedge tier: no bare underlay strip shows between the
+-- apron and the wall foot (tools/worldcheck/run.luau samples the edge every 10 studs).
+Kit.ApronHalf = Kit.FieldHalf + 146
+Kit.BackdropHalf = Kit.FieldHalf + 114 -- 234: field-end backdrop stops just inside the walls' inner line (236)
 Kit.MarkerX = Kit.LaneHalf + 8 -- 68: distance marker signs
 Kit.ArchX = Kit.FieldHalf - 8 -- 112: zone arch pillars
 Kit.MarkerEvery = 100

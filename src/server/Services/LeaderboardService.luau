@@ -1,6 +1,6 @@
 --!nonstrict
--- leaderstats (Income $/s, Cash) for the Roblox player list. There is no in-world board any more (the
--- "Leaderboard" tag was removed); global boards are a v1.1 TODO.
+-- leaderstats (Income $/s, Cash) for the Roblox player list. There is no in-world board; global boards are
+-- a v1.1 TODO.
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local DogService = require(script.Parent:WaitForChild("DogService"))
