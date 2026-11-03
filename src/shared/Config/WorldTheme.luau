@@ -22,7 +22,7 @@ WorldTheme.YardColors = {
 }
 
 WorldTheme.Outskirts = {
-	Ground = rgb(98, 180, 82),
+	Ground = rgb(98, 180, 82), -- field-level underlay and the plateau top (Layout.HubY)
 	Hill = rgb(120, 196, 96),
 	HillDark = rgb(84, 156, 70),
 }
@@ -75,20 +75,28 @@ WorldTheme.ThrowLine = {
 	Line = rgb(255, 255, 255),
 }
 
--- The raised throwing platform (deck at Y = 40), its tower and ramp.
+-- The throwing platform: a deck flush with the plaza paving at the cliff edge (deck surface = Layout.HubY).
 WorldTheme.Platform = {
 	Deck = rgb(255, 255, 255),
+	DeckPlank = rgb(236, 236, 244),
 	DeckTrim = rgb(255, 210, 60),
-	Tower = rgb(214, 196, 168),
-	TowerBand = rgb(186, 164, 134),
-	TowerSign = rgb(40, 40, 60),
-	Ramp = rgb(226, 208, 176),
-	RampStripe = rgb(255, 210, 60),
 	Rail = rgb(255, 255, 255),
 	RailPost = rgb(60, 60, 80),
 	ThrowSpot = rgb(255, 90, 90),
 	ThrowSpotRing = rgb(255, 255, 255),
 	QueueSpot = rgb(70, 160, 255),
+}
+
+-- The plateau cliff (Cliff.luau): the hub plateau (Layout.HubY) drops to the field (Layout.GroundY) along the throw
+-- line in layered, stepped rock slabs. Backyard tones (Zones.luau Backyard Theme: Ground 106,170,72 / Accent
+-- 150,110,70): warm brown strata with grey stone between them, moss on the ledges, grass on the plateau lip.
+WorldTheme.Cliff = {
+	Strata = { rgb(150, 110, 70), rgb(128, 94, 62), rgb(164, 128, 88), rgb(118, 104, 92), rgb(140, 120, 100) },
+	Dark = rgb(92, 70, 50), -- the foot layers lerp toward this
+	Moss = rgb(96, 158, 66), -- ledge caps (Backyard ground, a touch darker)
+	Lip = rgb(106, 170, 72), -- grass lip along the plateau edge outside the plaza
+	Material = Enum.Material.Slate,
+	MossMaterial = Enum.Material.Grass,
 }
 
 -- World walls (Walls.luau): stepped cliff / hedge faces around the whole map. Each zone's wall is built

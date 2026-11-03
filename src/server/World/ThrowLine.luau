@@ -1,7 +1,10 @@
 --!strict
--- Throw line at ground level: the white line across the field start (Layout.ThrowLine.Z, right in front
--- of the platform tower) and the low fence + invisible wall along the plaza's field edge either side of
--- the tower. The raised deck / ThrowPad itself is built by Platform.luau.
+-- The cliff edge of the hub plateau along the throw line (Layout.ThrowLine.Z, surface Layout.HubY):
+--   * a white throw line across the whole plaza front (the deck's front edge is distance 0),
+--   * low visible railings either side of the deck (the deck's own front railing is Platform.luau),
+--   * ONE invisible collision wall right at the edge, Layout.Edge.GuardHeight tall (well above the railings and any
+--     jump), from plaza side wall to plaza side wall, so nobody walks or jumps off the cliff onto the field.
+-- The rock cliff face below is Cliff.luau. Nothing here reaches past the edge into the landing lane.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -12,33 +15,39 @@ local Props = require((script.Parent :: Instance):WaitForChild("Props")) :: any
 
 local ThrowLine = {}
 
-local Y = Layout.GroundY
+local Y = Layout.HubY
 local T = WorldTheme.ThrowLine
 local TL = Layout.ThrowLine
 
-ThrowLine.WallOffset = 8 -- clear apron in front of the tower; Field.luau starts lane stripes / decor past it
-ThrowLine.WallHeight = 12 -- taller than a default jump (~7.2 studs)
+-- Field.luau keeps its lane stripes / decor this far past the throw line (the cliff foot stands in front of it).
+ThrowLine.WallOffset = 8
+ThrowLine.LineDepth = 1.2
+-- the guard straddles the edge: from just in front of the throw-spot ring (Z - 0.4) to 0.6 over the drop
+ThrowLine.GuardMinZ = TL.Z - 0.4
+ThrowLine.GuardMaxZ = TL.Z + 0.6
 
 function ThrowLine.Build(parent: Instance)
 	local folder = Props.Folder(parent, "ThrowLine")
-	local minX, maxX = Layout.Field.MinX, Layout.Field.MaxX
-
-	-- starts exactly at the tower's front face so it never overlaps the platform
-	Props.Slab(folder, "Line", minX, maxX, TL.Z, TL.Z + 1.5, Y + 0.06, 0.06, T.Line, WorldTheme.AccentMaterial, false)
-
-	-- the plaza ends at the throw line: a low fence + invisible wall either side of the tower keeps ground
-	-- walkers out of the field without putting anything into the landing lane (Z > ThrowLine.Z)
 	local pminX, pmaxX = Layout.Plaza.MinX, Layout.Plaza.MaxX
-	local towerHalf = Layout.Platform.Size.X / 2
+
+	-- the throw line: white strip along the edge of the plaza + deck (decal-thin, under the throw-spot ring)
+	Props.Slab(folder, "Line", pminX, pmaxX, TL.Z - ThrowLine.LineDepth, TL.Z, Y + 0.03, 0.03, T.Line,
+		WorldTheme.AccentMaterial, false)
+
+	-- low railings either side of the deck (visual; the guard below does the blocking)
+	local deckHalf = Layout.Platform.Size.X / 2
 	for _, side in { -1, 1 } do
-		local a = side * (towerHalf + 0.6)
+		local a = side * (deckHalf + 0.6)
 		local b = if side < 0 then pminX + 0.6 else pmaxX - 0.6
-		Props.FenceLine(folder, Vector3.new(a, Y, TL.Z - 1), Vector3.new(b, Y, TL.Z - 1), 6, 2.6,
+		Props.FenceLine(folder, Vector3.new(a, Y, TL.Z - 1), Vector3.new(b, Y, TL.Z - 1), 6, Layout.Edge.RailHeight,
 			WorldTheme.YardColors[3], false)
-		local edge = if side < 0 then pminX else pmaxX
-		Props.Wall(folder, "PlazaEndWall", math.min(side * towerHalf, edge), math.max(side * towerHalf, edge),
-			TL.Z - 0.6, TL.Z, Y, ThrowLine.WallHeight)
 	end
+
+	-- the invisible edge wall (Transparency 1, CanQuery false: never blocks the ball, the camera or raycasts).
+	-- It overlaps the plaza side walls (Boundaries.luau) at both ends so the corners are sealed.
+	local guard = Props.Wall(folder, "EdgeGuard", pminX - 2, pmaxX + 2, ThrowLine.GuardMinZ, ThrowLine.GuardMaxZ, Y,
+		Layout.Edge.GuardHeight)
+	guard:SetAttribute("EdgeGuard", true)
 end
 
 return ThrowLine

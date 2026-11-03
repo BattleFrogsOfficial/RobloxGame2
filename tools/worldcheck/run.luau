@@ -1,15 +1,23 @@
 --!nocheck
 -- Headless world check. Builds the REAL world (src/server/World + src/shared) with Lune's @lune/roblox
 -- instances, then runs:
---   * WorldCheck.Check (tagged parts on their ground, spawn standing volumes clear, tag counts)
---   * area overlap checks (yards / street / plaza / platform / ramp / shop / training / spawns / lawn / walls)
---   * walls: outside the field + margin, >= 200 studs tall, part budget, no overlap with gameplay parts
---   * landing lane |x| <= 56 over the field: nothing of ours in it (Field-owned items are reported apart)
+--   * WorldCheck.Check (every tagged part on its surface: hub items on the plateau at Layout.HubY, field items
+--     at Layout.GroundY; nothing inside a collidable part; spawn standing volumes clear; tag counts)
+--   * area overlap checks (yards / street / plaza / platform deck / shop / training / spawns / lawn / walls)
+--   * hub plateau + cliff: every hub floor's top at HubY, the flush deck at the edge, the cliff face covered
+--     by rock slabs from wall to wall, the invisible edge guard + railings, and no walkable route to the field
+--   * walls: outside the field + margin, >= 200 studs tall, hub-side chunks rise from the plateau and field
+--     chunks from the field, no gap at the cliff junction, part budget, no overlap with gameplay parts
+--   * landing lane |x| <= 56 over the field: nothing of ours in it (Field-owned items are reported apart);
+--     the ball arcs (BallFlight) of the shortest throws clear every cliff ledge
 --   * camera box above/behind the thrower + ball launch: nothing in the way, front railing below launch
---   * walking path lengths (grid shortest path around collidable obstacles + the ramp) between every
+--   * walking path lengths (grid shortest path around collidable obstacles on the plateau) between every
 --     yard gate, the platform throw spot, the ball shop and the training area: must be <= 300 studs
 -- Usage (from the repo root):
 --   lune run tools/worldcheck/run.luau -- [--no-field] [--quiet] [--dump=parts.json]
+--        [--root=<dir>]            build the world from another checkout (e.g. an old revision)
+--        [--dump-tags=<file.json>] write every tagged part / SpawnLocation's position (for --compare)
+--        [--compare=<file.json>]   print every tagged part / spawn that moved versus that dump (old -> new)
 -- Exit code 1 on any failure.
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -30,8 +38,14 @@ for _, a in process.args do
 	end
 end
 local QUIET = ARGS["--quiet"] == true
+local ROOT_ARG, DUMP_TAGS, COMPARE = nil, nil, nil
+for _, a in process.args do
+	ROOT_ARG = string.match(a, "^%-%-root=(.+)$") or ROOT_ARG
+	DUMP_TAGS = string.match(a, "^%-%-dump%-tags=(.+)$") or DUMP_TAGS
+	COMPARE = string.match(a, "^%-%-compare=(.+)$") or COMPARE
+end
 
-local ROOT = string.gsub(process.cwd, "/$", "")
+local ROOT = string.gsub(ROOT_ARG or process.cwd, "/$", "")
 if not fs.isDir(ROOT .. "/src/server/World") then
 	print("run from the repository root")
 	process.exit(2)
@@ -248,6 +262,8 @@ local WorldFolder = mount(ROOT .. "/src/server/World", Server, "World", skip)
 
 local Layout = requireFn(Shared.Config.Layout)
 local Zones = requireFn(Shared.Config.Zones)
+local Game = requireFn(Shared.Config.Game)
+local BallFlight = requireFn(Shared.Util.BallFlight)
 local WorldBuilder = requireFn(WorldFolder.WorldBuilder)
 local WorldCheck = requireFn(WorldFolder.WorldCheck)
 
@@ -359,6 +375,7 @@ local F = {
 	Outskirts = map:FindFirstChild("Outskirts"),
 	Boundaries = map:FindFirstChild("Boundaries"),
 	ThrowLine = map:FindFirstChild("ThrowLine"),
+	Cliff = map:FindFirstChild("Cliff"),
 }
 for k, v in F do
 	if v == nil and not (k == "Field" and NO_FIELD) then
@@ -448,25 +465,12 @@ local plat = F.Platform
 local function find(root, name)
 	return root and root:FindFirstChild(name, true)
 end
-local towerParts = {}
-if plat then
-	for _, n in { "Tower", "Deck" } do
-		local p = plat:FindFirstChild(n)
-		if p then
-			table.insert(towerParts, p)
-		end
-	end
-end
-if #towerParts > 0 then
-	local b
-	for _, p in towerParts do
-		b = union(b, Bounds(p))
-	end
-	feats.Platform = { Box = b }
+local deckPart = plat and plat:FindFirstChild("Deck")
+if deckPart then
+	feats.Platform = { Box = Bounds(deckPart) }
 else
-	fail("missing feature: Platform tower/deck")
+	fail("missing feature: Platform deck")
 end
-feat("Ramp", find(plat, "Ramp"))
 feat("Shop", find(F.Plaza, "Shop_Balls"))
 feat("Training", find(F.Plaza, "TrainingArea"))
 feat("RunawayLawn", find(F.Plaza, "RunawayArea"))
@@ -492,20 +496,58 @@ for i = 1, #featNames do
 	end
 end
 
--- platform geometry vs the Layout contract
+-- platform geometry vs the Layout contract: a deck set flush into the plateau at the cliff edge
 do
 	local P = Layout.Platform
+	local HUB = Layout.HubY
+	if Layout.HubY - Layout.GroundY < 40 - 1e-6 then
+		fail(("Layout.HubY %s is not 40 studs above Layout.GroundY %s"):format(fmt(Layout.HubY), fmt(Layout.GroundY)))
+	end
+	if math.abs(Layout.ThrowLine.Y - HUB) > 1e-6 or math.abs(P.Center.Y - HUB) > 1e-6 or math.abs(P.ThrowSpot.Y - HUB) > 1e-6 then
+		fail("flush deck: ThrowLine.Y, Platform.Center.Y and Platform.ThrowSpot.Y must equal Layout.HubY")
+	end
+	for i, q in P.QueueSpots do
+		if math.abs(q.Y - HUB) > 1e-6 then
+			fail(("Platform.QueueSpots[%d].Y %s ~= HubY"):format(i, fmt(q.Y)))
+		end
+	end
+	for _, c in { { "Shop", Layout.Shop.Center }, { "Training", Layout.Training.Center } } do
+		if math.abs(c[2].Y - HUB) > 1e-6 then
+			fail(("Layout.%s.Center.Y %s ~= HubY"):format(c[1], fmt(c[2].Y)))
+		end
+	end
+	if P.RampBottom or P.RampTop then
+		fail("Layout.Platform still describes a ramp (the deck is flush: no ramp)")
+	end
 	local deck = find(plat, "Deck")
 	if deck then
 		local b = Bounds(deck)
-		if math.abs(b.MaxY - Layout.ThrowLine.Y) > 0.02 or math.abs(P.Center.Y - Layout.ThrowLine.Y) > 0.02 then
-			fail("deck top / Platform.Center.Y must equal ThrowLine.Y")
+		if math.abs(b.MaxY - Layout.ThrowLine.Y) > 0.02 then
+			fail("deck top must equal ThrowLine.Y")
 		end
 		if math.abs(b.MaxZ - Layout.ThrowLine.Z) > 0.02 then
 			fail(("deck front edge Z %s ~= ThrowLine.Z %s"):format(fmt(b.MaxZ), fmt(Layout.ThrowLine.Z)))
 		end
 		if b.MaxY - Layout.GroundY < 40 - 0.02 then
 			fail("deck is less than 40 studs above the field")
+		end
+		-- flush: the paving around the deck has its top at the deck surface on the three open sides
+		local function floorTopAt(x, z)
+			local best = -math.huge
+			for _, o in allParts do
+				local pb = o.Box
+				if o.Part ~= deck and o.Part.CanCollide and x >= pb.MinX and x <= pb.MaxX and z >= pb.MinZ and z <= pb.MaxZ
+					and pb.MaxY <= b.MaxY + 0.3 then
+					best = math.max(best, pb.MaxY)
+				end
+			end
+			return best
+		end
+		for _, pt in { { b.MinX - 1, (b.MinZ + b.MaxZ) / 2 }, { b.MaxX + 1, (b.MinZ + b.MaxZ) / 2 }, { (b.MinX + b.MaxX) / 2, b.MinZ - 1 } } do
+			local top = floorTopAt(pt[1], pt[2])
+			if math.abs(top - b.MaxY) > 0.02 then
+				fail(("deck is not flush: paving top at (%s, %s) is %s, deck %s"):format(fmt(pt[1]), fmt(pt[2]), fmt(top), fmt(b.MaxY)))
+			end
 		end
 		-- StandRadius covers the whole deck
 		local ts = P.ThrowSpot
@@ -522,31 +564,269 @@ do
 	if #P.QueueSpots ~= 5 then
 		fail("Layout.Platform.QueueSpots must hold 5 spots")
 	end
-	local ramp = find(plat, "Ramp")
-	if ramp then
-		local slope = math.deg(math.atan((P.RampTop.Y - P.RampBottom.Y) / (P.RampTop.Z - P.RampBottom.Z)))
-		note(("ramp slope %.1f deg, run %s, rise %s"):format(slope, fmt(P.RampTop.Z - P.RampBottom.Z), fmt(P.RampTop.Y - P.RampBottom.Y)))
-		if slope > 35.01 then
-			fail(("ramp slope %.1f deg > 35"):format(slope))
-		end
-		local rb = Bounds(ramp)
-		if math.abs(rb.MaxY - P.RampTop.Y) > 0.05 or math.abs(rb.MinY - P.RampBottom.Y) > 0.05
-			or math.abs(rb.MinZ - P.RampBottom.Z) > 0.05 or math.abs(rb.MaxZ - P.RampTop.Z) > 0.05 then
-			fail("ramp part does not match Layout.Platform.RampBottom/RampTop: " .. boxStr(rb))
-		end
-	end
-	-- railings: front railing below the launch height (ThrowSpot + 4)
-	local launchY = P.ThrowSpot.Y + 4
-	if plat then
-		for _, d in plat:GetDescendants() do
-			if d:IsA("BasePart") and d.Transparency < 1 then
-				local b = Bounds(d)
-				if b.MaxZ > Layout.ThrowLine.Z - 3 and b.MinY >= P.Center.Y - 0.1 and b.MaxY > launchY - 0.3 then
-					fail(("%s near the deck front tops out at Y %s (launch height %s)"):format(pathOf(d), fmt(b.MaxY), fmt(launchY)))
+	-- railings: front railing below the launch height (deck + Game.Throw.LaunchHeight)
+	local launchY = Layout.ThrowLine.Y + 4
+	for _, root in { plat, F.ThrowLine } do
+		if root then
+			for _, d in root:GetDescendants() do
+				if d:IsA("BasePart") and d.Transparency < 1 then
+					local bb = Bounds(d)
+					if bb.MaxZ > Layout.ThrowLine.Z - 3 and bb.MinY >= HUB - 0.1 and bb.MaxY > launchY - 0.3 then
+						fail(("%s near the cliff edge tops out at Y %s (launch height %s)"):format(pathOf(d), fmt(bb.MaxY), fmt(launchY)))
+					end
 				end
 			end
 		end
 	end
+end
+
+-- hub floors: every walking surface of the hub has its top at HubY and stays behind the cliff edge
+do
+	local HUB = Layout.HubY
+	local floors = {}
+	for _, root in { F.Yards, F.Street, F.Plaza, F.Platform } do
+		if root then
+			for _, d in root:GetDescendants() do
+				if d:IsA("BasePart") and d.CanCollide and (d.Name == "YardPlot" or d.Name == "GapGround" or d.Name == "Road"
+					or d.Name == "PlazaFloor" or d.Name == "Deck") then
+					table.insert(floors, d)
+				end
+			end
+		end
+	end
+	if #floors < Layout.Yards.Count + 5 then
+		fail(("hub floors: only %d floor slabs found"):format(#floors))
+	end
+	for _, d in floors do
+		local b = Bounds(d)
+		if math.abs(b.MaxY - HUB) > 0.02 then
+			fail(("hub floor %s top Y %s ~= HubY %s"):format(pathOf(d), fmt(b.MaxY), fmt(HUB)))
+		end
+		if b.MaxZ > Layout.ThrowLine.Z + 0.02 then
+			fail(("hub floor %s reaches past the cliff edge (z %s)"):format(pathOf(d), fmt(b.MaxZ)))
+		end
+	end
+	note(("hub: %d floor slabs, all with their top at HubY = %s (field at GroundY = %s)"):format(#floors, fmt(HUB),
+		fmt(Layout.GroundY)))
+	-- plateau block under the whole hub
+	local plateau = F.Outskirts and F.Outskirts:FindFirstChild("Plateau")
+	if not plateau then
+		fail("Outskirts/Plateau missing")
+	else
+		local b = Bounds(plateau)
+		if b.MaxY > HUB + 0.02 or b.MaxY < HUB - 0.5 or b.MinY > Layout.GroundY + 0.02 then
+			fail("plateau block must reach from the field up to just under HubY: " .. boxStr(b))
+		end
+		if b.MinX > -Layout.Street.MaxX - 300 or b.MaxX < Layout.Street.MaxX + 300 or b.MinZ > Layout.Yards.CenterZ - 200 then
+			fail("plateau block does not run under the whole hub and its walls: " .. boxStr(b))
+		end
+	end
+end
+
+-- the cliff edge: guard, railings, no way down
+do
+	local HUB = Layout.HubY
+	local edgeZ = Layout.ThrowLine.Z
+	-- the invisible guard covers the whole plaza front from the surface to above any jump
+	local guards = {}
+	for _, o in allParts do
+		local b = o.Box
+		if o.Part.CanCollide and b.MinZ <= edgeZ + 0.6 and b.MaxZ >= edgeZ - 1.5 and b.MinY <= HUB + 0.05
+			and b.MaxY >= HUB + 12 then
+			table.insert(guards, o)
+		end
+	end
+	local open = 0
+	local firstOpen = nil
+	local x = Layout.Plaza.MinX + 0.25
+	while x < Layout.Plaza.MaxX do
+		local covered = false
+		for _, g in guards do
+			if x >= g.Box.MinX and x <= g.Box.MaxX then
+				covered = true
+				break
+			end
+		end
+		if not covered then
+			open += 1
+			firstOpen = firstOpen or x
+		end
+		x += 0.5
+	end
+	if open > 0 then
+		fail(("cliff edge: %d samples along the plaza front have no collidable guard >= 12 studs tall (first x %s)"):format(
+			open, fmt(firstOpen)))
+	end
+	local gh = 0
+	for _, g in guards do
+		gh = math.max(gh, g.Box.MaxY - HUB)
+	end
+	-- visible railings along the edge (deck front + either side)
+	local railed = 0
+	local total = 0
+	x = Layout.Plaza.MinX + 1
+	while x < Layout.Plaza.MaxX - 1 do
+		total += 1
+		for _, root in { plat, F.ThrowLine } do
+			local hit = false
+			if root then
+				for _, d in root:GetDescendants() do
+					if d:IsA("BasePart") and d.Name == "Rail" and d.Transparency < 1 then
+						local b = Bounds(d)
+						if x >= b.MinX - 0.6 and x <= b.MaxX + 0.6 and b.MaxZ > edgeZ - 2 then
+							hit = true
+							break
+						end
+					end
+				end
+			end
+			if hit then
+				railed += 1
+				break
+			end
+		end
+		x += 2
+	end
+	if railed < total then
+		fail(("cliff edge: only %d of %d samples along the plaza front have a visible railing"):format(railed, total))
+	end
+	note(("cliff edge: guard %s studs above the plateau over the whole plaza front, railing at %d/%d samples"):format(
+		fmt(gh), railed, total))
+	-- nothing walkable reaches the field: no collidable floor of ours bridges the edge between HubY and GroundY
+	for _, o in allParts do
+		local p, b = o.Part, o.Box
+		if p.CanCollide and not isUnder(p, F.Field) and p.Name ~= "Underlay" and b.MaxZ > edgeZ + 0.7
+			and b.MinZ < edgeZ and b.MaxY > Layout.GroundY + 1 and b.MaxY < HUB + 2.1 and p.Transparency < 1 then
+			fail(("%s (%s) bridges the cliff edge: players could walk down"):format(pathOf(p), boxStr(b)))
+		end
+	end
+end
+
+-- the cliff face: layered rock from wall to wall, no flat box face, nothing in the landing lane but the foot
+do
+	local cliffParts = {}
+	if F.Cliff then
+		for _, d in F.Cliff:GetDescendants() do
+			if d:IsA("BasePart") then
+				table.insert(cliffParts, { Part = d, Box = Bounds(d) })
+				if d.CanCollide or d.CanQuery then
+					fail("cliff part is collidable/queryable: " .. pathOf(d))
+				end
+			end
+		end
+	else
+		fail("Cliff folder missing")
+	end
+	local edgeZ = Layout.ThrowLine.Z
+	local function inAny(list, x, y, z)
+		for _, w in list do
+			local bx = w.Box
+			if x >= bx.MinX - 0.01 and x <= bx.MaxX + 0.01 and y >= bx.MinY - 0.01 and y <= bx.MaxY + 0.01
+				and z >= bx.MinZ - 1 and z <= bx.MaxZ + 1 then
+				local lp = w.Part.CFrame:PointToObjectSpace(Vector3.new(x, y, z))
+				local h = w.Part.Size / 2
+				if math.abs(lp.X) <= h.X + 0.01 and math.abs(lp.Y) <= h.Y + 0.01 and math.abs(lp.Z) <= h.Z + 0.01 then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	-- coverage: just in front of the plateau block, every point of the face from the field to the plateau top
+	local holes, firstHole, samples = 0, nil, 0
+	local fronts = {}
+	local x = -Layout.Street.MaxX - 160
+	while x <= Layout.Street.MaxX + 160 do
+		local y = Layout.GroundY + 0.5
+		while y < Layout.HubY - 0.5 do
+			samples += 1
+			if not inAny(cliffParts, x, y, edgeZ - 2.5) then
+				holes += 1
+				firstHole = firstHole or ("x %s y %s"):format(fmt(x), fmt(y))
+			end
+			y += 1.5
+		end
+		x += 1.5
+	end
+	if holes > 0 then
+		fail(("cliff face: %d of %d samples are not covered by rock (first %s)"):format(holes, samples, firstHole))
+	end
+	-- stepped: the front faces of the rock differ by height (layers) and along X (chunks)
+	local layerFronts = {}
+	for _, c in cliffParts do
+		if c.Part.Name == "Rock" then
+			local layer = c.Part.Parent.Name
+			layerFronts[layer] = layerFronts[layer] or {}
+			table.insert(layerFronts[layer], c.Box.MaxZ)
+			table.insert(fronts, c.Box.MaxZ)
+		end
+	end
+	local nLayers, meanFronts = 0, {}
+	for name, list in layerFronts do
+		nLayers += 1
+		local sum = 0
+		for _, v in list do
+			sum += v
+		end
+		table.insert(meanFronts, { name, sum / #list, #list })
+	end
+	table.sort(meanFronts, function(a, b)
+		return a[1] < b[1]
+	end)
+	local stepped = nLayers >= 3
+	for i = 2, #meanFronts do
+		if meanFronts[i][2] <= meanFronts[i - 1][2] then
+			stepped = false
+		end
+	end
+	local maxFront = -math.huge
+	for _, v in fronts do
+		maxFront = math.max(maxFront, v)
+	end
+	if not stepped then
+		fail("cliff face is not stepped: lower layers must stand further out than the ones above")
+	end
+	local desc = {}
+	for _, m in meanFronts do
+		table.insert(desc, ("%s %d slabs front ~%s"):format(m[1], m[3], fmt(m[2])))
+	end
+	note(("cliff: %d parts, %d samples of the face all covered; %s; foot reaches z %s"):format(#cliffParts, samples,
+		table.concat(desc, ", "), fmt(maxFront)))
+	if maxFront > edgeZ + Game.Throw.MinDistance - 0.5 then
+		fail(("cliff foot reaches z %s, too close to the shortest landing z %s"):format(fmt(maxFront),
+			fmt(edgeZ + Game.Throw.MinDistance)))
+	end
+	-- the shortest throws' arcs (as the server and every client solve them) clear every ledge
+	local spot = Layout.Platform.ThrowSpot
+	local launchY = Layout.ThrowLine.Y + Game.Throw.LaunchHeight
+	local hits = 0
+	local worstClear = math.huge
+	for _, dist in { Game.Throw.MinDistance, 6, 8, 10, 15, 20, 30, 50 } do
+		for _, landX in { -56, -40, -20, -10, 0, 10, 20, 40, 56 } do
+			local launch, land = BallFlight.Endpoints(spot, launchY, Layout.ThrowLine.Z, Layout.GroundY, dist, landX)
+			local arc = BallFlight.ForThrow(launch, land)
+			for i = 0, 400 do
+				local pt = arc.Position(arc.Duration * i / 400)
+				if pt.Z > edgeZ - 3.5 and pt.Y > Layout.GroundY + 0.75 then
+					for _, c in cliffParts do
+						local b = c.Box
+						if pt.X >= b.MinX and pt.X <= b.MaxX and pt.Z >= b.MinZ - 0.75 and pt.Z <= b.MaxZ + 0.75 then
+							local clear = pt.Y - b.MaxY
+							worstClear = math.min(worstClear, if pt.Z > b.MaxZ then math.huge else clear)
+							if pt.Y < b.MaxY + 0.75 then
+								hits += 1
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	if hits > 0 then
+		fail(("ball arcs: %d samples of the shortest throws pass within a ball radius of a cliff ledge"):format(hits))
+	end
+	note(("ball arcs from the edge (%d..50 studs) clear the cliff (closest pass %s studs above a ledge)"):format(
+		Game.Throw.MinDistance, fmt(worstClear)))
 end
 
 ----------------------------------------------------------------------------------------------------

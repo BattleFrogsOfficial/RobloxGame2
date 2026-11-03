@@ -12,7 +12,7 @@ local Props = require((script.Parent :: Instance):WaitForChild("Props")) :: any
 
 local Street = {}
 
-local Y = Layout.GroundY
+local Y = Layout.HubY -- on the hub plateau
 local T = WorldTheme.Street
 
 function Street.Build(parent: Instance)

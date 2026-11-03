@@ -1,17 +1,26 @@
 --!strict
--- Shared helpers for the zone decorators. Decorations obey these placement rules:
---   * "Band" items sit in the OUTER 25% of the field width on each side (|x| in [LaneHalf, DecorMaxAbsX]),
---     so the centre lane (|x| < LaneHalf) stays clear for ball flight and dog runs.
---   * The zone landmark sits at the outer edge of the field, |x| <= LandmarkMaxAbsX (the scenery walls of the
---     outskirts start beyond that).
--- Points avoid the DistanceMarker signs (every 100 studs, |x| ~ MarkerX) and the zone arch pillars.
--- Every accepted point is also recorded in ctx.Taken (centre + footprint radius = margin) so later Band
--- calls of the same zone keep clear of earlier ones (no tree inside a doghouse, no bale inside a crop patch).
+-- Shared helpers for the zone decorators. Each zone plot (the whole field width, |x| <= 120, over the zone's
+-- distance band) is filled in three layers:
+--   1. Ground cover (Kit.Cover): 200+ tiny one-part items (flowers, tufts, pebbles, shells, snow lumps, leaves,
+--      cracks, puddles) scattered over the WHOLE plot. CanCollide/CanQuery/CanTouch/CastShadow all false, so the
+--      landing raycast always hits the ZoneBand. Grouped into Atomic "CoverCell" Models (80 x 60 stud cells) so
+--      phones stream them per area.
+--   2. Mid-size props (Kit.Place): 20-40 per zone (trees, boulders, bales, umbrellas, ...), each its own Atomic
+--      Model, non-colliding and non-queryable, at least Kit.PropGap (6) studs apart measured between footprint
+--      edges (XZ bounding boxes) and the same distance from the landmark, the boundary line, the arch pillars
+--      and the distance-marker signs, so every landing spot has open ground for the dog animation. Inside the
+--      ball-POV corridor (|x| <= Kit.Corridor) only low props (<= Kit.CorridorMaxH tall) are allowed.
+--   3. One tall landmark per zone at the field edge (Kit.Landmark, Persistent so it is always visible from the
+--      platform).
+-- The zone boundary (Kit.Boundary) is a low fence line / hedge / terrain step across the FULL field width just
+-- past the zone start, plus the side-only name-board gantry (Kit.ZoneArch; nothing crosses the lane).
 --
 -- Tagging contract (read by tools/worldcheck/zones.luau):
---   Decor=true      on every placed decoration (one top-level Model/Part in ctx.Folder), 15-30 per zone
---   Landmark=true   on the one landmark model per zone (+ LandmarkHeight)
---   Boundary=true   on the zone-start arch (BoundaryKind "Arch") and the themed gate (BoundaryKind = style)
+--   <zone>/Ground   Persistent Model: ZoneBand, threshold, aprons, flat dressing
+--   <zone>/Cover    Folder of Atomic CoverCell Models (attribute Cover=true); every part is one cover item
+--   <zone>/Props    Folder of Atomic prop Models (Prop=true, PropKind, ZoneId)
+--   Landmark=true   on the one landmark model per zone (+ LandmarkHeight, LandmarkKind)
+--   Boundary=true   on the zone-start arch (BoundaryKind "Arch") and the full-width line (BoundaryKind = style)
 --   ParticleVolume  on the invisible, non-colliding, non-queryable parts that carry the zone ParticleEmitters
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -24,134 +33,52 @@ local Kit = {}
 local F = Layout.Field
 Kit.FieldHalf = (F.MaxX - F.MinX) / 2 -- 120
 Kit.CenterX = (F.MaxX + F.MinX) / 2 -- 0
-Kit.LaneHalf = Kit.FieldHalf * 0.5 -- 60: centre 50% clear, outer 25% each side for decor
+Kit.LaneHalf = Kit.FieldHalf * 0.5 -- 60 (only used for the arch gantry opening now)
 -- 266: themed ground strip outside the field. It runs 30 studs past the scenery walls' inner line (Walls.InnerX
--- = 236) so its outer edge is always hidden under a cliff / hedge tier: no bare underlay strip shows between the
--- apron and the wall foot (tools/worldcheck/run.luau samples the edge every 10 studs).
+-- = 236) so its outer edge is always hidden under a cliff / hedge tier (tools/worldcheck/run.luau samples it).
 Kit.ApronHalf = Kit.FieldHalf + 146
 Kit.BackdropHalf = Kit.FieldHalf + 114 -- 234: field-end backdrop stops just inside the walls' inner line (236)
 Kit.MarkerX = Kit.LaneHalf + 8 -- 68: distance marker signs
 Kit.ArchX = Kit.FieldHalf - 8 -- 112: zone arch pillars
 Kit.MarkerEvery = 100
-Kit.DecorMaxAbsX = Kit.FieldHalf - 2 -- 118: decorations stay inside the field
+Kit.PlotHalf = Kit.FieldHalf - 2 -- 118: props and cover stay inside the field
+Kit.DecorMaxAbsX = Kit.PlotHalf
 Kit.LandmarkMaxAbsX = Kit.FieldHalf + 30 -- 150: landmarks may overhang the field edge up to here
-Kit.GateOffset = 5 -- themed gate sits this far past the zone arch
-Kit.DecorStartOffset = 9 -- decorations start this far past the arch (clear of the gate)
+Kit.BoundaryOffset = 6 -- the full-width boundary line's centre sits this far past the arch
+Kit.PropGap = 6 -- minimum distance between prop footprints (edge to edge)
+Kit.Corridor = 30 -- |x| <= 30: the ball-POV camera flies here (~15 studs up), so only low props
+Kit.CorridorMaxH = 10
+Kit.CoverMaxH = 2.5 -- ground cover limits (checked by tools/worldcheck/zones.luau)
+Kit.CoverMaxW = 6
+Kit.CoverCell = Vector2.new(80, 60) -- streaming cluster size for ground cover (x, z)
+
+export type Box = { x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, name: string? }
 
 export type Ctx = {
 	Zone: any,
-	Folder: Instance,
-	MinZ: number, -- world Z where decorations may start
-	MaxZ: number,
+	ZoneFolder: Instance,
+	Folder: Instance, -- <zone>/Props
+	CoverFolder: Instance, -- <zone>/Cover
+	GroundModel: Instance, -- <zone>/Ground (flat dressing goes here)
+	MinZ: number, -- world Z where the plot starts (band start, or the throw-line wall for the Backyard)
+	MaxZ: number, -- band end
 	StartZ: number, -- world Z of the band start
 	ArchZ: number,
+	BoundaryZ: number,
 	Rng: Random,
 	Decor: any, -- WorldTheme.ZoneDecor[ZoneId]
 	Ground: Color3,
 	Accent: Color3,
 	Props: any,
 	Y: number,
-	Taken: { { X: number, Z: number, R: number } }?,
+	Boxes: { Box }, -- obstacle + placed prop footprints (XZ)
+	CoverCells: { [string]: Model },
+	CoverItems: number,
+	PropCount: number,
 }
 
-export type Slot = { Pos: Vector3, Side: number }
-
-local function nearMarker(ctx: Ctx, x: number, z: number, margin: number): boolean
-	local d = z - Layout.ThrowLine.Z
-	local m = d % Kit.MarkerEvery
-	local nearLine = m < margin or m > Kit.MarkerEvery - margin
-	if nearLine and math.abs(math.abs(x) - Kit.MarkerX) < 6 + margin then
-		return true
-	end
-	if math.abs(z - ctx.ArchZ) < 6 + margin and math.abs(math.abs(x) - Kit.ArchX) < 6 + margin then
-		return true
-	end
-	return false
-end
-
-local function takenList(ctx: Ctx): { { X: number, Z: number, R: number } }
-	local taken = ctx.Taken
-	if taken == nil then
-		taken = {}
-		ctx.Taken = taken
-	end
-	return taken :: { { X: number, Z: number, R: number } }
-end
-
-local function pick(ctx: Ctx, count: number, minAbsX: number, maxAbsX: number, spacing: number,
-	zPad: number, radius: number): { Slot }
-	local out: { Slot } = {}
-	local takenList = takenList(ctx)
-	local tries = 0
-	local z0, z1 = ctx.MinZ + zPad, ctx.MaxZ - zPad
-	if ctx.ArchZ > z0 - zPad and ctx.ArchZ < z0 + 10 then
-		z0 = math.max(z0, ctx.ArchZ + 8)
-	end
-	while #out < count and tries < count * 60 do
-		tries += 1
-		local side = if (#out + tries) % 2 == 0 then 1 else -1
-		local x = Kit.CenterX + side * ctx.Rng:NextNumber(minAbsX, math.max(minAbsX, maxAbsX))
-		local z = ctx.Rng:NextNumber(z0, math.max(z0 + 1, z1))
-		if nearMarker(ctx, x, z, math.max(spacing * 0.4, radius)) then
-			continue
-		end
-		local ok = true
-		for _, s in out do
-			if (Vector2.new(s.Pos.X, s.Pos.Z) - Vector2.new(x, z)).Magnitude < spacing then
-				ok = false
-				break
-			end
-		end
-		if ok then
-			for _, t in takenList do
-				if (Vector2.new(t.X, t.Z) - Vector2.new(x, z)).Magnitude < t.R + radius then
-					ok = false
-					break
-				end
-			end
-		end
-		if ok then
-			table.insert(out, { Pos = Vector3.new(x, ctx.Y, z), Side = side })
-			table.insert(takenList, { X = x, Z = z, R = radius })
-		end
-	end
-	return out
-end
-
--- Points inside the field's outer 25% band. `margin` (>= the item's footprint half-extent) keeps the item
--- off the lane edge, the field edge (DecorMaxAbsX) and the zone ends.
-function Kit.Band(ctx: Ctx, count: number, spacing: number, margin: number?): { Slot }
-	local m = margin or 4
-	return pick(ctx, count, Kit.LaneHalf + m, Kit.DecorMaxAbsX - m, spacing, 6 + m, m)
-end
-
--- Reserve a circular footprint (fixed placements, landmarks) so later Band calls avoid it.
-function Kit.Reserve(ctx: Ctx, x: number, z: number, r: number)
-	table.insert(takenList(ctx), { X = x, Z = z, R = r })
-end
-
--- Evenly spaced Z values along the band (for fences/rows).
-function Kit.Every(ctx: Ctx, step: number, pad: number): { number }
-	local out = {}
-	local z = ctx.MinZ + pad
-	while z <= ctx.MaxZ - pad do
-		table.insert(out, z)
-		z += step
-	end
-	return out
-end
-
-function Kit.Yaw(ctx: Ctx): CFrame
-	return CFrame.Angles(0, ctx.Rng:NextNumber(0, math.pi * 2), 0)
-end
-
--- Faces the lane: yaw that turns a model's -Z front toward the field centre.
-function Kit.FaceLane(side: number): CFrame
-	return CFrame.Angles(0, if side > 0 then math.pi / 2 else -math.pi / 2, 0)
-end
-
 ----------------------------------------------------------------------------------------------------
--- Tagging
+-- Geometry
 ----------------------------------------------------------------------------------------------------
 local function eachPart(inst: Instance, fn: (BasePart) -> ())
 	if inst:IsA("BasePart") then
@@ -165,21 +92,404 @@ local function eachPart(inst: Instance, fn: (BasePart) -> ())
 end
 Kit.EachPart = eachPart
 
--- Marks one placed decoration. Decorations never collide; small props cast no shadow.
-function Kit.Decor<T>(ctx: Ctx, inst: T, small: boolean?): T
-	local i = (inst :: any) :: Instance
-	i:SetAttribute("Decor", true)
-	i:SetAttribute("ZoneId", ctx.Zone.Id)
-	eachPart(i, function(p)
-		p.CanCollide = false
-		p.CanTouch = false
-		if small then
-			p.CastShadow = false
-		end
-	end)
-	return inst
+function Kit.PartBox(p: BasePart): Box
+	local cf, s = p.CFrame, p.Size
+	local hx, hy, hz = s.X / 2, s.Y / 2, s.Z / 2
+	local r, u, l = cf.RightVector, cf.UpVector, cf.LookVector
+	local ex = math.abs(r.X) * hx + math.abs(u.X) * hy + math.abs(l.X) * hz
+	local ey = math.abs(r.Y) * hx + math.abs(u.Y) * hy + math.abs(l.Y) * hz
+	local ez = math.abs(r.Z) * hx + math.abs(u.Z) * hy + math.abs(l.Z) * hz
+	local c = cf.Position
+	return { x0 = c.X - ex, x1 = c.X + ex, y0 = c.Y - ey, y1 = c.Y + ey, z0 = c.Z - ez, z1 = c.Z + ez }
 end
 
+function Kit.Bounds(inst: Instance): Box?
+	local b: Box? = nil
+	eachPart(inst, function(p)
+		local a = Kit.PartBox(p)
+		local cur = b
+		if cur == nil then
+			b = a
+		else
+			cur.x0, cur.x1 = math.min(cur.x0, a.x0), math.max(cur.x1, a.x1)
+			cur.y0, cur.y1 = math.min(cur.y0, a.y0), math.max(cur.y1, a.y1)
+			cur.z0, cur.z1 = math.min(cur.z0, a.z0), math.max(cur.z1, a.z1)
+		end
+	end)
+	return b
+end
+
+-- Edge-to-edge distance between two XZ footprints (0 when they overlap).
+function Kit.Gap(a: Box, b: Box): number
+	local dx = math.max(0, math.max(a.x0, b.x0) - math.min(a.x1, b.x1))
+	local dz = math.max(0, math.max(a.z0, b.z0) - math.min(a.z1, b.z1))
+	return math.sqrt(dx * dx + dz * dz)
+end
+
+-- Register a footprint that props must keep Kit.PropGap away from (landmark, boundary, signs, fixed dressing).
+function Kit.Obstacle(ctx: Ctx, inst: Instance | Box, name: string?)
+	local b: Box? = if typeof(inst) == "Instance" then Kit.Bounds(inst :: Instance) else inst :: Box
+	if b then
+		b.name = name or (if typeof(inst) == "Instance" then (inst :: Instance).Name else "obstacle")
+		table.insert(ctx.Boxes, b)
+	end
+end
+
+local function noShadowLowFlags(p: BasePart, shadow: boolean)
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	if not shadow then
+		p.CastShadow = false
+	end
+end
+
+local function destroyCounted(ctx: Ctx, inst: Instance)
+	local n = 0
+	eachPart(inst, function()
+		n += 1
+	end)
+	ctx.Props.PartCount -= n
+	inst:Destroy()
+end
+
+----------------------------------------------------------------------------------------------------
+-- Props (layer 2)
+----------------------------------------------------------------------------------------------------
+export type PropSpec = {
+	Name: string,
+	Count: number,
+	R: number, -- rough footprint half-extent (used to pick candidate spots; the real footprint is measured)
+	Tall: boolean?, -- taller than Kit.CorridorMaxH: kept out of the ball-POV corridor
+	MinAbsX: number?, -- optional band limits (|x|)
+	MaxAbsX: number?,
+	Shadow: boolean?, -- default: Tall props cast shadows, low ones do not
+	Build: (ctx: Ctx, m: Model, pos: Vector3, i: number, side: number) -> (),
+}
+
+local function fits(ctx: Ctx, b: Box): boolean
+	local half = Kit.PlotHalf
+	if b.x0 < Kit.CenterX - half - 1e-3 or b.x1 > Kit.CenterX + half + 1e-3 then
+		return false
+	end
+	if b.z0 < ctx.MinZ + 1 or b.z1 > ctx.MaxZ - 1 then
+		return false
+	end
+	local inCorridor = b.x1 > Kit.CenterX - Kit.Corridor and b.x0 < Kit.CenterX + Kit.Corridor
+	if inCorridor and b.y1 > ctx.Y + Kit.CorridorMaxH then
+		return false
+	end
+	for _, o in ctx.Boxes do
+		if Kit.Gap(o, b) < Kit.PropGap then
+			return false
+		end
+	end
+	return true
+end
+
+-- Scatter `spec.Count` props of one kind through the plot. Returns the number actually placed.
+function Kit.Place(ctx: Ctx, spec: PropSpec): number
+	local P, rng = ctx.Props, ctx.Rng
+	local placed, tries = 0, 0
+	local r = spec.R
+	local minAbs = spec.MinAbsX or (if spec.Tall then Kit.Corridor + 1 else 0)
+	local maxAbs = spec.MaxAbsX or Kit.PlotHalf
+	while placed < spec.Count and tries < spec.Count * 80 do
+		tries += 1
+		local side = if rng:NextNumber() < 0.5 then -1 else 1
+		local lo, hi = minAbs + r, maxAbs - r
+		if hi <= lo then
+			break
+		end
+		local x = Kit.CenterX + side * rng:NextNumber(lo, hi)
+		if minAbs == 0 then
+			x = Kit.CenterX + rng:NextNumber(-hi, hi)
+			side = if x < Kit.CenterX then -1 else 1
+		end
+		local z = rng:NextNumber(ctx.MinZ + 1 + r, ctx.MaxZ - 1 - r)
+		-- quick reject with the estimated footprint
+		local guess: Box = { x0 = x - r * 0.7, x1 = x + r * 0.7, y0 = 0, y1 = 0, z0 = z - r * 0.7, z1 = z + r * 0.7 }
+		local ok = true
+		for _, o in ctx.Boxes do
+			if Kit.Gap(o, guess) < Kit.PropGap then
+				ok = false
+				break
+			end
+		end
+		if not ok then
+			continue
+		end
+		local m = P.Model(ctx.Folder, spec.Name)
+		spec.Build(ctx, m, Vector3.new(x, ctx.Y, z), placed + 1, side)
+		local b = Kit.Bounds(m)
+		if b == nil or not fits(ctx, b) then
+			destroyCounted(ctx, m)
+			continue
+		end
+		b.name = spec.Name
+		table.insert(ctx.Boxes, b)
+		placed += 1
+		ctx.PropCount += 1
+		m:SetAttribute("Prop", true)
+		m:SetAttribute("PropKind", spec.Name)
+		m:SetAttribute("ZoneId", ctx.Zone.Id)
+		local shadow = if spec.Shadow ~= nil then spec.Shadow else spec.Tall == true
+		eachPart(m, function(p)
+			noShadowLowFlags(p, shadow)
+		end)
+		m.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	end
+	return placed
+end
+
+-- Place several kinds in order (largest first gives the best packing).
+function Kit.PlaceAll(ctx: Ctx, specs: { PropSpec })
+	for _, s in specs do
+		Kit.Place(ctx, s)
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Ground cover (layer 1): every item is exactly ONE part
+----------------------------------------------------------------------------------------------------
+export type CoverKind = "Block" | "Ball" | "Disc" | "Wedge" | "Spike"
+export type CoverItem = {
+	W: number, -- weight
+	Make: (ctx: Ctx, x: number, z: number, rng: Random) -> (CoverKind, Vector3, CFrame, Color3, Enum.Material?),
+}
+export type CoverOpts = {
+	Count: number,
+	Items: { CoverItem },
+	Mode: string?, -- "Random" (default) | "Grid" (tidy, jittered rows) | "Clumps" (dense patches)
+	Clumps: number?,
+	ClumpShare: number?, -- share of items inside clumps (default 0.65)
+	ClumpRadius: number?,
+}
+
+local function coverCell(ctx: Ctx, x: number, z: number): Model
+	local cx = math.floor((x - (Kit.CenterX - Kit.FieldHalf)) / Kit.CoverCell.X)
+	local cz = math.floor((z - ctx.MinZ) / Kit.CoverCell.Y)
+	local key = cx .. "_" .. cz
+	local m = ctx.CoverCells[key]
+	if m == nil then
+		local nm = ctx.Props.Model(ctx.CoverFolder, "CoverCell_" .. key)
+		nm.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+		nm:SetAttribute("Cover", true)
+		ctx.CoverCells[key] = nm
+		m = nm
+	end
+	return m :: Model
+end
+
+-- One cover part (no SpecialMesh, no children). Disc = flat cylinder lying on the ground (size.X = diameter,
+-- size.Y = thickness); Spike = CornerWedgePart (a one-part tuft / shard / shell).
+function Kit.CoverPart(ctx: Ctx, parent: Instance, kind: CoverKind, size: Vector3, cf: CFrame, color: Color3,
+	material: Enum.Material?): BasePart
+	local p: BasePart
+	if kind == "Wedge" then
+		p = Instance.new("WedgePart")
+	elseif kind == "Spike" then
+		p = Instance.new("CornerWedgePart")
+	else
+		local part = Instance.new("Part")
+		if kind == "Ball" then
+			part.Shape = Enum.PartType.Ball
+		elseif kind == "Disc" then
+			part.Shape = Enum.PartType.Cylinder
+		end
+		p = part
+	end
+	p.Name = "Cover"
+	p.Anchored = true
+	if kind == "Disc" then
+		p.Size = Vector3.new(size.Y, size.X, size.X)
+		p.CFrame = cf * CFrame.Angles(0, 0, math.pi / 2)
+	else
+		p.Size = size
+		p.CFrame = cf
+	end
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.CastShadow = false
+	p.Parent = parent
+	ctx.Props.PartCount += 1
+	return p
+end
+
+local function gauss(rng: Random): number
+	local u1 = math.max(1e-6, rng:NextNumber())
+	local u2 = rng:NextNumber()
+	return math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+end
+
+local function freeForCover(ctx: Ctx, x: number, z: number): boolean
+	for _, o in ctx.Boxes do
+		if x > o.x0 - 0.8 and x < o.x1 + 0.8 and z > o.z0 - 0.8 and z < o.z1 + 0.8 then
+			return false
+		end
+	end
+	return true
+end
+
+function Kit.Cover(ctx: Ctx, o: CoverOpts): number
+	local rng = ctx.Rng
+	local total = 0
+	for _, it in o.Items do
+		total += it.W
+	end
+	local function pickItem(): CoverItem
+		local r = rng:NextNumber(0, total)
+		for _, it in o.Items do
+			r -= it.W
+			if r <= 0 then
+				return it
+			end
+		end
+		return o.Items[#o.Items]
+	end
+	local half = Kit.PlotHalf - 1
+	local z0, z1 = ctx.MinZ + 2, ctx.MaxZ - 2
+	local placed = 0
+	local function put(x: number, z: number): boolean
+		if x < Kit.CenterX - half or x > Kit.CenterX + half or z < z0 or z > z1 then
+			return false
+		end
+		if not freeForCover(ctx, x, z) then
+			return false
+		end
+		local it = pickItem()
+		local kind, size, cf, color, mat = it.Make(ctx, x, z, rng)
+		Kit.CoverPart(ctx, coverCell(ctx, x, z), kind, size, cf, color, mat)
+		placed += 1
+		return true
+	end
+	local mode = o.Mode or "Random"
+	if mode == "Grid" then
+		-- tidy: a jittered grid, cells visited in a shuffled order until the count is reached
+		local w, d = half * 2, z1 - z0
+		local cells = o.Count * 1.4
+		local nx = math.max(1, math.floor(math.sqrt(cells * w / d) + 0.5))
+		local nz = math.max(1, math.ceil(cells / nx))
+		local sx, sz = w / nx, d / nz
+		local order = {}
+		for i = 0, nx * nz - 1 do
+			table.insert(order, i)
+		end
+		for i = #order, 2, -1 do
+			local j = rng:NextInteger(1, i)
+			order[i], order[j] = order[j], order[i]
+		end
+		for _, idx in order do
+			if placed >= o.Count then
+				break
+			end
+			local ix, iz = idx % nx, idx // nx
+			local x = Kit.CenterX - half + (ix + 0.5 + rng:NextNumber(-0.18, 0.18)) * sx
+			local z = z0 + (iz + 0.5 + rng:NextNumber(-0.18, 0.18)) * sz
+			put(x, z)
+		end
+	end
+	local centres = {}
+	if mode == "Clumps" then
+		for _ = 1, o.Clumps or 12 do
+			table.insert(centres, Vector2.new(rng:NextNumber(-half, half) + Kit.CenterX, rng:NextNumber(z0, z1)))
+		end
+	end
+	local share = o.ClumpShare or 0.65
+	local cr = o.ClumpRadius or 9
+	local tries = 0
+	while placed < o.Count and tries < o.Count * 30 do
+		tries += 1
+		local x, z
+		if #centres > 0 and rng:NextNumber() < share then
+			local c = centres[rng:NextInteger(1, #centres)]
+			x, z = c.X + gauss(rng) * cr, c.Y + gauss(rng) * cr
+		else
+			x, z = Kit.CenterX + rng:NextNumber(-half, half), rng:NextNumber(z0, z1)
+		end
+		put(x, z)
+	end
+	ctx.CoverItems += placed
+	return placed
+end
+
+-- Common cover makers -------------------------------------------------------------------------------
+-- (each returns kind, size, cframe, colour, material for Kit.CoverPart; yaw is random)
+local function yaw(rng: Random): CFrame
+	return CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
+end
+Kit.CoverYaw = yaw
+
+local function pickColor(rng: Random, colors: { Color3 }): Color3
+	return colors[rng:NextInteger(1, #colors)]
+end
+Kit.PickColor = pickColor
+
+-- dome sunk into the ground (pebble, snow lump, moss mound): a Ball whose centre sits below the surface
+function Kit.Dome(colors: { Color3 }, dmin: number, dmax: number, material: Enum.Material?, sink: number?): CoverItem
+	return { W = 1, Make = function(ctx, x, z, rng)
+		local d = rng:NextNumber(dmin, dmax)
+		return "Ball", Vector3.new(d, d, d), CFrame.new(x, ctx.Y + d * (0.5 - (sink or 0.3)), z), pickColor(rng, colors), material
+	end }
+end
+
+-- small ball sitting on (or just above) the ground: flower head, berry, tiny mushroom cap
+function Kit.Bead(colors: { Color3 }, dmin: number, dmax: number, lift: number, material: Enum.Material?): CoverItem
+	return { W = 1, Make = function(ctx, x, z, rng)
+		local d = rng:NextNumber(dmin, dmax)
+		return "Ball", Vector3.new(d, d, d), CFrame.new(x, ctx.Y + lift + d / 2, z), pickColor(rng, colors), material
+	end }
+end
+
+-- one-part tuft / shard / shell (CornerWedgePart)
+function Kit.Spike(colors: { Color3 }, w: number, h: number, material: Enum.Material?): CoverItem
+	return { W = 1, Make = function(ctx, x, z, rng)
+		local s = rng:NextNumber(0.75, 1.25)
+		local hh = h * s
+		return "Spike", Vector3.new(w * s, hh, w * s), CFrame.new(x, ctx.Y + hh / 2, z) * yaw(rng), pickColor(rng, colors),
+			material
+	end }
+end
+
+-- flat disc on the ground: puddle, moss patch, clover, wet sand
+function Kit.Disc(colors: { Color3 }, dmin: number, dmax: number, material: Enum.Material?): CoverItem
+	return { W = 1, Make = function(ctx, x, z, rng)
+		local d = rng:NextNumber(dmin, dmax)
+		return "Disc", Vector3.new(d, 0.1, d), CFrame.new(x, ctx.Y + 0.05, z), pickColor(rng, colors), material
+	end }
+end
+
+-- flat chip / leaf / crack: a thin block lying on the ground, random yaw
+function Kit.Chip(colors: { Color3 }, sx: number, sz: number, thick: number, material: Enum.Material?): CoverItem
+	return { W = 1, Make = function(ctx, x, z, rng)
+		local s = rng:NextNumber(0.7, 1.3)
+		return "Block", Vector3.new(sx * s, thick, sz * s), CFrame.new(x, ctx.Y + thick / 2, z) * yaw(rng),
+			pickColor(rng, colors), material
+	end }
+end
+
+-- small chunky block (clod, crate bolt, gravel), slightly tilted
+function Kit.Nugget(colors: { Color3 }, size: number, material: Enum.Material?): CoverItem
+	return { W = 1, Make = function(ctx, x, z, rng)
+		local s = size * rng:NextNumber(0.7, 1.3)
+		return "Block", Vector3.new(s, s * 0.6, s * 0.8),
+			CFrame.new(x, ctx.Y + s * 0.25, z) * yaw(rng) * CFrame.Angles(rng:NextNumber(-0.3, 0.3), 0, rng:NextNumber(-0.3, 0.3)),
+			pickColor(rng, colors), material
+	end }
+end
+
+function Kit.Weight(item: CoverItem, w: number): CoverItem
+	return { W = w, Make = item.Make }
+end
+
+----------------------------------------------------------------------------------------------------
+-- Tagging
+----------------------------------------------------------------------------------------------------
 function Kit.Landmark(ctx: Ctx, model: Model, height: number, kind: string): Model
 	model:SetAttribute("Landmark", true)
 	model:SetAttribute("LandmarkKind", kind)
@@ -188,8 +498,21 @@ function Kit.Landmark(ctx: Ctx, model: Model, height: number, kind: string): Mod
 	eachPart(model, function(p)
 		p.CanCollide = false
 		p.CanTouch = false
+		p.CanQuery = false
 	end)
+	-- always streamed: the landmark is what tells the zones apart from the platform, thousands of studs away
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+	Kit.Obstacle(ctx, model, "Landmark")
 	return model
+end
+
+function Kit.Yaw(ctx: Ctx): CFrame
+	return CFrame.Angles(0, ctx.Rng:NextNumber(0, math.pi * 2), 0)
+end
+
+-- Faces the lane: yaw that turns a model's -Z front toward the field centre.
+function Kit.FaceLane(side: number): CFrame
+	return CFrame.Angles(0, if side > 0 then math.pi / 2 else -math.pi / 2, 0)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -235,10 +558,13 @@ function Kit.Flat(P: any, parent: Instance, name: string, minX: number, maxX: nu
 end
 
 ----------------------------------------------------------------------------------------------------
--- Zone gate (themed boundary across the outer bands at the zone start; the lane stays open)
+-- Zone boundary: a low fence line / hedge / terrain step across the FULL field width (x -120..120) at
+-- ctx.BoundaryZ. Visual only (CanCollide/CanQuery/CanTouch false) and low (<= 4 studs in the first three zones,
+-- <= 7 after), so it never enters the platform camera's view of the lane or the ball arc, and the ball-POV
+-- camera (~15 studs up) flies over it.
 ----------------------------------------------------------------------------------------------------
 export type GateStyle = {
-	Kind: string, -- Hedge | Picket | Dune | Rail | Logs | Ice | Parapet | Bulkhead | Crystal
+	Kind: string, -- Picket | Hedge | Dune | Rail | Logs | Ice | Parapet | Bulkhead | Crystal
 	Color: Color3,
 	Trim: Color3,
 	Material: Enum.Material?,
@@ -246,51 +572,129 @@ export type GateStyle = {
 	Height: number,
 }
 
-function Kit.Gate(ctx: Ctx, style: GateStyle): Model
+function Kit.Boundary(ctx: Ctx, style: GateStyle): Model
 	local P = ctx.Props
-	local m = P.Model(ctx.Folder.Parent :: Instance, "Gate")
-	local z = ctx.ArchZ + Kit.GateOffset
-	local x0, x1 = Kit.LaneHalf + 2, Kit.ArchX - 4 -- 62 .. 108: clear of the lane and the arch pillar
+	local m = P.Model(ctx.ZoneFolder, "Boundary")
+	local z, Y = ctx.BoundaryZ, ctx.Y
+	local x0, x1 = Kit.CenterX - Kit.FieldHalf, Kit.CenterX + Kit.FieldHalf
 	local len = x1 - x0
+	local cx = Kit.CenterX
 	local h = style.Height
-	for _, side in { -1, 1 } do
-		local cx = Kit.CenterX + side * (x0 + x1) / 2
-		local kind = style.Kind
-		if kind == "Hedge" or kind == "Ice" or kind == "Dune" then
-			P.Block(m, "Wall", Vector3.new(len, h, 3), CFrame.new(cx, ctx.Y + h / 2, z), style.Color, style.Material)
-			P.Block(m, "Cap", Vector3.new(len + 0.4, 0.8, 3.4), CFrame.new(cx, ctx.Y + h + 0.1, z), style.Trim, style.TrimMaterial)
-		elseif kind == "Picket" or kind == "Rail" or kind == "Logs" then
-			local n = 6
-			for i = 0, n do
-				local px = Kit.CenterX + side * (x0 + len * i / n)
-				P.Block(m, "Post", Vector3.new(1.4, h + 1, 1.4), CFrame.new(px, ctx.Y + (h + 1) / 2, z), style.Trim, style.TrimMaterial)
+	local kind = style.Kind
+	local rng = ctx.Rng
+	local function posts(step: number, size: Vector3, color: Color3, material: Enum.Material?, name: string)
+		local n = math.floor(len / step + 0.5)
+		for i = 0, n do
+			local px = x0 + len * i / n
+			px = math.clamp(px, x0 + size.X / 2, x1 - size.X / 2)
+			P.Block(m, name, size, CFrame.new(px, Y + size.Y / 2, z), color, material)
+		end
+	end
+	if kind == "Picket" then
+		-- white picket fence: two rails + posts with caps every 12 studs + a pale base board
+		for _, fy in { 0.4, 0.8 } do
+			P.Block(m, "Rail", Vector3.new(len, 0.5, 0.35), CFrame.new(cx, Y + h * fy, z), style.Color)
+		end
+		posts(12, Vector3.new(0.9, h + 0.6, 0.9), style.Trim, style.TrimMaterial, "Post")
+		P.Block(m, "Base", Vector3.new(len, 0.5, 0.6), CFrame.new(cx, Y + 0.25, z), style.Color)
+	elseif kind == "Hedge" then
+		-- one long clipped hedge with pink blossoms every ~10 studs
+		P.Block(m, "Hedge", Vector3.new(len, h, 2.6), CFrame.new(cx, Y + h / 2, z), style.Color, style.Material)
+		P.Block(m, "Top", Vector3.new(len, 0.5, 2.2), CFrame.new(cx, Y + h + 0.25, z), style.Color:Lerp(Color3.new(1, 1, 1), 0.15),
+			style.Material)
+		local n = 22
+		for i = 0, n do
+			local px = x0 + 3 + (len - 6) * i / n
+			P.Ball(m, "Blossom", Vector3.new(px, Y + h * rng:NextNumber(0.45, 0.95), z - 1.3), 1.1, style.Trim)
+		end
+	elseif kind == "Dune" then
+		-- terrain step: a sand ridge (two long wedges) topped with dune-grass tufts
+		local d = 10
+		for _, s in { -1, 1 } do
+			P.Wedge({ Parent = m, Name = "Ridge", Size = Vector3.new(len, h, d / 2),
+				CFrame = CFrame.new(cx, Y + h / 2, z + s * d / 4) * CFrame.Angles(0, if s > 0 then math.pi else 0, 0),
+				Color = style.Color, Material = style.Material })
+		end
+		for i = 0, 20 do
+			local px = x0 + 4 + (len - 8) * i / 20 + rng:NextNumber(-2, 2)
+			local th = rng:NextNumber(1.2, 2)
+			local tuft = Instance.new("CornerWedgePart")
+			tuft.Name = "Grass"
+			tuft.Anchored = true
+			tuft.Size = Vector3.new(1.4, th, 1.4)
+			tuft.CFrame = CFrame.new(px, Y + h - 0.4 + th / 2, z + rng:NextNumber(-1, 1)) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0)
+			tuft.Color = style.Trim
+			tuft.Material = Enum.Material.Grass
+			tuft.Parent = m
+			P.PartCount += 1
+		end
+	elseif kind == "Rail" then
+		-- split-rail ranch fence: two log rails + chunky posts every 15 studs
+		for _, fy in { 0.4, 0.8 } do
+			P.Block(m, "Rail", Vector3.new(len, 0.8, 0.6), CFrame.new(cx, Y + h * fy, z), style.Color, style.Material)
+		end
+		posts(15, Vector3.new(1.2, h + 0.5, 1.2), style.Trim, style.TrimMaterial or style.Material, "Post")
+	elseif kind == "Logs" then
+		-- a line of felled logs end to end, a second staggered course on top
+		local seg = 24
+		local n = math.floor(len / seg)
+		for i = 0, n - 1 do
+			local px = x0 + seg * (i + 0.5)
+			Kit.LyingCylinder(P, m, "Log", Vector3.new(px, Y + 1, z), seg - 0.4, 2, 0, style.Color, style.Material)
+			if i % 2 == 0 then
+				Kit.LyingCylinder(P, m, "LogTop", Vector3.new(px + rng:NextNumber(-3, 3), Y + 2.6, z), seg * 0.6, 1.4, 0,
+					style.Trim, style.Material)
 			end
-			for _, frac in { 0.35, 0.8 } do
-				P.Block(m, "Rail", Vector3.new(len, if kind == "Logs" then 1.6 else 0.8, 0.8),
-					CFrame.new(cx, ctx.Y + h * frac, z), style.Color, style.Material)
-			end
-		elseif kind == "Parapet" or kind == "Bulkhead" then
-			P.Block(m, "Wall", Vector3.new(len, h, 2), CFrame.new(cx, ctx.Y + h / 2, z), style.Color, style.Material)
-			P.Block(m, "Trim", Vector3.new(len + 0.2, 0.6, 2.3), CFrame.new(cx, ctx.Y + h * 0.7, z), style.Trim, style.TrimMaterial)
-			P.Block(m, "Pylon", Vector3.new(3, h + 3, 3), CFrame.new(Kit.CenterX + side * (x0 + 1.5), ctx.Y + (h + 3) / 2, z),
-				style.Color:Lerp(Color3.new(0, 0, 0), 0.25), style.Material)
-		else -- Crystal: a row of glowing shards
-			for i = 0, 7 do
-				local px = Kit.CenterX + side * (x0 + 2 + (len - 4) * i / 7)
-				local sh = h * (if i % 2 == 0 then 1 else 0.65)
-				P.Block(m, "Shard", Vector3.new(2.2, sh, 2.2), CFrame.new(px, ctx.Y + sh / 2, z) * CFrame.Angles(0, math.rad(45), 0),
-					if i % 2 == 0 then style.Color else style.Trim, style.Material)
-			end
+		end
+	elseif kind == "Ice" then
+		-- snow bank with ice shards poking out every ~12 studs
+		P.Block(m, "Bank", Vector3.new(len, h * 0.5, 4), CFrame.new(cx, Y + h * 0.25, z), style.Trim, Enum.Material.Snow)
+		P.Block(m, "BankTop", Vector3.new(len, h * 0.25, 2.6), CFrame.new(cx, Y + h * 0.625, z), style.Trim, Enum.Material.Snow)
+		local n = 20
+		for i = 0, n do
+			local px = x0 + 3 + (len - 6) * i / n
+			local sh = h * (if i % 2 == 0 then 1 else 0.75)
+			P.Block(m, "Shard", Vector3.new(1.6, sh, 1.6), CFrame.new(px, Y + sh / 2, z) * CFrame.Angles(0, math.rad(45), math.rad(8)),
+				style.Color, style.Material)
+		end
+	elseif kind == "Parapet" then
+		-- roof-edge step: a concrete kerb with a glowing trim line and roof lights every 30 studs
+		P.Block(m, "Kerb", Vector3.new(len, h, 2), CFrame.new(cx, Y + h / 2, z), style.Color, Enum.Material.Concrete)
+		P.Block(m, "Trim", Vector3.new(len, 0.35, 2.2), CFrame.new(cx, Y + h * 0.7, z), style.Trim, style.TrimMaterial)
+		P.Block(m, "Cap", Vector3.new(len, 0.4, 2.4), CFrame.new(cx, Y + h + 0.2, z), style.Color:Lerp(Color3.new(1, 1, 1), 0.2),
+			Enum.Material.Concrete)
+		posts(30, Vector3.new(1, 1.2, 1), style.Trim, style.TrimMaterial, "RoofLight")
+	elseif kind == "Bulkhead" then
+		-- low bulkhead wall with a neon band and pylons every 30 studs
+		P.Block(m, "Wall", Vector3.new(len, h * 0.6, 1.6), CFrame.new(cx, Y + h * 0.3, z), style.Color, style.Material)
+		P.Block(m, "Band", Vector3.new(len, 0.4, 1.8), CFrame.new(cx, Y + h * 0.45, z), style.Trim, style.TrimMaterial)
+		posts(30, Vector3.new(2, h, 2), style.Color:Lerp(Color3.new(0, 0, 0), 0.25), style.Material, "Pylon")
+		local n = math.floor(len / 30 + 0.5)
+		for i = 0, n do
+			local px = math.clamp(x0 + len * i / n, x0 + 1, x1 - 1)
+			P.Block(m, "PylonLight", Vector3.new(2.1, 0.5, 2.1), CFrame.new(px, Y + h - 0.6, z), style.Trim, style.TrimMaterial)
+		end
+	else -- Crystal: a glowing rim with a row of shards
+		P.Block(m, "Rim", Vector3.new(len, 0.5, 1.4), CFrame.new(cx, Y + 0.25, z), style.Trim, style.TrimMaterial)
+		local n = 36
+		for i = 0, n do
+			local px = x0 + 2 + (len - 4) * i / n
+			local sh = h * (if i % 3 == 0 then 1 elseif i % 3 == 1 then 0.6 else 0.4)
+			P.Block(m, "Shard", Vector3.new(1.8, sh, 1.8), CFrame.new(px, Y + sh / 2, z) * CFrame.Angles(0, math.rad(45), 0),
+				if i % 2 == 0 then style.Color else style.Trim, style.Material)
 		end
 	end
 	m:SetAttribute("Boundary", true)
-	m:SetAttribute("BoundaryKind", style.Kind)
+	m:SetAttribute("BoundaryKind", kind)
 	m:SetAttribute("ZoneId", ctx.Zone.Id)
 	eachPart(m, function(p)
 		p.CanCollide = false
 		p.CanTouch = false
 		p.CanQuery = false
+		p.CastShadow = false
 	end)
+	m.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+	Kit.Obstacle(ctx, m, "Boundary")
 	return m
 end
 
@@ -343,6 +747,7 @@ function Kit.ZoneArch(P: any, parent: Instance, center: Vector3, width: number, 
 		end
 	end
 	m.PrimaryPart = first
+	m.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	m:SetAttribute("Boundary", true)
 	m:SetAttribute("BoundaryKind", "Arch")
 	return m
@@ -382,11 +787,12 @@ function Kit.Particles(ctx: Ctx, o: ParticleOpts): ParticleEmitter
 	local P = ctx.Props
 	local half = o.HalfWidth or Kit.FieldHalf
 	local z0, z1 = ctx.StartZ, ctx.MaxZ
-	local vol = P.Part({ Parent = ctx.Folder.Parent :: Instance, Name = "ParticleVolume_" .. o.Name,
+	local vol = P.Part({ Parent = ctx.ZoneFolder, Name = "ParticleVolume_" .. o.Name,
 		Size = Vector3.new(half * 2, math.max(1, o.Y1 - o.Y0), z1 - z0),
 		CFrame = CFrame.new(Kit.CenterX, (o.Y0 + o.Y1) / 2, (z0 + z1) / 2),
 		Transparency = 1, Collide = false, Query = false, Shadow = false })
 	vol:SetAttribute("ParticleVolume", true)
+	vol.CastShadow = false
 	local e = Instance.new("ParticleEmitter")
 	e.Name = o.Name
 	e.Shape = Enum.ParticleEmitterShape.Box

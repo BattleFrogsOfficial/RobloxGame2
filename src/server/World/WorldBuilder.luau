@@ -14,7 +14,8 @@ local WorldBuilder = {}
 -- Remove the default template Baseplate / SpawnLocation (they overlap the map at Y = 0).
 WorldBuilder.RemoveTemplateParts = true
 
-WorldBuilder.Steps = { "Outskirts", "Yards", "Street", "Plaza", "Platform", "ThrowLine", "Field", "Boundaries", "Walls" }
+WorldBuilder.Steps = { "Outskirts", "Yards", "Street", "Plaza", "Platform", "ThrowLine", "Cliff", "Field", "Boundaries",
+	"Walls" }
 -- step names to skip (the headless checker uses this for --no-field)
 WorldBuilder.SkipSteps = {} :: { [string]: boolean }
 -- run WorldCheck after building and warn every violation

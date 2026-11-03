@@ -1,13 +1,14 @@
 --!strict
--- Park (100-250): leafy trees, benches, lamp posts, a duck pond, a fountain, bushes and picnic blankets along
--- paved paths. Landmark: a clock tower (faces without numerals) at the east edge.
+-- Park (100-250): leafy-grass lawn crossed by paved paths, daisies, dark tufts, fallen leaves and pebbles over
+-- the whole plot; round trees, benches, lamp posts, bushes, a duck pond, a fountain, picnic blankets and
+-- planters. Boundary: a clipped hedge with blossoms across the field. Landmark: a clock tower (no numerals, east).
 local Kit = require((script.Parent :: Instance):WaitForChild("Kit")) :: any
 
 local rgb = Color3.fromRGB
 
 local function clockTower(ctx: any, base: Vector3): Model
 	local P = ctx.Props
-	local m = P.Model(ctx.Folder.Parent, "ClockTower")
+	local m = P.Model(ctx.ZoneFolder, "ClockTower")
 	local stone, trim, roof = rgb(236, 222, 196), rgb(170, 120, 80), rgb(70, 120, 170)
 	P.Block(m, "Plinth", Vector3.new(18, 4, 18), CFrame.new(base + Vector3.new(0, 2, 0)), trim)
 	P.Block(m, "Shaft", Vector3.new(13, 44, 13), CFrame.new(base + Vector3.new(0, 26, 0)), stone)
@@ -32,95 +33,102 @@ local function clockTower(ctx: any, base: Vector3): Model
 	return m
 end
 
-local function fountain(ctx: any, pos: Vector3)
+local function fountain(ctx: any, m: Model, pos: Vector3)
 	local P = ctx.Props
-	local m = P.Model(ctx.Folder, "Fountain")
 	local stone, water = rgb(225, 220, 210), rgb(90, 190, 255)
-	P.Cylinder(m, "Basin", pos, 1.6, 16, stone)
-	P.Cylinder(m, "Water", pos + Vector3.new(0, 1.6, 0), 0.1, 14.5, water, Enum.Material.Glass)
-	P.Cylinder(m, "Column", pos, 6, 2, stone)
-	P.Cylinder(m, "Bowl", pos + Vector3.new(0, 6, 0), 1, 7, stone)
-	local top = P.Ball(m, "Spout", pos + Vector3.new(0, 7.6, 0), 1.6, water, Enum.Material.Glass)
+	P.Cylinder(m, "Basin", pos, 1.6, 14, stone)
+	P.Cylinder(m, "Water", pos + Vector3.new(0, 1.6, 0), 0.1, 12.5, water, Enum.Material.Glass)
+	P.Cylinder(m, "Column", pos, 5, 2, stone)
+	P.Cylinder(m, "Bowl", pos + Vector3.new(0, 5, 0), 1, 6, stone)
+	local top = P.Ball(m, "Spout", pos + Vector3.new(0, 6.6, 0), 1.6, water, Enum.Material.Glass)
 	local e = Instance.new("ParticleEmitter")
 	e.Name = "Jet"
 	e.Texture = Kit.Textures.Soft
 	e.Rate = 14
 	e.Lifetime = NumberRange.new(0.9, 1.2)
-	e.Speed = NumberRange.new(9, 12)
+	e.Speed = NumberRange.new(8, 10)
 	e.SpreadAngle = Vector2.new(12, 12)
 	e.Acceleration = Vector3.new(0, -26, 0)
 	e.Size = NumberSequence.new(0.8, 1.6)
 	e.Color = ColorSequence.new(rgb(210, 240, 255))
 	e.Transparency = NumberSequence.new(0.3, 1)
 	e.Parent = top
-	Kit.Decor(ctx, m)
 end
 
-local function pond(ctx: any, pos: Vector3)
+local function pond(ctx: any, m: Model, pos: Vector3)
 	local P = ctx.Props
-	local m = P.Model(ctx.Folder, "Pond")
-	P.Ellipsoid(m, "Rim", CFrame.new(pos + Vector3.new(0, 0.1, 0)), Vector3.new(30, 0.5, 40), rgb(200, 190, 160))
-	P.Ellipsoid(m, "Water", CFrame.new(pos + Vector3.new(0, 0.25, 0)), Vector3.new(26, 0.5, 36), ctx.Decor.Pond, Enum.Material.Glass)
-	for _, o in { Vector3.new(-5, 0, -8), Vector3.new(4, 0, 6), Vector3.new(6, 0, -3) } do
+	P.Ellipsoid(m, "Rim", CFrame.new(pos + Vector3.new(0, 0.1, 0)), Vector3.new(22, 0.5, 30), rgb(200, 190, 160))
+	P.Ellipsoid(m, "Water", CFrame.new(pos + Vector3.new(0, 0.25, 0)), Vector3.new(19, 0.5, 27), ctx.Decor.Pond, Enum.Material.Glass)
+	for _, o in { Vector3.new(-4, 0, -6), Vector3.new(3, 0, 5), Vector3.new(5, 0, -2) } do
 		P.Part({ Parent = m, Name = "LilyPad", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.15, 3, 3),
-			CFrame = CFrame.new(pos + o + Vector3.new(0, 0.55, 0)) * CFrame.Angles(0, 0, math.pi / 2), Color = rgb(70, 170, 70),
-			Shadow = false })
+			CFrame = CFrame.new(pos + o + Vector3.new(0, 0.55, 0)) * CFrame.Angles(0, 0, math.pi / 2), Color = rgb(70, 170, 70) })
 	end
-	for _, o in { Vector3.new(-2, 0, 2), Vector3.new(1, 0, -10) } do
+	for _, o in { Vector3.new(-2, 0, 2), Vector3.new(1, 0, -8) } do
 		local p = pos + o + Vector3.new(0, 0.5, 0)
 		P.Ellipsoid(m, "Duck", CFrame.new(p + Vector3.new(0, 0.6, 0)), Vector3.new(1.6, 1.2, 2.4), rgb(255, 255, 255))
 		P.Ball(m, "DuckHead", p + Vector3.new(0, 1.6, -0.9), 0.9, rgb(255, 255, 255))
 	end
-	Kit.Decor(ctx, m, true)
+end
+
+local function picnic(ctx: any, m: Model, pos: Vector3, i: number)
+	local P = ctx.Props
+	P.Block(m, "Blanket", Vector3.new(6, 0.1, 6), CFrame.new(pos + Vector3.new(0, 0.05, 0)) * Kit.Yaw(ctx),
+		if i % 2 == 1 then rgb(230, 70, 70) else rgb(80, 160, 240))
+	P.Block(m, "Basket", Vector3.new(1.6, 1.2, 1.2), CFrame.new(pos + Vector3.new(1, 0.6, 1)), rgb(190, 140, 80))
+end
+
+local function planter(ctx: any, m: Model, pos: Vector3)
+	local P = ctx.Props
+	P.Block(m, "Box", Vector3.new(4, 1.6, 4), CFrame.new(pos + Vector3.new(0, 0.8, 0)), rgb(170, 110, 60), Enum.Material.Wood)
+	P.Ellipsoid(m, "Bloom", CFrame.new(pos + Vector3.new(0, 2, 0)), Vector3.new(3.6, 1.6, 3.6), rgb(255, 150, 190))
 end
 
 return function(ctx: any)
-	local P, D, f, Y = ctx.Props, ctx.Decor, ctx.Folder, ctx.Y
+	local P, D, Y = ctx.Props, ctx.Decor, ctx.Y
 	local rng = ctx.Rng
+	local g = ctx.GroundModel
 
 	-- landmark (east edge)
 	local lz = (ctx.MinZ + ctx.MaxZ) / 2 + 10
 	clockTower(ctx, Vector3.new(Kit.CenterX + 137, Y, lz))
-	Kit.Reserve(ctx, Kit.CenterX + 128, lz, 13)
 
-	-- paved paths running down each outer band (flat dressing)
-	for _, side in { -1, 1 } do
-		local x = Kit.CenterX + side * 88
-		Kit.Flat(P, f.Parent, "Path", x - 2.5, x + 2.5, ctx.MinZ, ctx.MaxZ, Y + 0.05, rgb(236, 214, 168))
+	-- paved paths: two running down the field and one cross path (flat dressing)
+	local path = rgb(236, 214, 168)
+	for _, x in { -84, 84 } do
+		Kit.Flat(P, g, "Path", Kit.CenterX + x - 3, Kit.CenterX + x + 3, ctx.MinZ, ctx.MaxZ, Y + 0.05, path)
 	end
+	local cz = ctx.MinZ + 95
+	Kit.Flat(P, g, "CrossPath", Kit.CenterX - Kit.FieldHalf, Kit.CenterX + Kit.FieldHalf, cz - 3, cz + 3, Y + 0.05, path)
 
-	-- fixed features: pond (east) and fountain (west), both off the 100-stud marker lines
-	local pz = ctx.MinZ + 60
-	pond(ctx, Vector3.new(Kit.CenterX + 92, Y, pz))
-	Kit.Reserve(ctx, Kit.CenterX + 92, pz, 21)
-	local fz = ctx.MinZ + 48
-	fountain(ctx, Vector3.new(Kit.CenterX - 90, Y, fz))
-	Kit.Reserve(ctx, Kit.CenterX - 90, fz, 10)
+	-- props (22)
+	Kit.PlaceAll(ctx, {
+		{ Name = "Pond", Count = 1, R = 12, Build = pond },
+		{ Name = "Fountain", Count = 1, R = 7, Build = fountain },
+		{ Name = "Tree", Count = 7, R = 7, Tall = true, Build = function(c, m, pos)
+			P.Tree(m, pos, rng:NextNumber(1, 1.3), D.Trunk, D.Leaf)
+		end },
+		{ Name = "Lamp", Count = 3, R = 1.4, Tall = true, Build = function(c, m, pos)
+			P.Lamp(m, pos, 11, D.Lamp, rgb(255, 236, 170), false)
+		end },
+		{ Name = "Bench", Count = 4, R = 4, Build = function(c, m, pos, _i, side)
+			P.Bench(m, pos, rng:NextNumber(0, math.pi * 2), D.Bench, D.Lamp)
+		end },
+		{ Name = "Picnic", Count = 2, R = 4, Build = picnic },
+		{ Name = "Bush", Count = 3, R = 3, Build = function(c, m, pos)
+			P.Bush(m, pos, rng:NextNumber(0.8, 1.2), D.Bush)
+		end },
+		{ Name = "Planter", Count = 1, R = 2, Build = planter },
+	})
 
-	-- trees (8)
-	for _, s in Kit.Band(ctx, 8, 16, 7) do
-		Kit.Decor(ctx, P.Tree(f, s.Pos, rng:NextNumber(1, 1.3), D.Trunk, D.Leaf))
-	end
-	-- benches (4), facing the lane
-	for _, s in Kit.Band(ctx, 4, 20, 5) do
-		Kit.Decor(ctx, P.Bench(f, s.Pos, if s.Side > 0 then math.pi / 2 else -math.pi / 2, D.Bench, D.Lamp), true)
-	end
-	-- lamp posts (4)
-	for _, s in Kit.Band(ctx, 4, 24, 2) do
-		Kit.Decor(ctx, P.Lamp(f, s.Pos, 11, D.Lamp, rgb(255, 236, 170), false), true)
-	end
-	-- bushes (4)
-	for _, s in Kit.Band(ctx, 4, 9, 4) do
-		Kit.Decor(ctx, P.Bush(f, s.Pos, rng:NextNumber(0.8, 1.2), D.Bush), true)
-	end
-	-- picnic blankets (2) with a basket
-	for i, s in Kit.Band(ctx, 2, 20, 4) do
-		local m = P.Model(f, "Picnic")
-		Kit.Flat(P, m, "Blanket", s.Pos.X - 3, s.Pos.X + 3, s.Pos.Z - 3, s.Pos.Z + 3, Y + 0.08,
-			if i == 1 then rgb(230, 70, 70) else rgb(80, 160, 240))
-		P.Block(m, "Basket", Vector3.new(1.6, 1.2, 1.2), CFrame.new(s.Pos + Vector3.new(1, 0.6, 1)), rgb(190, 140, 80))
-		Kit.Decor(ctx, m, true)
-	end
+	-- ground cover: daisies, dark tufts, fallen leaves, pebbles
+	local grass = ctx.Ground
+	Kit.Cover(ctx, { Count = 240, Mode = "Random", Items = {
+		Kit.Weight(Kit.Bead({ rgb(255, 255, 255), rgb(255, 250, 200) }, 0.7, 0.9, 0.1), 3),
+		Kit.Weight(Kit.Spike({ grass:Lerp(Color3.new(0, 0, 0), 0.3), grass:Lerp(rgb(30, 90, 40), 0.5) }, 1, 1.6,
+			Enum.Material.LeafyGrass), 4),
+		Kit.Weight(Kit.Chip({ rgb(240, 180, 60), rgb(220, 120, 50), rgb(200, 200, 70) }, 1, 0.7, 0.08), 2),
+		Kit.Weight(Kit.Dome({ rgb(180, 176, 168), rgb(150, 146, 140) }, 0.7, 1.1), 1),
+	} })
 
 	-- drifting leaves (light, cheap)
 	Kit.Particles(ctx, { Name = "Leaves", Y0 = 6, Y1 = 18, Rate = 4, Lifetime = { 6, 9 }, Speed = { 1, 2 },

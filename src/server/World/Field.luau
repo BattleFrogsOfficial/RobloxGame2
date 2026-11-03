@@ -1,9 +1,14 @@
 --!strict
 -- The fetch-field stem: 9 ZoneBand floors by distance band (Zones.luau), each with its own ground material
--- and colour, themed apron strips outside the field, a zone-name arch + a themed gate (Kit.Gate) at each band
--- start, distance lines + blank DistanceMarker boards every 100 studs, and a backdrop at the far end. Each zone's
--- decorations, landmark and particles come from Zones/<ZoneId>.luau. The centre lane (|x| <= Kit.LaneHalf)
--- only ever holds flat (<= 1 stud), non-colliding dressing; nothing at all crosses it above that.
+-- and colour, themed apron strips outside the field, a side-only zone-name gantry (Kit.ZoneArch) plus a low
+-- full-width boundary line (Kit.Boundary) at each band start, distance lines + blank DistanceMarker boards every
+-- 100 studs, and a backdrop at the far end. Each zone's plot is FILLED by Zones/<ZoneId>.luau: ground cover over
+-- the whole plot, 20-40 spaced props and one landmark (see Kit.luau for the rules). Nothing in the field
+-- collides except the ZoneBand floors, and nothing but the ZoneBand answers queries in the landing area.
+--
+-- Streaming (Workspace.StreamingEnabled, default.project.json): each zone's Ground model, arch, boundary line
+-- and landmark are Persistent (the platform always sees the whole field's silhouette); props and ground-cover
+-- cells are Atomic models that stream in around the player / the cutscene's RequestStreamAroundAsync.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -52,13 +57,13 @@ export type GroundStyle = { Material: Enum.Material, Color: Color3, Trim: Color3
 	Gate: any }
 Field.Ground = {
 	Backyard = { Material = M.Grass, Color = rgb(112, 186, 70), Trim = rgb(255, 255, 255),
-		Gate = { Kind = "Picket", Color = rgb(255, 255, 255), Trim = rgb(255, 255, 255), Height = 4 } },
+		Gate = { Kind = "Picket", Color = rgb(255, 255, 255), Trim = rgb(255, 255, 255), Height = 3 } },
 	Park = { Material = M.LeafyGrass, Color = rgb(72, 150, 92), Trim = rgb(236, 214, 168),
-		Gate = { Kind = "Hedge", Color = rgb(46, 128, 60), Trim = rgb(255, 150, 190), Material = M.LeafyGrass, Height = 5 } },
+		Gate = { Kind = "Hedge", Color = rgb(46, 128, 60), Trim = rgb(255, 150, 190), Material = M.LeafyGrass, Height = 3 } },
 	Beach = { Material = M.Sand, Color = rgb(238, 214, 156), Trim = rgb(70, 170, 230),
-		Gate = { Kind = "Dune", Color = rgb(224, 196, 136), Trim = rgb(120, 190, 90), Material = M.Sand, Height = 3.5 } },
+		Gate = { Kind = "Dune", Color = rgb(224, 196, 136), Trim = rgb(120, 190, 90), Material = M.Sand, Height = 3 } },
 	Farm = { Material = M.Ground, Color = rgb(150, 112, 70), Trim = rgb(240, 200, 90),
-		Gate = { Kind = "Rail", Color = rgb(170, 120, 70), Trim = rgb(200, 60, 50), Material = M.Wood, Height = 4.5 } },
+		Gate = { Kind = "Rail", Color = rgb(170, 120, 70), Trim = rgb(200, 60, 50), Material = M.Wood, Height = 4 } },
 	Forest = { Material = M.Grass, Color = rgb(52, 98, 50), Trim = rgb(120, 84, 50),
 		Gate = { Kind = "Logs", Color = rgb(120, 82, 48), Trim = rgb(90, 62, 38), Material = M.Wood, Height = 4 } },
 	SnowyPeaks = { Material = M.Snow, Color = rgb(238, 245, 252), Trim = rgb(140, 190, 235),
@@ -71,6 +76,15 @@ Field.Ground = {
 	MythicMeadow = { Material = M.Glacier, Color = rgb(196, 168, 240), Trim = rgb(255, 215, 120), TrimMaterial = M.Neon,
 		Gate = { Kind = "Crystal", Color = rgb(255, 130, 230), Trim = rgb(140, 220, 255), Material = M.Neon, Height = 7 } },
 } :: { [string]: GroundStyle }
+
+-- Same layout on every server: the per-zone seed comes from the zone Id.
+function Field.Seed(id: string): number
+	local h = 7
+	for i = 1, #id do
+		h = (h * 131 + string.byte(id, i)) % 2147483629
+	end
+	return h
+end
 
 local function buildBand(parent: Instance, zone: any)
 	local F = Layout.Field
@@ -92,20 +106,12 @@ local function buildBand(parent: Instance, zone: any)
 	local apron = (if g then g.Color else zone.Theme.Ground):Lerp(Color3.new(0, 0, 0), 0.12)
 	Props.Slab(parent, "ApronW", Kit.CenterX - Kit.ApronHalf, F.MinX, z0, z1, Y, 1, apron, nil, false)
 	Props.Slab(parent, "ApronE", F.MaxX, Kit.CenterX + Kit.ApronHalf, z0, z1, Y, 1, apron, nil, false)
-	-- accent stripes marking the clear centre lane edges (decal-thin, non-colliding)
-	for _, side in { -1, 1 } do
-		local x = Kit.CenterX + side * Kit.LaneHalf
-		local edge = Props.Slab(parent, "LaneEdge", x - 0.5, x + 0.5,
-			math.max(z0, Layout.ThrowLine.Z + ThrowLine.WallOffset + 1), z1, Y + 0.05, 0.05,
-			if g then g.Trim else zone.Theme.Accent, if g and g.TrimMaterial then g.TrimMaterial else nil, false)
-		edge.CanQuery = false
-		edge.CastShadow = false
-	end
 	return band
 end
 
-local function buildMarkers(parent: Instance)
+local function buildMarkers(parent: Instance): { any }
 	local folder = Props.Folder(parent, "DistanceMarkers")
+	local boxes = {}
 	local F = Layout.Field
 	local maxD = Layout.Field.MaxZ - Layout.ThrowLine.Z
 	local d = Kit.MarkerEvery
@@ -116,14 +122,28 @@ local function buildMarkers(parent: Instance)
 			local board = Props.Sign(folder, "Marker" .. d, Vector3.new(Kit.CenterX + side * Kit.MarkerX, Y, z),
 				Vector3.new(0, 0, -1), Vector3.new(10, 5, 0.8), 2.5, T.MarkerBoard, T.MarkerPost, nil) -- no world text
 			Props.Tag(board, "DistanceMarker", { Distance = d })
+			local model = board.Parent :: Model
+			model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+			for _, p in model:GetDescendants() do
+				if p:IsA("BasePart") then
+					p.CanCollide = false
+					p.CanQuery = false
+				end
+			end
+			local bx = Kit.Bounds(model)
+			if bx then
+				table.insert(boxes, bx)
+			end
 		end
 		d += Kit.MarkerEvery
 	end
+	return boxes
 end
 
 local function buildEnd(parent: Instance)
 	local F = Layout.Field
 	local m = Props.Model(parent, "FieldEnd")
+	m.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	local z = F.MaxZ
 	local width = Kit.BackdropHalf * 2
 	Props.Block(m, "Backdrop", Vector3.new(width, 36, 4), CFrame.new(Kit.CenterX, Y + 18, z + 2), T.EndWall)
@@ -135,33 +155,62 @@ end
 function Field.Build(parent: Instance)
 	local folder = Props.Folder(parent, "Field")
 	local wallZ = Layout.ThrowLine.Z + ThrowLine.WallOffset
-	for _, zone in ZonesCfg do
+	local markerBoxes = buildMarkers(folder)
+	for zi, zone in ZonesCfg do
 		local zf = Props.Folder(folder, zone.Id)
-		buildBand(zf, zone)
+		local ground = Props.Model(zf, "Ground")
+		ground.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+		buildBand(ground, zone)
 
 		local archZ = Field.ArchZ(zone)
 		local arch = Kit.ZoneArch(Props, zf, Vector3.new(Kit.CenterX, Y, archZ), Kit.ArchX * 2, Field.ArchHeight,
 			T.ArchPillar, T.ArchBoard, zone.Theme.Accent, string.upper(zone.Name))
 		arch:SetAttribute("ZoneId", zone.Id)
 
+		local z0, z1 = zoneStartZ(zone), zoneEndZ(zone)
 		local ctx = {
 			Zone = zone,
-			Folder = Props.Folder(zf, "Decor"),
-			MinZ = math.max(archZ + Kit.DecorStartOffset, wallZ + 4),
-			MaxZ = zoneEndZ(zone),
-			StartZ = math.max(zoneStartZ(zone), wallZ),
+			ZoneFolder = zf,
+			Folder = Props.Folder(zf, "Props"),
+			CoverFolder = Props.Folder(zf, "Cover"),
+			GroundModel = ground,
+			MinZ = math.max(z0, wallZ + 1),
+			MaxZ = z1,
+			StartZ = math.max(z0, wallZ),
 			ArchZ = archZ,
-			Rng = Random.new(1000 + zone.Order * 7919),
+			BoundaryZ = archZ + Kit.BoundaryOffset,
+			Rng = Random.new(Field.Seed(zone.Id)),
 			Decor = WorldTheme.ZoneDecor[zone.Id],
 			Ground = if Field.Ground[zone.Id] then Field.Ground[zone.Id].Color else zone.Theme.Ground,
 			Accent = zone.Theme.Accent,
 			Props = Props,
 			Y = Y,
-			Taken = {}, -- footprints already placed in this zone (Kit.pick keeps later items clear)
+			Boxes = {},
+			CoverCells = {},
+			CoverItems = 0,
+			PropCount = 0,
 		}
+		-- fixed obstacles props keep clear of: marker signs, arch pillars, the next zone's boundary / the end wall
+		for _, b in markerBoxes do
+			if b.z1 > z0 - 10 and b.z0 < z1 + 10 then
+				Kit.Obstacle(ctx, b, "DistanceMarker")
+			end
+		end
+		for _, p in arch:GetDescendants() do
+			if p:IsA("BasePart") then
+				local pb = Kit.PartBox(p :: BasePart)
+				if pb.y0 <= Y + 1 then
+					Kit.Obstacle(ctx, pb, "ArchPillar")
+				end
+			end
+		end
+		local nextZ = if zi < #ZonesCfg then z1 + Kit.BoundaryOffset - 5 else z1
+		Kit.Obstacle(ctx, { x0 = Layout.Field.MinX, x1 = Layout.Field.MaxX, y0 = Y, y1 = Y + 8, z0 = nextZ, z1 = nextZ + 10 },
+			"NextBoundary")
+
 		local style = Field.Ground[zone.Id]
 		if style then
-			Kit.Gate(ctx, style.Gate)
+			Kit.Boundary(ctx, style.Gate)
 		end
 
 		local decorModule = ZoneFolder:FindFirstChild(zone.Id)
@@ -174,8 +223,9 @@ function Field.Build(parent: Instance)
 				warn(("[World] zone decorator %s failed: %s"):format(zone.Id, tostring(err)))
 			end
 		end
+		zf:SetAttribute("CoverItems", ctx.CoverItems)
+		zf:SetAttribute("PropCount", ctx.PropCount)
 	end
-	buildMarkers(folder)
 	buildEnd(folder)
 end
 

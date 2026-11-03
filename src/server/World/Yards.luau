@@ -13,7 +13,7 @@ local Props = require((script.Parent :: Instance):WaitForChild("Props")) :: any
 
 local Yards = {}
 
-local Y = Layout.GroundY
+local Y = Layout.HubY -- on the hub plateau
 local T = WorldTheme.Yard
 
 -- Yard-local design constants (offsets from the yard centre; all inside the 52 x 100 plot).

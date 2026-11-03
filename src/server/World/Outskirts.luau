@@ -1,6 +1,8 @@
 --!strict
--- Everything players see but cannot reach: the grass underlay beneath the whole map, a treeline behind
--- the yards, tree clumps beside the plaza, and a few chunky clouds. The tall scenery walls are Walls.luau.
+-- Everything players see but cannot reach: the ground beneath the whole map (the hub PLATEAU, a solid block
+-- from below the field up to just under Layout.HubY, behind the cliff; and the field-level underlay in front of
+-- it), a treeline behind the yards, tree clumps beside the plaza, and a few chunky clouds. The plateau's front
+-- face is hidden by the stepped rock of Cliff.luau; the tall scenery walls are Walls.luau.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -11,10 +13,15 @@ local Props = require((script.Parent :: Instance):WaitForChild("Props")) :: any
 
 local Outskirts = {}
 
-local Y = Layout.GroundY
+local Y = Layout.HubY -- the hub decor below stands on the plateau
 local T = WorldTheme.Outskirts
 
-Outskirts.Underlay = { MinX = -720, MaxX = 720, MinZ = -520, MaxZ = Layout.Field.MaxZ + 240, TopY = Y - 0.4 }
+-- field-level ground (in front of the cliff, under the zone bands / aprons / walls)
+Outskirts.Underlay = { MinX = -720, MaxX = 720, MinZ = Layout.ThrowLine.Z - 3, MaxZ = Layout.Field.MaxZ + 240,
+	TopY = Layout.GroundY - 0.4 }
+-- the plateau block: top just under the hub floors, front face set back behind the cliff slabs (Cliff.luau)
+Outskirts.Plateau = { MinX = -720, MaxX = 720, MinZ = -520, MaxZ = Layout.ThrowLine.Z - 3, TopY = Layout.HubY - 0.4,
+	BottomY = Layout.GroundY - 2.4 }
 
 function Outskirts.Build(parent: Instance)
 	local f = Props.Folder(parent, "Outskirts")
@@ -26,6 +33,10 @@ function Outskirts.Build(parent: Instance)
 		Props.Slab(f, "Underlay", u.MinX, u.MaxX, z, z1, u.TopY, 2, T.Ground, nil, true)
 		z = z1
 	end
+	local pl = Outskirts.Plateau
+	local plateau = Props.Slab(f, "Plateau", pl.MinX, pl.MaxX, pl.MinZ, pl.MaxZ, pl.TopY, pl.TopY - pl.BottomY, T.Ground,
+		nil, true)
+	plateau:SetAttribute("SurfaceY", pl.TopY)
 
 	local rng = Random.new(4242)
 	local backZ = Layout.Yards.CenterZ - Layout.Yards.Size.Z / 2
@@ -53,7 +64,7 @@ function Outskirts.Build(parent: Instance)
 		-- beside the landing lane (|x| >= 62 incl. puffs) and inside the scenery walls
 		local cx = (if rng:NextNumber() < 0.5 then -1 else 1) * rng:NextNumber(112, 170)
 		local cz = rng:NextNumber(-150, Layout.Field.MaxZ)
-		local cy = rng:NextNumber(150, 230)
+		local cy = Layout.HubY + rng:NextNumber(110, 190)
 		local s = rng:NextNumber(0.8, 1.6)
 		Props.Ellipsoid(f, "Cloud", CFrame.new(cx, cy, cz), Vector3.new(60, 18, 36) * s, Color3.new(1, 1, 1))
 		Props.Ellipsoid(f, "Cloud", CFrame.new(cx + 18 * s, cy + 6 * s, cz), Vector3.new(36, 20, 30) * s, Color3.new(1, 1, 1))

@@ -9,6 +9,10 @@
 --     lerps toward the sky colour so the silhouette melts into the atmosphere.
 --   * Colours come from the zone the chunk borders (Zones.luau Theme Ground/Accent); the crossbar
 --     (yards / street / plaza) gets green hedge tiers. Materials from WorldTheme.Walls.
+--   * Two levels: every chunk beside / behind the hub (world Z < Layout.ThrowLine.Z) stands on the plateau
+--     (Layout.HubY); every chunk beside / past the field stands on the field (Layout.GroundY). The side runs are
+--     cut exactly at the throw line so no chunk straddles the drop; the stepped rock of Cliff.luau runs from
+--     under the west wall to under the east wall along that line, so cliff and walls meet with no gaps.
 --   * Pure scenery: CanCollide / CanQuery / CanTouch / CastShadow all off (never blocks the ball, the
 --     camera, raycasts, or throws long shadows over the field). Players are kept in by Boundaries.luau.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -83,9 +87,15 @@ local function part(f: Instance, name: string, size: Vector3, cf: CFrame, color:
 		Collide = false, Query = false, Shadow = false })
 end
 
+-- Ground level a wall chunk stands on: the plateau beside / behind the hub, the field beyond the throw line.
+function Walls.BaseY(z: number): number
+	return if z < Layout.ThrowLine.Z then Layout.HubY else Layout.GroundY
+end
+
 -- One run of wall: from `origin` along unit `u` for `length` studs; `n` = outward unit (away from the map).
+-- `breaks` (distances along the run) are never straddled by a chunk: a chunk ends exactly on a break.
 local function buildRun(f: Instance, name: string, origin: Vector3, u: Vector3, n: Vector3, length: number,
-	rng: Random, paletteAt: (Vector3) -> Palette, tall: number)
+	rng: Random, paletteAt: (Vector3) -> Palette, tall: number, breaks: { number }?)
 	local run = Props.Folder(f, name)
 	local t = 0
 	local k = 0
@@ -94,8 +104,14 @@ local function buildRun(f: Instance, name: string, origin: Vector3, u: Vector3, 
 		local mid0 = origin + u * t
 		local far = math.abs(mid0.Z) > 900
 		local w = math.min(if far then rng:NextNumber(70, 110) else rng:NextNumber(38, 68), length - t + 4)
+		for _, b in breaks or {} do
+			if t < b - 0.01 and t + w > b then
+				w = b - t
+			end
+		end
 		local center = origin + u * (t + w / 2)
 		local pal = paletteAt(center)
+		local groundY = Walls.BaseY(center.Z)
 		local yaw = math.rad(rng:NextNumber(-4, 4))
 		local ww = w + 6 -- overlap neighbours so the face never shows gaps
 
@@ -103,8 +119,8 @@ local function buildRun(f: Instance, name: string, origin: Vector3, u: Vector3, 
 		local function tier(tname: string, inner: number, depth: number, height: number, color: Color3, bottom: number?)
 			local b = bottom or 0
 			local p = center + n * (inner + depth / 2)
-			local cf = CFrame.lookAt(Vector3.new(p.X, Layout.GroundY + b + height / 2, p.Z),
-				Vector3.new(p.X, Layout.GroundY + b + height / 2, p.Z) + n) * CFrame.Angles(0, yaw, 0)
+			local cf = CFrame.lookAt(Vector3.new(p.X, groundY + b + height / 2, p.Z),
+				Vector3.new(p.X, groundY + b + height / 2, p.Z) + n) * CFrame.Angles(0, yaw, 0)
 			return part(run, tname, Vector3.new(ww, height, depth), cf, color, pal.Material)
 		end
 
@@ -131,8 +147,8 @@ local function buildRun(f: Instance, name: string, origin: Vector3, u: Vector3, 
 			local sh = rng:NextNumber(12, 22)
 			local sd = rng:NextNumber(8, 12)
 			local p = center + n * (base - sd / 2 + 1)
-			local cf = CFrame.lookAt(Vector3.new(p.X, Layout.GroundY + sh / 2, p.Z),
-				Vector3.new(p.X, Layout.GroundY + sh / 2, p.Z) - n) * CFrame.Angles(0, -yaw, 0)
+			local cf = CFrame.lookAt(Vector3.new(p.X, groundY + sh / 2, p.Z),
+				Vector3.new(p.X, groundY + sh / 2, p.Z) - n) * CFrame.Angles(0, -yaw, 0)
 			local wedge = Props.Wedge({ Parent = run, Name = "Scree", Size = Vector3.new(w * 0.8, sh, sd), CFrame = cf,
 				Color = pal.Base:Lerp(BLACK, 0.1), Material = pal.Material, Collide = false, Query = false, Shadow = false })
 			wedge.CanTouch = false
@@ -153,6 +169,7 @@ function Walls.Build(parent: Instance)
 	local D = Walls.Depth
 	local backZ, farZ = Walls.BackZ, Walls.FarZ
 	local sideLen = farZ - backZ + 2 * D -- sides run past both ends so the corners close
+	local sideBreaks = { Layout.ThrowLine.Z - (backZ - D) } -- the side runs split exactly at the cliff
 
 	local function crossbar(_: Vector3): Palette
 		return CROSSBAR
@@ -162,19 +179,19 @@ function Walls.Build(parent: Instance)
 		return lastPal
 	end
 
-	-- behind the yards (outward = -Z); spans the corners
+	-- behind the yards (outward = -Z, on the plateau); spans the corners
 	buildRun(f, "Back", Vector3.new(-X - D, 0, backZ), Vector3.new(1, 0, 0), Vector3.new(0, 0, -1), 2 * (X + D), rng,
 		crossbar, 1)
 	-- the two long sides (outward = -X / +X), colour follows the zone they border
 	buildRun(f, "West", Vector3.new(-X, 0, backZ - D), Vector3.new(0, 0, 1), Vector3.new(-1, 0, 0), sideLen, rng,
 		function(p: Vector3): Palette
 			return paletteAtZ(p.Z)
-		end, 1)
+		end, 1, sideBreaks)
 	buildRun(f, "East", Vector3.new(X, 0, backZ - D), Vector3.new(0, 0, 1), Vector3.new(1, 0, 0), sideLen, rng,
 		function(p: Vector3): Palette
 			return paletteAtZ(p.Z)
-		end, 1)
-	-- far end behind Mythic Meadow (outward = +Z), a little taller so it reads across 3,200 studs of haze
+		end, 1, sideBreaks)
+	-- far end behind Mythic Meadow (outward = +Z, on the field), a little taller so it reads across 3,200 studs of haze
 	buildRun(f, "Far", Vector3.new(-X - D, 0, farZ), Vector3.new(1, 0, 0), Vector3.new(0, 0, 1), 2 * (X + D), rng,
 		farEnd, 1.25)
 end

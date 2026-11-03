@@ -47,15 +47,19 @@ Game.Throw = {
 	MinSecondsBetweenThrows = 2, -- hard floor measured release -> next ChargeBegin; also the gap after a turn ends
 	Scatter = 0.02, -- distance * (1 + U(-Scatter, Scatter))
 	MinDistance = 5,
-	LaunchHeight = 4, -- ball leaves at Layout.Platform.ThrowSpot.Y + this (44: above the deck's 43.2 railing caps)
+	-- The ball leaves at the deck surface (Layout.ThrowLine.Y = Layout.HubY = 40) + this = 44, above the railing caps
+	-- (43.35), and lands on the field at Layout.GroundY: Util/BallFlight adds that 44-stud drop to the flight time.
+	LaunchHeight = 4,
 	LateralScatter = 40, -- landing X = 0.5 x platform X + 0.5 x U(-n, n), clamped into the clear centre lane (|x| <= 56)
 }
 
 -- The one shared throwing platform (Layout.Platform) and its FIFO queue (ThrowService).
--- On the platform = XZ distance to Layout.Platform.ThrowSpot <= StandRadius and Y >= Layout.ThrowLine.Y - YTolerance.
+-- On the platform = root inside the deck rectangle (Layout.Platform Center/Size) grown by EdgeMargin, and
+-- Y >= Layout.ThrowLine.Y - YTolerance. The deck is flush with the plaza, so the rectangle (not a radius) decides.
 Game.Platform = {
 	SampleInterval = 0.25, -- presence sampling (~4x per second)
 	YTolerance = 4,
+	EdgeMargin = 1.5,
 	TurnStartSeconds = 15, -- the player at position 1 must ChargeBegin within this or goes to the back
 }
 
@@ -91,6 +95,10 @@ Game.RateLimits = {
 	RequestState = { 0.2, 2 },
 	CutsceneFinished = { 2, 4 },
 }
+
+-- Fall rescue (CharacterService): a character whose root drops this far below Layout.HubY (e.g. glitched over the
+-- cliff edge onto the field) is put back on a PlazaSpawn.
+Game.FallRescueDepth = 12
 
 Game.AfkSeconds = 15 * 60 -- training stops crediting after this long without movement
 

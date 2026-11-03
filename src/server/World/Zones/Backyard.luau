@@ -1,36 +1,32 @@
 --!strict
--- Backyard (0-100): mown lawn, white picket fences along the lane edges, kennels, bushes, sprinklers,
--- garden gnome-like figures, flower beds and toys. Landmark: a stacked doghouse tower at the west edge.
+-- Backyard (0-100): the tidy home lawn. Mown stripes across the whole plot, neat rows of flowers / clover /
+-- tufts, and a few spaced props: kennels, round trees, bushes, flower beds, gnomes, toys, a sprinkler, a sandpit
+-- and a birdbath. Boundary: a white picket fence across the field. Landmark: a stacked doghouse tower (west).
 local Kit = require((script.Parent :: Instance):WaitForChild("Kit")) :: any
 
 local rgb = Color3.fromRGB
 
-local function kennel(ctx: any, pos: Vector3, side: number, scale: number)
+local function kennel(ctx: any, m: Model, pos: Vector3, _i: number, side: number)
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder, "Kennel")
-	local cf = CFrame.new(pos) * Kit.FaceLane(side)
+	local scale = ctx.Rng:NextNumber(0.85, 1)
+	local cf = CFrame.new(pos) * Kit.FaceLane(-side)
 	P.Block(m, "Body", Vector3.new(7, 5, 7) * scale, cf * CFrame.new(0, 2.5 * scale, 0), D.House)
 	Kit.Gable(P, m, "Roof", cf * CFrame.new(0, 5 * scale, 0), 8 * scale, 8 * scale, 3 * scale, D.Roof)
 	P.Block(m, "Door", Vector3.new(3, 3.4, 0.3) * scale, cf * CFrame.new(0, 1.7 * scale, -3.55 * scale), rgb(60, 40, 30))
-	P.Block(m, "Bowl", Vector3.new(1.6, 0.6, 1.6), cf * CFrame.new(2.6 * scale, 0.3, -5 * scale), D.Toy)
-	Kit.Decor(ctx, m)
+	P.Block(m, "Bowl", Vector3.new(1.6, 0.6, 1.6), cf * CFrame.new(2.4 * scale, 0.3, -4.6 * scale), D.Toy)
 end
 
-local function gnome(ctx: any, pos: Vector3)
+local function gnome(ctx: any, m: Model, pos: Vector3)
 	local P = ctx.Props
-	local m = P.Model(ctx.Folder, "GardenGnome")
 	P.Block(m, "Body", Vector3.new(1.8, 2, 1.6), CFrame.new(pos + Vector3.new(0, 1, 0)), rgb(70, 120, 220))
 	P.Block(m, "Beard", Vector3.new(1.4, 1.2, 0.5), CFrame.new(pos + Vector3.new(0, 2.2, -0.75)), rgb(250, 250, 250))
 	P.Ball(m, "Head", pos + Vector3.new(0, 2.9, 0), 1.4, rgb(255, 210, 170))
-	P.Block(m, "HatA", Vector3.new(1.6, 0.8, 1.6), CFrame.new(pos + Vector3.new(0, 3.6, 0)), rgb(230, 50, 50))
-	P.Block(m, "HatB", Vector3.new(0.9, 1, 0.9), CFrame.new(pos + Vector3.new(0, 4.4, 0)) * CFrame.Angles(0, math.rad(45), 0),
+	P.Block(m, "Hat", Vector3.new(1.2, 1.6, 1.2), CFrame.new(pos + Vector3.new(0, 4, 0)) * CFrame.Angles(0, math.rad(45), 0),
 		rgb(230, 50, 50))
-	Kit.Decor(ctx, m, true)
 end
 
-local function sprinkler(ctx: any, pos: Vector3)
+local function sprinkler(ctx: any, m: Model, pos: Vector3)
 	local P = ctx.Props
-	local m = P.Model(ctx.Folder, "Sprinkler")
 	P.Cylinder(m, "Base", pos, 0.4, 2.4, rgb(70, 180, 90))
 	P.Cylinder(m, "Stem", pos + Vector3.new(0, 0.4, 0), 1.2, 0.5, rgb(200, 200, 210))
 	local head = P.Ball(m, "Head", pos + Vector3.new(0, 1.8, 0), 0.9, rgb(230, 230, 240))
@@ -46,13 +42,35 @@ local function sprinkler(ctx: any, pos: Vector3)
 	e.Color = ColorSequence.new(rgb(200, 235, 255))
 	e.Transparency = NumberSequence.new(0.35, 1)
 	e.Parent = head
-	Kit.Decor(ctx, m, true)
+end
+
+local function flowerBed(ctx: any, m: Model, pos: Vector3, i: number)
+	local P, D = ctx.Props, ctx.Decor
+	P.Block(m, "Soil", Vector3.new(6, 0.6, 3), CFrame.new(pos + Vector3.new(0, 0.3, 0)), rgb(140, 95, 60))
+	P.Ellipsoid(m, "Flowers", CFrame.new(pos + Vector3.new(0, 1.1, 0)), Vector3.new(5.5, 1.4, 2.4),
+		({ D.Flower, rgb(255, 220, 80), rgb(190, 120, 255) })[(i - 1) % 3 + 1])
+end
+
+local function sandpit(ctx: any, m: Model, pos: Vector3)
+	local P = ctx.Props
+	P.Block(m, "Frame", Vector3.new(9, 0.8, 9), CFrame.new(pos + Vector3.new(0, 0.4, 0)), rgb(170, 110, 60))
+	P.Block(m, "Sand", Vector3.new(7.6, 0.2, 7.6), CFrame.new(pos + Vector3.new(0, 0.85, 0)), rgb(240, 220, 160), Enum.Material.Sand)
+	P.Block(m, "Bucket", Vector3.new(1, 1.2, 1), CFrame.new(pos + Vector3.new(2, 1.5, 1.5)), rgb(80, 170, 255))
+end
+
+local function birdbath(ctx: any, m: Model, pos: Vector3)
+	local P = ctx.Props
+	local stone = rgb(225, 222, 214)
+	P.Cylinder(m, "Foot", pos, 0.6, 2.2, stone)
+	P.Cylinder(m, "Column", pos + Vector3.new(0, 0.6, 0), 2.6, 0.8, stone)
+	P.Cylinder(m, "Bowl", pos + Vector3.new(0, 3.2, 0), 0.6, 3.2, stone)
+	P.Cylinder(m, "Water", pos + Vector3.new(0, 3.8, 0), 0.05, 2.6, rgb(120, 200, 255), Enum.Material.Glass)
 end
 
 local function tower(ctx: any, base: Vector3): Model
 	-- three stacked doghouses (22 / 16 / 10 wide) with a bone on top: 47 studs
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder.Parent, "DoghouseTower")
+	local m = P.Model(ctx.ZoneFolder, "DoghouseTower")
 	local y = 0
 	local tiers = { { 22, 13, rgb(255, 196, 110) }, { 16, 10, rgb(130, 200, 255) }, { 10, 7, rgb(255, 150, 190) } }
 	for i, t in tiers do
@@ -76,73 +94,56 @@ local function tower(ctx: any, base: Vector3): Model
 end
 
 return function(ctx: any)
-	local P, D, f, Y = ctx.Props, ctx.Decor, ctx.Folder, ctx.Y
+	local P, D, Y = ctx.Props, ctx.Decor, ctx.Y
 	local rng = ctx.Rng
-	local z0, z1 = ctx.MinZ, ctx.MaxZ - 4
+	local g = ctx.GroundModel
 
-	-- landmark first so the scatter keeps clear of it
-	local lz = (ctx.MinZ + ctx.MaxZ) / 2 + 6
+	-- landmark first so everything else keeps clear of it
+	local lz = (ctx.MinZ + ctx.MaxZ) / 2 + 12
 	tower(ctx, Vector3.new(Kit.CenterX - 136, Y, lz))
-	Kit.Reserve(ctx, Kit.CenterX - 128, lz, 16)
 
-	-- mown-lawn stripes in the outer bands (flat dressing)
-	for _, side in { -1, 1 } do
-		local i = 0
-		local z = z0
-		while z < ctx.MaxZ do
-			if i % 2 == 0 then
-				local xa, xb = Kit.CenterX + side * (Kit.LaneHalf + 3), Kit.CenterX + side * Kit.DecorMaxAbsX
-				Kit.Flat(P, f.Parent, "LawnStripe", math.min(xa, xb), math.max(xa, xb), z, math.min(z + 10, ctx.MaxZ), Y + 0.04,
-					ctx.Ground:Lerp(Color3.new(1, 1, 1), 0.1))
-			end
-			z += 10
-			i += 1
+	-- mown-lawn stripes across the whole plot (flat dressing, part of the persistent ground)
+	local i = 0
+	local z = ctx.MinZ
+	while z < ctx.MaxZ do
+		if i % 2 == 0 then
+			Kit.Flat(P, g, "LawnStripe", Kit.CenterX - Kit.FieldHalf, Kit.CenterX + Kit.FieldHalf, z, math.min(z + 8, ctx.MaxZ), Y + 0.04,
+				ctx.Ground:Lerp(Color3.new(1, 1, 1), 0.12), Enum.Material.Grass)
 		end
+		z += 8
+		i += 1
 	end
 
-	-- picket fence just outside each lane edge (2)
-	for _, side in { -1, 1 } do
-		local x = Kit.CenterX + side * (Kit.LaneHalf + 1.5)
-		Kit.Decor(ctx, P.FenceLine(f, Vector3.new(x, Y, z0), Vector3.new(x, Y, z1), 10, 3, D.Fence, false))
-	end
-	-- kennels (3)
-	for _, s in Kit.Band(ctx, 3, 22, 7) do
-		kennel(ctx, s.Pos, s.Side, rng:NextNumber(0.9, 1.1))
-	end
-	-- round trees (2)
-	for _, s in Kit.Band(ctx, 2, 18, 7) do
-		Kit.Decor(ctx, P.Tree(f, s.Pos, rng:NextNumber(0.9, 1.1), D.Trunk, D.Leaf))
-	end
-	-- bushes (5)
-	for _, s in Kit.Band(ctx, 5, 9, 4) do
-		Kit.Decor(ctx, P.Bush(f, s.Pos, rng:NextNumber(0.8, 1.2), D.Leaf:Lerp(Color3.new(0, 0, 0), 0.15)), true)
-	end
-	-- sprinklers (3)
-	for _, s in Kit.Band(ctx, 3, 14, 2) do
-		sprinkler(ctx, s.Pos)
-	end
-	-- garden gnomes (3)
-	for _, s in Kit.Band(ctx, 3, 8, 2) do
-		gnome(ctx, s.Pos)
-	end
-	-- flower beds (3)
-	for _, s in Kit.Band(ctx, 3, 10, 4) do
-		local m = P.Model(f, "FlowerBed")
-		P.Slab(m, "Soil", s.Pos.X - 3, s.Pos.X + 3, s.Pos.Z - 1.5, s.Pos.Z + 1.5, Y + 0.6, 0.6, rgb(140, 95, 60), nil, false)
-		P.Ellipsoid(m, "Flowers", CFrame.new(s.Pos + Vector3.new(0, 1.1, 0)), Vector3.new(5.5, 1.4, 2.4), D.Flower)
-		Kit.Decor(ctx, m, true)
-	end
-	-- toy balls (2) + a sandpit (1)
-	for _, s in Kit.Band(ctx, 2, 8, 2) do
-		Kit.Decor(ctx, P.Ball(f, "Toy", s.Pos + Vector3.new(0, 1, 0), 2, if rng:NextNumber() < 0.5 then D.Toy else D.Flower), true)
-	end
-	for _, s in Kit.Band(ctx, 1, 10, 5) do
-		local m = P.Model(f, "Sandpit")
-		P.Slab(m, "Frame", s.Pos.X - 4.5, s.Pos.X + 4.5, s.Pos.Z - 4.5, s.Pos.Z + 4.5, Y + 0.8, 0.8, rgb(170, 110, 60), nil, false)
-		P.Slab(m, "Sand", s.Pos.X - 3.8, s.Pos.X + 3.8, s.Pos.Z - 3.8, s.Pos.Z + 3.8, Y + 0.9, 0.8, rgb(240, 220, 160),
-			Enum.Material.Sand, false)
-		Kit.Decor(ctx, m, true)
-	end
+	-- props (20): tidy, well spaced
+	Kit.PlaceAll(ctx, {
+		{ Name = "Tree", Count = 3, R = 6, Tall = true, MinAbsX = 50,
+			Build = function(c, m, pos)
+				P.Tree(m, pos, rng:NextNumber(0.9, 1.1), D.Trunk, D.Leaf)
+			end },
+		{ Name = "Kennel", Count = 3, R = 5, Build = kennel },
+		{ Name = "Sandpit", Count = 1, R = 4.5, Build = sandpit },
+		{ Name = "FlowerBed", Count = 3, R = 3, Build = flowerBed },
+		{ Name = "Bush", Count = 4, R = 3, Build = function(c, m, pos)
+			P.Bush(m, pos, rng:NextNumber(0.8, 1.1), D.Leaf:Lerp(Color3.new(0, 0, 0), 0.15))
+		end },
+		{ Name = "Birdbath", Count = 1, R = 1.6, Build = birdbath },
+		{ Name = "Sprinkler", Count = 1, R = 1.2, Build = sprinkler },
+		{ Name = "GardenGnome", Count = 2, R = 1, Build = gnome },
+		{ Name = "ToyBall", Count = 2, R = 1, Build = function(c, m, pos, n)
+			P.Ball(m, "Toy", pos + Vector3.new(0, 1, 0), 2, if n % 2 == 0 then D.Toy else D.Flower)
+		end },
+	})
+
+	-- ground cover (tidy rows): flowers, clover, grass tufts, stepping stones
+	local grass = ctx.Ground
+	Kit.Cover(ctx, { Count = 214, Mode = "Grid", Items = {
+		Kit.Weight(Kit.Bead({ rgb(255, 120, 180), rgb(255, 230, 90), rgb(255, 255, 255), rgb(255, 90, 90) }, 0.8, 1.1, 0.15), 4),
+		Kit.Weight(Kit.Disc({ grass:Lerp(Color3.new(0, 0, 0), 0.25), grass:Lerp(rgb(40, 120, 40), 0.5) }, 1.4, 2.2,
+			Enum.Material.Grass), 2),
+		Kit.Weight(Kit.Spike({ grass:Lerp(Color3.new(1, 1, 1), 0.2), grass:Lerp(rgb(60, 140, 40), 0.4) }, 0.9, 1.3,
+			Enum.Material.Grass), 3),
+		Kit.Weight(Kit.Disc({ rgb(205, 200, 190), rgb(185, 180, 172) }, 1.8, 2.4), 0.6),
+	} })
 
 	-- butterflies (light, cheap)
 	Kit.Particles(ctx, { Name = "Butterflies", Y0 = 1, Y1 = 8, Rate = 3, Lifetime = { 5, 8 }, Speed = { 0.5, 1.5 },
