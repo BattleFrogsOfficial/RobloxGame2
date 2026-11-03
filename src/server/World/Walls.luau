@@ -89,7 +89,7 @@ end
 
 -- Ground level a wall chunk stands on: the plateau beside / behind the hub, the field beyond the throw line.
 function Walls.BaseY(z: number): number
-	return if z < Layout.ThrowLine.Z then Layout.HubY else Layout.GroundY
+	return if z < Layout.ThrowLine.Z then Layout.HubY - 1 else Layout.GroundY -- hub: the plateau top under the floors
 end
 
 -- One run of wall: from `origin` along unit `u` for `length` studs; `n` = outward unit (away from the map).

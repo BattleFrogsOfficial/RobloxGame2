@@ -70,7 +70,8 @@ Layout.Edge = {
 }
 
 Layout.Shop = { Center = Vector3.new(-34, Layout.HubY, -4) } -- the ONE ball shop counter (ShopStand, ShopId "Balls")
-Layout.Training = { Center = Vector3.new(34, Layout.HubY, 10) } -- the ONE training area (TrainingStation, StationId "Main")
+Layout.Training = { Center = Vector3.new(34, Layout.HubY, 2) } -- the ONE training area (TrainingStation, StationId "Main");
+-- its sign stands at Z 15, clear of the view over the thrower's shoulder
 
 Layout.Field = { MinX = -120, MaxX = 120, MinZ = 60, MaxZ = 3260, Y = Layout.GroundY } -- 40 studs below the hub
 

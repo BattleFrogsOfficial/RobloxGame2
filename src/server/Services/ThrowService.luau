@@ -1,12 +1,20 @@
 --!nonstrict
 -- The throw: ChargeBegin/ChargeRelease timing (server clock only; the client clicks once to start and once
 -- to release), one throw in flight per player, cooldowns + rate limits, the ONE shared throwing platform and
--- its FIFO queue, distance/landing/zone, consumable balls, the full roll (RollService), commit to data
--- BEFORE any visuals, ThrowResult to every client, cutscene completion (CutsceneFinished or timeout),
--- broadcasts, runaway spawn on a miss and the Golden Whistle recall (UseWhistle).
+-- its FIFO queue, distance/landing/zone, consumable balls, the full roll (RollService), the outcome committed to
+-- the player's data, then ThrowResult to EVERY client immediately (before any visual, toast, StateUpdate or
+-- display refresh), cutscene completion (CutsceneFinished or timeout), broadcasts, runaway spawn on a miss and
+-- the Golden Whistle recall (UseWhistle).
 --
--- Platform queue: a player is "on the platform" while their root is within Layout.Platform.StandRadius (XZ)
--- of Layout.Platform.ThrowSpot and at Y >= Layout.ThrowLine.Y - Game.Platform.YTolerance (sampled every
+-- Flight: the platform deck is flush with the hub plateau (Layout.ThrowLine.Y = Layout.HubY = 40); the ball leaves
+-- at LaunchPos (ThrowSpot, Y = deck + Game.Throw.LaunchHeight = 44) and lands on the field at LandPos
+-- (Y = Layout.GroundY, Z = ThrowLine.Z + Distance). Util/BallFlight.ForThrow adds that drop to the flight: same
+-- horizontal distance, longer flight. ThrowResult.FlightTime = ForThrow(LaunchPos, LandPos).Duration, the arc every
+-- client renders.
+--
+-- Platform queue: a player is "on the platform" while their root is inside the deck rectangle (Layout.Platform
+-- Center/Size grown by Game.Platform.EdgeMargin; the deck is flush, so height alone cannot tell) and at
+-- Y >= Layout.ThrowLine.Y - Game.Platform.YTolerance (sampled every
 -- Game.Platform.SampleInterval). Arrivals join the back of the line; position 1 has the turn and is the only
 -- one allowed to ChargeBegin (one throw per turn). Waiting players are moved onto
 -- Layout.Platform.QueueSpots[pos - 1] when they arrive and whenever the line advances; a new turn-holder is
@@ -103,9 +111,16 @@ function ThrowService.ThrowSpot(): Vector3
 	return Layout.Platform.ThrowSpot
 end
 
--- The ball leaves the thrower's hand: ThrowSpot.Y + Game.Throw.LaunchHeight (= 44, above the 43.2 railing caps).
+-- The ball leaves the thrower's hand: deck surface + Game.Throw.LaunchHeight (= 44, above the 43.35 railing caps).
 function ThrowService.LaunchY(): number
-	return Layout.Platform.ThrowSpot.Y + Game.Throw.LaunchHeight
+	return deckY() + Game.Throw.LaunchHeight
+end
+
+-- Inside the flush deck's rectangle (+ EdgeMargin), in XZ.
+local function onDeckXZ(pos: Vector3): boolean
+	local c: Vector3, s: Vector3 = Layout.Platform.Center, Layout.Platform.Size
+	local m = Game.Platform.EdgeMargin or 0
+	return math.abs(pos.X - c.X) <= s.X / 2 + m and math.abs(pos.Z - c.Z) <= s.Z / 2 + m
 end
 
 local function standRadius(): number
@@ -142,7 +157,7 @@ local function isOnPlatform(player: Player): boolean
 		return false
 	end
 	local spot = ThrowService.ThrowSpot()
-	if Vector2.new(pos.X - spot.X, pos.Z - spot.Z).Magnitude <= standRadius() then
+	if onDeckXZ(pos) and Vector2.new(pos.X - spot.X, pos.Z - spot.Z).Magnitude <= standRadius() then
 		return true
 	end
 	local qp = queue:Position(player)
@@ -261,7 +276,6 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		ballsLeft = left
 		if left <= 0 then
 			state.EquippedBall = Balls.Default
-			BroadcastService.Notify(player, ("That was your last %s: back to the Tennis Ball."):format(ball.Name), "Ball")
 		end
 	end
 	state.Stats.Throws += 1
@@ -282,11 +296,12 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 	local record, status = nil, nil
 	if outcome.Caught then
 		state.Stats.Caught += 1
+		-- Quiet: no StateUpdate / signal yet (they follow the ThrowResult below); Defer: no display refresh
 		record, status = DogService.AddDog(player, outcome.DogId, outcome.Variant, {
 			Defer = true,
+			Quiet = true,
 			SaleDelay = cutLen + Timers.CutscenePadding + Timers.DupeKeepWindow,
 		})
-		BookService.Record(player, outcome.DogId, outcome.Variant)
 	else
 		state.Stats.Missed += 1
 	end
@@ -298,7 +313,8 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 	local laneHalf = (Layout.Field.MaxX - Layout.Field.MinX) * 0.25 - 4
 	local landX = math.clamp(fieldCX + (spot.X - fieldCX) * 0.5
 		+ rng:Range(-Game.Throw.LateralScatter, Game.Throw.LateralScatter) * 0.5, fieldCX - laneHalf, fieldCX + laneHalf)
-	-- Raised launch: same horizontal distance, the arc starts at hand height on the deck and drops to the field.
+	-- Plateau -> field: same horizontal distance; the arc starts at hand height on the deck and drops to the field
+	-- (GroundY); BallFlight adds the drop to the flight time.
 	local launchPos, landPos = BallFlight.Endpoints(spot, ThrowService.LaunchY(), Layout.ThrowLine.Z, Layout.GroundY, distance, landX)
 	local flightTime = BallFlight.ForThrow(launchPos, landPos).Duration
 	local adult = DogCatalog.AdultIncome(def, outcome.Variant) * PlayerStats.IncomeMult(ctx)
@@ -330,9 +346,9 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		Band = band,
 		BallId = ball.Id,
 		BallsLeft = ballsLeft, -- remaining throws of a consumable ball (nil for Tennis)
-		LaunchPos = launchPos, -- (ThrowSpot.X, ThrowSpot.Y + Game.Throw.LaunchHeight = 44, ThrowSpot.Z)
-		LandPos = landPos, -- Y = GroundY, Z = ThrowLine.Z + Distance
-		FlightTime = flightTime, -- BallFlight.ForThrow(LaunchPos, LandPos).Duration
+		LaunchPos = launchPos, -- (ThrowSpot.X, ThrowLine.Y + Game.Throw.LaunchHeight = 44, ThrowSpot.Z)
+		LandPos = landPos, -- on the field: Y = Layout.GroundY (0), Z = ThrowLine.Z + Distance
+		FlightTime = flightTime, -- BallFlight.ForThrow(LaunchPos, LandPos).Duration (incl. the 44-stud drop)
 		StartPosition = launchPos, -- legacy names (cutscene contract)
 		LandingPosition = landPos,
 		TreatPocketUsed = outcome.TreatPocketUsed,
@@ -362,7 +378,18 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 	inFlight[player] = rec
 	throws[throwId] = rec
 
+	-- First thing anyone sees of this throw: the result, to every client.
 	Remotes.Get("ThrowResult"):FireAllClients(result)
+	-- Then everything else visible: book entry (pushes state), the added-dog signal, toasts, the state snapshot.
+	if outcome.Caught then
+		BookService.Record(player, outcome.DogId, outcome.Variant)
+		if record then
+			DogService.DogAdded:Fire(player, record, status)
+		end
+	end
+	if ball.Consumable and ballsLeft == 0 then
+		BroadcastService.Notify(player, ("That was your last %s: back to the Tennis Ball."):format(ball.Name), "Ball")
+	end
 	DataService.Push(player)
 	if Odds.IsLegendaryPlus(outcome.Rarity) then
 		task.spawn(DataService.SaveNow, player)

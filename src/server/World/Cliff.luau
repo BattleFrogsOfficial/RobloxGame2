@@ -4,7 +4,7 @@
 --
 --   * Four strata, top to bottom. Each one is cut along X into irregular chunks (independent seams per layer),
 --     and each layer steps further out than the one above it, so the face reads as a weathered stepped cliff:
---       layer 1 (lip, ~30..HubY-0.4)  front Z = edge - 0..0.7   (tucked just under the plaza paving lip)
+--       layer 1 (lip, ~30..HubY-1)    front Z = edge - 0..0.7   (tucked just under the plaza paving lip)
 --       layer 2 (~19..30)             front Z = edge + 0.6..1.6
 --       layer 3 (~9..19)              front Z = edge + 1.8..2.8
 --       layer 4 (foot, 0..~9)         front Z = edge + 2.8..3.8 (Cliff.MaxOut)
@@ -57,7 +57,7 @@ function Cliff.Build(parent: Instance)
 	local f = Props.Folder(parent, "Cliff")
 	local rng = Random.new(60606)
 	local hub, ground = Layout.HubY, Layout.GroundY
-	local lipY = hub - 0.4 -- the plateau top (just under the hub floors)
+	local lipY = hub - 1 -- the plateau top (Outskirts.Plateau, just under the 1-stud hub floors)
 	local edge = Cliff.EdgeZ
 	local W = Cliff.HalfWidth
 	for k, L in Cliff.Layers do

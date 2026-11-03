@@ -1,13 +1,14 @@
 --!strict
--- Forest (700-1000): dark grass with leaf-litter patches, dense pines and broadleaf trees, fallen logs,
--- red mushrooms and mossy rocks; fireflies hover over the whole band. Landmark: a giant tree at the west edge.
+-- Forest (700-1000): dark grass under a thick litter of leaves, ferns, tiny mushrooms, moss and twigs (dense
+-- clumps); dense pines and broadleaf trees, fallen logs, stumps, red mushrooms and mossy rocks; fireflies over
+-- the whole band. Boundary: a line of felled logs across the field. Landmark: a giant tree (west).
 local Kit = require((script.Parent :: Instance):WaitForChild("Kit")) :: any
 
 local rgb = Color3.fromRGB
 
 local function giantTree(ctx: any, base: Vector3): Model
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder.Parent, "GiantTree")
+	local m = P.Model(ctx.ZoneFolder, "GiantTree")
 	local bark, leaf = rgb(105, 70, 42), rgb(58, 140, 64)
 	-- buttress roots
 	for k = 0, 3 do
@@ -33,53 +34,71 @@ local function giantTree(ctx: any, base: Vector3): Model
 	return m
 end
 
+local function log(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	local yaw = ctx.Rng:NextNumber(0, math.pi)
+	Kit.LyingCylinder(P, m, "Log", pos + Vector3.new(0, 1.3, 0), 9, 2.6, yaw, D.Log, Enum.Material.Wood)
+	local dir = CFrame.Angles(0, yaw, 0).RightVector
+	Kit.LyingCylinder(P, m, "Ring", pos + Vector3.new(0, 1.3, 0) + dir * 4.55, 0.1, 2.2, yaw, rgb(220, 180, 120))
+end
+
+local function mushroom(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	local sc = ctx.Rng:NextNumber(1, 1.6)
+	P.Cylinder(m, "Stem", pos, 2 * sc, 1 * sc, D.MushroomStem)
+	P.Ellipsoid(m, "Cap", CFrame.new(pos + Vector3.new(0, 2.2 * sc, 0)), Vector3.new(3.4, 1.8, 3.4) * sc, D.Mushroom)
+	P.Ball(m, "Spot", pos + Vector3.new(0.6 * sc, 2.9 * sc, -0.5 * sc), 0.6 * sc, Color3.new(1, 1, 1))
+end
+
+local function stump(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	P.Cylinder(m, "Stump", pos, 2.2, 3.2, D.Trunk, Enum.Material.Wood)
+	P.Cylinder(m, "Rings", pos + Vector3.new(0, 2.2, 0), 0.05, 2.8, rgb(220, 180, 120))
+	P.Ellipsoid(m, "Moss", CFrame.new(pos + Vector3.new(0.8, 2.3, 0.4)), Vector3.new(1.6, 0.5, 1.4), rgb(90, 150, 60))
+end
+
 return function(ctx: any)
-	local P, D, f, Y = ctx.Props, ctx.Decor, ctx.Folder, ctx.Y
+	local P, D, Y = ctx.Props, ctx.Decor, ctx.Y
 	local rng = ctx.Rng
+	local g = ctx.GroundModel
 
 	-- landmark (west edge)
 	local lz = (ctx.MinZ + ctx.MaxZ) / 2 + 6
 	giantTree(ctx, Vector3.new(Kit.CenterX - 130, Y, lz))
-	Kit.Reserve(ctx, Kit.CenterX - 118, lz, 22)
 
-	-- leaf-litter patches on the outer bands (flat dressing)
-	for i = 1, 6 do
-		local side = if i % 2 == 0 then 1 else -1
-		local cz = ctx.MinZ + (ctx.MaxZ - ctx.MinZ) * (i - 0.5) / 6
-		local cx = Kit.CenterX + side * 90
-		Kit.Flat(P, f.Parent, "LeafLitter", cx - 24, cx + 24, cz - 14, cz + 14, Y + 0.04,
+	-- leaf-litter patches across the whole plot (flat dressing)
+	for i = 1, 9 do
+		local col = (i - 1) % 3 - 1
+		local cz = ctx.MinZ + (ctx.MaxZ - ctx.MinZ) * (i - 0.5) / 9
+		local cx = Kit.CenterX + col * 78 + rng:NextNumber(-8, 8)
+		Kit.Flat(P, g, "LeafLitter", math.max(cx - 30, -Kit.FieldHalf), math.min(cx + 30, Kit.FieldHalf), cz - 14, cz + 14, Y + 0.04,
 			if i % 3 == 0 then rgb(110, 80, 45) else rgb(80, 96, 44), Enum.Material.Ground)
 	end
 
-	-- dense pines (12) and broadleaf trees (4)
-	for i, s in Kit.Band(ctx, 12, 11, 8) do
-		Kit.Decor(ctx, P.Pine(f, s.Pos, rng:NextNumber(1.2, 1.6), if i % 3 == 0 then D.PineDark else D.Pine, D.Trunk))
-	end
-	for _, s in Kit.Band(ctx, 4, 14, 7) do
-		Kit.Decor(ctx, P.Tree(f, s.Pos, rng:NextNumber(1, 1.2), D.Trunk, rgb(70, 150, 60)))
-	end
-	-- fallen logs (3): log + cut end
-	for _, s in Kit.Band(ctx, 3, 16, 6) do
-		local m = P.Model(f, "Log")
-		local yaw = rng:NextNumber(0, math.pi)
-		Kit.LyingCylinder(P, m, "Log", s.Pos + Vector3.new(0, 1.3, 0), 9, 2.6, yaw, D.Log, Enum.Material.Wood)
-		local dir = CFrame.Angles(0, yaw, 0).RightVector
-		Kit.LyingCylinder(P, m, "Ring", s.Pos + Vector3.new(0, 1.3, 0) + dir * 4.55, 0.1, 2.2, yaw, rgb(220, 180, 120))
-		Kit.Decor(ctx, m, true)
-	end
-	-- mushrooms (4): stem + cap + spots
-	for _, s in Kit.Band(ctx, 4, 8, 3) do
-		local m = P.Model(f, "Mushroom")
-		local sc = rng:NextNumber(1, 1.6)
-		P.Cylinder(m, "Stem", s.Pos, 2 * sc, 1 * sc, D.MushroomStem)
-		P.Ellipsoid(m, "Cap", CFrame.new(s.Pos + Vector3.new(0, 2.2 * sc, 0)), Vector3.new(3.4, 1.8, 3.4) * sc, D.Mushroom)
-		P.Ball(m, "Spot", s.Pos + Vector3.new(0.6 * sc, 2.9 * sc, -0.5 * sc), 0.6 * sc, Color3.new(1, 1, 1))
-		Kit.Decor(ctx, m, true)
-	end
-	-- mossy rocks (3)
-	for _, s in Kit.Band(ctx, 3, 14, 5) do
-		Kit.Decor(ctx, P.Rock(f, s.Pos, rng:NextNumber(0.8, 1.1), rgb(110, 120, 100), rng:NextNumber(0, 6.28)), true)
-	end
+	-- props (32): a dense wood with low things in the middle
+	Kit.PlaceAll(ctx, {
+		{ Name = "Pine", Count = 12, R = 6, Tall = true, Build = function(c, m, pos, i)
+			P.Pine(m, pos, rng:NextNumber(1.2, 1.6), if i % 3 == 0 then D.PineDark else D.Pine, D.Trunk)
+		end },
+		{ Name = "Tree", Count = 4, R = 7, Tall = true, Build = function(c, m, pos)
+			P.Tree(m, pos, rng:NextNumber(1, 1.2), D.Trunk, rgb(70, 150, 60))
+		end },
+		{ Name = "Log", Count = 4, R = 4.5, Build = log },
+		{ Name = "MossyRock", Count = 4, R = 3, Build = function(c, m, pos)
+			P.Rock(m, pos, rng:NextNumber(0.8, 1.1), rgb(110, 120, 100), rng:NextNumber(0, 6.28))
+		end },
+		{ Name = "Stump", Count = 4, R = 1.8, Build = stump },
+		{ Name = "Mushroom", Count = 4, R = 2.2, Build = mushroom },
+	})
+
+	-- ground cover (dense clumps): leaves, ferns, tiny mushrooms, moss, twigs
+	Kit.Cover(ctx, { Count = 380, Mode = "Clumps", Clumps = 16, ClumpRadius = 10, Items = {
+		Kit.Weight(Kit.Chip({ rgb(200, 110, 40), rgb(170, 60, 40), rgb(140, 95, 45), rgb(210, 160, 60) }, 1.1, 0.8, 0.08), 5),
+		Kit.Weight(Kit.Spike({ rgb(40, 120, 50), rgb(60, 140, 60) }, 1.6, 1.8, Enum.Material.Grass), 4),
+		Kit.Weight(Kit.Bead({ rgb(230, 60, 60), rgb(240, 200, 150) }, 0.6, 0.9, 0.25), 1.5),
+		Kit.Weight(Kit.Disc({ rgb(70, 130, 50), rgb(90, 140, 60) }, 1.8, 3.2, Enum.Material.Grass), 1.5),
+		Kit.Weight(Kit.Chip({ rgb(100, 70, 45) }, 2.2, 0.25, 0.25, Enum.Material.Wood), 1.5),
+	} })
 
 	-- fireflies over the whole band (required)
 	Kit.Particles(ctx, { Name = "Fireflies", Y0 = 1, Y1 = 12, Rate = 28, Lifetime = { 4, 7 }, Speed = { 0.3, 1.2 },

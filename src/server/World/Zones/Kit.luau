@@ -639,8 +639,8 @@ function Kit.Boundary(ctx: Ctx, style: GateStyle): Model
 		local seg = 24
 		local n = math.floor(len / seg)
 		for i = 0, n - 1 do
-			local px = x0 + seg * (i + 0.5)
-			Kit.LyingCylinder(P, m, "Log", Vector3.new(px, Y + 1, z), seg - 0.4, 2, 0, style.Color, style.Material)
+			local px = math.clamp(x0 + seg * (i + 0.5), x0 + seg / 2 + 0.3, x1 - seg / 2 - 0.3)
+			Kit.LyingCylinder(P, m, "Log", Vector3.new(px, Y + 1, z), seg + 0.6, 2, 0, style.Color, style.Material)
 			if i % 2 == 0 then
 				Kit.LyingCylinder(P, m, "LogTop", Vector3.new(px + rng:NextNumber(-3, 3), Y + 2.6, z), seg * 0.6, 1.4, 0,
 					style.Trim, style.Material)

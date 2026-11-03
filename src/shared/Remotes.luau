@@ -24,10 +24,12 @@
 -- EventState         RemoteEvent    S->All ({Kind: "Squirrel"|"RunawayDog"|"DailyWalk", Active, EndsAt, Data})
 --
 -- type ThrowResult = { ThrowId, ThrowerUserId, PadIndex (always 1: the one platform), Distance, ZoneId, DogId,
---   Rarity, Variant: string?, Caught, CatchChance, Boosts: {string}, LuckyStreakTriggered, WhistleOwned,
---   WhistleCount, IsTutorial, BallId, BallsLeft: number? (consumable throws left after this one),
---   LaunchPos: Vector3 (ThrowSpot + (0, Game.Throw.LaunchHeight, 0): Y = 44), LandPos: Vector3 (Y = 0, Z = ThrowLine.Z + Distance),
---   FlightTime: number (= Util/BallFlight.ForThrow(LaunchPos, LandPos).Duration), ... }
+--   Rarity, Variant: string?, Caught, CatchChance, Boosts: {string}, LuckyStreakTriggered, TreatPocketUsed,
+--   WhistleOwned, WhistleCount, IsTutorial, BallId, BallsLeft: number? (consumable throws left after this one),
+--   LaunchPos: Vector3 (ThrowSpot on the deck at Layout.HubY + (0, Game.Throw.LaunchHeight, 0): Y = 44),
+--   LandPos: Vector3 (on the field: Y = Layout.GroundY = 0, Z = ThrowLine.Z + Distance),
+--   FlightTime: number (= Util/BallFlight.ForThrow(LaunchPos, LandPos).Duration: includes the 44-stud drop), ... }
+--   Fired to all clients the moment the throw is released, before any toast, StateUpdate or world display.
 -- type PlayerState = { Cash, Bones, ThrowPower,
 --   Balls: {[ballId]: number}  -- remaining throws of each CONSUMABLE ball (> 0; absent = 0). The Tennis Ball is
 --                                 never stored: it is free, unlimited and always available. (Save schema v2;

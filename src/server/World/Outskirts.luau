@@ -13,14 +13,14 @@ local Props = require((script.Parent :: Instance):WaitForChild("Props")) :: any
 
 local Outskirts = {}
 
-local Y = Layout.HubY -- the hub decor below stands on the plateau
+local Y = Layout.HubY - 1 -- the hub decor below stands on the plateau top (1 stud under the hub floors)
 local T = WorldTheme.Outskirts
 
 -- field-level ground (in front of the cliff, under the zone bands / aprons / walls)
 Outskirts.Underlay = { MinX = -720, MaxX = 720, MinZ = Layout.ThrowLine.Z - 3, MaxZ = Layout.Field.MaxZ + 240,
-	TopY = Layout.GroundY - 0.4 }
+	TopY = Layout.GroundY - 1 } -- the 1-stud field / apron slabs sit on it
 -- the plateau block: top just under the hub floors, front face set back behind the cliff slabs (Cliff.luau)
-Outskirts.Plateau = { MinX = -720, MaxX = 720, MinZ = -520, MaxZ = Layout.ThrowLine.Z - 3, TopY = Layout.HubY - 0.4,
+Outskirts.Plateau = { MinX = -720, MaxX = 720, MinZ = -520, MaxZ = Layout.ThrowLine.Z - 3, TopY = Layout.HubY - 1,
 	BottomY = Layout.GroundY - 2.4 }
 
 function Outskirts.Build(parent: Instance)

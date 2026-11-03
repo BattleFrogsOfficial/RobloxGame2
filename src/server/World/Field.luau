@@ -61,7 +61,7 @@ Field.Ground = {
 	Park = { Material = M.LeafyGrass, Color = rgb(72, 150, 92), Trim = rgb(236, 214, 168),
 		Gate = { Kind = "Hedge", Color = rgb(46, 128, 60), Trim = rgb(255, 150, 190), Material = M.LeafyGrass, Height = 3 } },
 	Beach = { Material = M.Sand, Color = rgb(238, 214, 156), Trim = rgb(70, 170, 230),
-		Gate = { Kind = "Dune", Color = rgb(224, 196, 136), Trim = rgb(120, 190, 90), Material = M.Sand, Height = 3 } },
+		Gate = { Kind = "Dune", Color = rgb(224, 196, 136), Trim = rgb(120, 190, 90), Material = M.Sand, Height = 2.6 } },
 	Farm = { Material = M.Ground, Color = rgb(150, 112, 70), Trim = rgb(240, 200, 90),
 		Gate = { Kind = "Rail", Color = rgb(170, 120, 70), Trim = rgb(200, 60, 50), Material = M.Wood, Height = 4 } },
 	Forest = { Material = M.Grass, Color = rgb(52, 98, 50), Trim = rgb(120, 84, 50),
@@ -117,7 +117,9 @@ local function buildMarkers(parent: Instance): { any }
 	local d = Kit.MarkerEvery
 	while d < maxD do -- the final distance is marked by the end backdrop
 		local z = Layout.DistanceToZ(d)
-		Props.Slab(folder, "Line" .. d, F.MinX, F.MaxX, z - 0.6, z + 0.6, Y + 0.05, 0.05, T.DistanceLine, nil, false)
+		local line = Props.Slab(folder, "Line" .. d, F.MinX, F.MaxX, z - 0.6, z + 0.6, Y + 0.05, 0.05, T.DistanceLine, nil, false)
+		line.CanQuery = false
+		line.CastShadow = false
 		for _, side in { -1, 1 } do
 			local board = Props.Sign(folder, "Marker" .. d, Vector3.new(Kit.CenterX + side * Kit.MarkerX, Y, z),
 				Vector3.new(0, 0, -1), Vector3.new(10, 5, 0.8), 2.5, T.MarkerBoard, T.MarkerPost, nil) -- no world text
@@ -204,7 +206,7 @@ function Field.Build(parent: Instance)
 				end
 			end
 		end
-		local nextZ = if zi < #ZonesCfg then z1 + Kit.BoundaryOffset - 5 else z1
+		local nextZ = if zi < #ZonesCfg then z1 - 2.5 else z1 -- next arch pillars sit at z1 +- 2
 		Kit.Obstacle(ctx, { x0 = Layout.Field.MinX, x1 = Layout.Field.MaxX, y0 = Y, y1 = Y + 8, z0 = nextZ, z1 = nextZ + 10 },
 			"NextBoundary")
 

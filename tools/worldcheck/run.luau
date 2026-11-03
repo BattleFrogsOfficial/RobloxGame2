@@ -365,6 +365,70 @@ for _, d in map:GetDescendants() do
 	end
 end
 
+-- tagged parts + spawn locations: dump (for an old checkout) / compare (old -> new), keyed by tag + attributes
+local moved = {}
+do
+	local serde = require("@lune/serde")
+	local function keyOf(inst, tag)
+		local attrs = {}
+		for _, k in { "YardIndex", "SpotIndex", "Order", "PadIndex", "ZoneId", "Distance", "ShopId", "StationId" } do
+			local v = inst:GetAttribute(k)
+			if v ~= nil then
+				table.insert(attrs, k .. "=" .. tostring(v))
+			end
+		end
+		return tag .. "[" .. table.concat(attrs, ",") .. "]"
+	end
+	local rows = {}
+	local seen = {}
+	for _, d in map:GetDescendants() do
+		if d:IsA("BasePart") then
+			local tags = {}
+			for _, t in WorldCheck.Tags do
+				if d:HasTag(t) then
+					table.insert(tags, t)
+				end
+			end
+			if d.ClassName == "SpawnLocation" then
+				table.insert(tags, "SpawnLocation")
+			end
+			for _, t in tags do
+				local k = keyOf(d, t)
+				seen[k] = (seen[k] or 0) + 1
+				if seen[k] > 1 then
+					k ..= "#" .. seen[k] -- DistanceMarker boards come in pairs (both sides)
+				end
+				local b = WorldCheck.Bounds(d)
+				rows[k] = { (b.MinX + b.MaxX) / 2, b.MinY, (b.MinZ + b.MaxZ) / 2, b.MaxY }
+			end
+		end
+	end
+	if DUMP_TAGS then
+		fs.writeFile(DUMP_TAGS, serde.encode("json", rows))
+	end
+	if COMPARE then
+		local old = serde.decode("json", fs.readFile(COMPARE))
+		local keys = {}
+		for k in rows do
+			table.insert(keys, k)
+		end
+		for k in old do
+			if rows[k] == nil then
+				table.insert(keys, k)
+			end
+		end
+		table.sort(keys)
+		for _, k in keys do
+			local o, n = old[k], rows[k]
+			if o == nil or n == nil then
+				table.insert(moved, { k, o, n })
+			elseif math.abs(o[1] - n[1]) > 0.01 or math.abs(o[2] - n[2]) > 0.01 or math.abs(o[3] - n[3]) > 0.01 then
+				table.insert(moved, { k, o, n })
+			end
+		end
+	end
+end
+
 local F = {
 	Field = map:FindFirstChild("Field"),
 	Walls = map:FindFirstChild("Walls"),
@@ -399,10 +463,23 @@ for _, v in violations do
 end
 
 -- World text rule: the only text in the world is on the zone-name arch boards (BoundaryKind "Arch"), the
--- yard owner signs (OwnerLabel) and the kennel count (CountLabel).
+-- yard owner signs (OwnerLabel), the kennel count (CountLabel), and the two plaza name signs: "BALL SHOP"
+-- (ShopLabel, on the shop's sign) and "TRAINING" (TrainingLabel, on the training area's sign).
 for _, d in map:GetDescendants() do
 	if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+		local function under(name)
+			local a = d.Parent
+			while a and a ~= map do
+				if a.Name == name then
+					return true
+				end
+				a = a.Parent
+			end
+			return false
+		end
 		local allowed = d.Name == "OwnerLabel" or d.Name == "CountLabel"
+			or (d.Name == "ShopLabel" and d.Text == "BALL SHOP" and under("Shop_Balls"))
+			or (d.Name == "TrainingLabel" and d.Text == "TRAINING" and under("TrainingArea"))
 		local a = d.Parent
 		while not allowed and a and a ~= map do
 			if a:GetAttribute("BoundaryKind") == "Arch" then
@@ -614,8 +691,8 @@ do
 		fail("Outskirts/Plateau missing")
 	else
 		local b = Bounds(plateau)
-		if b.MaxY > HUB + 0.02 or b.MaxY < HUB - 0.5 or b.MinY > Layout.GroundY + 0.02 then
-			fail("plateau block must reach from the field up to just under HubY: " .. boxStr(b))
+		if b.MaxY > HUB - 0.98 or b.MaxY < HUB - 1.05 or b.MinY > Layout.GroundY + 0.02 then
+			fail("plateau block must reach from the field up to 1 stud under HubY (the floors sit on it): " .. boxStr(b))
 		end
 		if b.MinX > -Layout.Street.MaxX - 300 or b.MaxX < Layout.Street.MaxX + 300 or b.MinZ > Layout.Yards.CenterZ - 200 then
 			fail("plateau block does not run under the whole hub and its walls: " .. boxStr(b))
@@ -905,6 +982,66 @@ if F.Walls then
 			end
 		end
 	end
+	-- two levels: chunks beside / behind the hub stand on the plateau, chunks beside the field on the field
+	local wrongBase = 0
+	for _, run in F.Walls:GetChildren() do
+		for _, d in run:GetDescendants() do
+			if d:IsA("BasePart") and d.Name ~= "Band" and d.Name ~= "HedgeCap" and d.Name ~= "Strata" then
+				local b = Bounds(d)
+				local cz = (b.MinZ + b.MaxZ) / 2
+				local want = if cz < Layout.ThrowLine.Z then Layout.HubY else Layout.GroundY
+				if math.abs(b.MinY - want) > 1.5 then -- yawed chunks dip ~0.5 below their base in AABB terms
+					wrongBase += 1
+					if wrongBase <= 6 then
+						fail(("wall %s (%s) should stand on Y %s"):format(pathOf(d), boxStr(b), fmt(want)))
+					end
+				end
+				if b.MinZ < Layout.ThrowLine.Z - 6 and b.MaxZ > Layout.ThrowLine.Z + 6 then
+					fail(("wall %s straddles the cliff (z %s..%s)"):format(pathOf(d), fmt(b.MinZ), fmt(b.MaxZ)))
+				end
+			end
+		end
+	end
+	-- junction: around the cliff line, the side walls have no gap from their ground up to 200 studs
+	do
+		local gaps, firstGap = 0, nil
+		local function inWall(x, y, z)
+			for _, w in wallParts do
+				local bx = w.Box
+				if x >= bx.MinX - 1 and x <= bx.MaxX + 1 and y >= bx.MinY - 1 and y <= bx.MaxY + 1 and z >= bx.MinZ - 1
+					and z <= bx.MaxZ + 1 then
+					local lp = w.Part.CFrame:PointToObjectSpace(roblox.Vector3.new(x, y, z))
+					local h = w.Part.Size / 2
+					if math.abs(lp.X) <= h.X and math.abs(lp.Y) <= h.Y and math.abs(lp.Z) <= h.Z then
+						return true
+					end
+				end
+			end
+			return false
+		end
+		local WallsMod = requireFn(WorldFolder.Walls)
+		local sx = WallsMod.InnerX + 70 -- inside the deep tiers (the low tier's face is jittered)
+		local z = Layout.ThrowLine.Z - 30
+		while z <= Layout.ThrowLine.Z + 30 do
+			local base = if z < Layout.ThrowLine.Z then Layout.HubY else Layout.GroundY
+			local y = base + 1
+			while y < 200 do
+				for _, side in { -1, 1 } do
+					if not inWall(side * sx, y, z) then
+						gaps += 1
+						firstGap = firstGap or ("x %s y %s z %s"):format(fmt(side * sx), fmt(y), fmt(z))
+					end
+				end
+				y += 4
+			end
+			z += 1
+		end
+		if gaps > 0 then
+			fail(("walls: %d gaps in the side walls around the cliff junction (first %s)"):format(gaps, firstGap))
+		end
+		note(("walls: %d wall chunks off their level; side walls solid from their ground to 200 at the cliff junction (|x| %s)"):format(
+			wrongBase, fmt(sx)))
+	end
 	-- the field aprons must run under the walls: sample the apron's outer edge along both sides; every sample
 	-- has to sit inside a wall part (else a strip of bare underlay would show between apron and cliff foot)
 	if F.Field then
@@ -953,7 +1090,8 @@ if F.Walls then
 	-- walls vs everything else (except the ground underlay / clouds of the outskirts)
 	local hits = 0
 	for _, o in allParts do
-		if isUnder(o.Part, F.Walls) or (o.Part.Name == "Underlay") then
+		-- ground blocks and the cliff rock run under / into the walls on purpose (scenery meets scenery)
+		if isUnder(o.Part, F.Walls) or o.Part.Name == "Underlay" or o.Part.Name == "Plateau" or isUnder(o.Part, F.Cliff) then
 			continue
 		end
 		for _, w in wallParts do
@@ -983,7 +1121,7 @@ local fieldLane, fieldCam = {}, {}
 for _, o in allParts do
 	local p = o.Part
 	local invisibleGuard = p.Transparency >= 1 and not p.CanQuery
-	if invisibleGuard then
+	if invisibleGuard or isUnder(p, F.Cliff) then -- the cliff foot is checked against the real arcs above
 		continue
 	end
 	if Overlaps(o.Box, lane, 0.02) then
@@ -1010,6 +1148,7 @@ do
 	local CELL = 1
 	local X0, X1 = Layout.Street.MinX - 4, Layout.Street.MaxX + 4
 	local Z0, Z1 = Layout.Yards.CenterZ - Layout.Yards.Size.Z / 2 - 4, Layout.ThrowLine.Z + 12
+	local HUB = Layout.HubY
 	local NX = math.floor((X1 - X0) / CELL) + 1
 	local NZ = math.floor((Z1 - Z0) / CELL) + 1
 	local blocked = {}
@@ -1019,7 +1158,7 @@ do
 	local nObst = 0
 	for _, o in allParts do
 		local p, b = o.Part, o.Box
-		if p.CanCollide and b.MinY < Layout.GroundY + HEAD and b.MaxY > Layout.GroundY + STEP then
+		if p.CanCollide and b.MinY < HUB + HEAD and b.MaxY > HUB + STEP and b.MinZ < Layout.ThrowLine.Z + 2 then
 			nObst += 1
 			local ix0 = math.max(0, math.floor((b.MinX - R - X0) / CELL))
 			local ix1 = math.min(NX - 1, math.ceil((b.MaxX + R - X0) / CELL))
@@ -1124,9 +1263,6 @@ do
 	end
 
 	local P = Layout.Platform
-	local rampLen = (P.RampTop - P.RampBottom).Magnitude
-	local deckLen = (Vector3.new(P.ThrowSpot.X, 0, P.ThrowSpot.Z) - Vector3.new(P.RampTop.X, 0, P.RampTop.Z)).Magnitude
-	local rampFoot = Vector3.new(P.RampBottom.X, 0, P.RampBottom.Z - 1.5)
 	local points = {}
 	local order = {}
 	local function addPoint(name, pos)
@@ -1142,7 +1278,7 @@ do
 	end
 	addPoint("Shop", Layout.Shop.Center + Vector3.new(0, 0, -3.5))
 	addPoint("Training", Layout.Training.Center)
-	addPoint("RampFoot", rampFoot)
+	addPoint("Platform", P.ThrowSpot) -- the deck is flush: walk straight onto it
 	local dists = {}
 	for _, name in order do
 		dists[name] = dijkstra(points[name])
@@ -1151,24 +1287,12 @@ do
 		local v = dists[a][points[b]]
 		return v or math.huge
 	end
-	local targets = {}
-	for _, n in order do
-		if n ~= "RampFoot" then
-			table.insert(targets, n)
-		end
-	end
-	table.insert(targets, "Platform")
-	local platformExtra = 1.5 + rampLen + deckLen
+	local targets = order
 	local worst = 0
 	for i = 1, #targets do
 		for j = i + 1, #targets do
 			local a, b = targets[i], targets[j]
-			local len
-			if b == "Platform" then
-				len = d(a, "RampFoot") + platformExtra
-			else
-				len = d(a, b)
-			end
+			local len = d(a, b)
 			table.insert(walk, { a, b, len })
 			worst = math.max(worst, len)
 			if len > 300 then
@@ -1176,8 +1300,18 @@ do
 			end
 		end
 	end
-	note(("walk: %d obstacles rasterised, ramp %s + deck %s studs; worst path %s studs = %.1f s at 32"):format(nObst,
-		fmt(rampLen), fmt(deckLen), fmt(worst), worst / 32))
+	-- nobody walks off the plateau: no cell past the cliff edge is reachable from any gate
+	local reach = 0
+	for c in dists["Gate1"] do
+		if Z0 + (c // NX) * CELL > Layout.ThrowLine.Z + 1 then
+			reach += 1
+		end
+	end
+	if reach > 0 then
+		fail(("walk: %d cells past the cliff edge are reachable from the yards (a way onto the field)"):format(reach))
+	end
+	note(("walk: %d obstacles rasterised on the plateau; worst path %s studs = %.1f s at 32; %d cells past the edge reachable"):format(
+		nObst, fmt(worst), worst / 32, reach))
 end
 
 if DUMP then
@@ -1212,6 +1346,44 @@ print("walking paths (studs; <= 300 required):")
 for _, w in walk do
 	if not QUIET or w[3] > 250 then
 		print(("  %-9s -> %-9s %6.1f  (%.1f s)"):format(w[1], w[2], w[3], w[3] / 32))
+	end
+end
+if COMPARE then
+	-- group identical moves (same tag, same delta) so 72 dog spots read as one line
+	local groups, gorder = {}, {}
+	local function f1(v)
+		return string.format("%.2f", v)
+	end
+	for _, m in moved do
+		local k, o, n = m[1], m[2], m[3]
+		local tag = string.match(k, "^(%w+)")
+		local line
+		if o == nil then
+			line = ("%s: new at (%s, %s, %s)"):format(k, f1(n[1]), f1(n[2]), f1(n[3]))
+			table.insert(gorder, line)
+			groups[line] = { line }
+		elseif n == nil then
+			line = ("%s: removed (was at %s, %s, %s)"):format(k, f1(o[1]), f1(o[2]), f1(o[3]))
+			table.insert(gorder, line)
+			groups[line] = { line }
+		else
+			local gk = ("%s d(%s, %s, %s)"):format(tag, f1(n[1] - o[1]), f1(n[2] - o[2]), f1(n[3] - o[3]))
+			if not groups[gk] then
+				groups[gk] = {}
+				table.insert(gorder, gk)
+			end
+			table.insert(groups[gk], ("%s (%s, %s, %s) -> (%s, %s, %s)"):format(k, f1(o[1]), f1(o[2]), f1(o[3]), f1(n[1]),
+				f1(n[2]), f1(n[3])))
+		end
+	end
+	print(("moved versus %s (bottom Y / centre XZ of each tagged part + spawn, old -> new): %d items"):format(COMPARE, #moved))
+	for _, gk in gorder do
+		local list = groups[gk]
+		if #list == 1 then
+			print("  " .. list[1])
+		else
+			print(("  %d x %s, e.g. %s"):format(#list, gk, list[1]))
+		end
 	end
 end
 if #fieldProblems > 0 then

@@ -1,7 +1,8 @@
 --!strict
--- Mythic Meadow (2500-3200): pastel glacier ground, glowing crystal clusters, giant flowers, floating islets,
--- standing-stone circles, glowing mushrooms and candy-coloured trees; sparkles drift over the band.
--- Landmark: a giant crystal spire (~255 studs) at the west edge.
+-- Mythic Meadow (2500-3200): the densest, glowing plot. Pastel glacier ground with bloom patches, thick clumps of
+-- glowing flowers, crystal chips, lavender tufts, petals and sparkle stones; crystal clusters (a few lit),
+-- giant flowers, floating islets, standing-stone circles, glowing mushrooms and candy trees; sparkles drift
+-- over the band. Boundary: a glowing rim with crystal shards across the field. Landmark: a crystal spire (west).
 local Kit = require((script.Parent :: Instance):WaitForChild("Kit")) :: any
 
 local rgb = Color3.fromRGB
@@ -9,7 +10,7 @@ local NEON = Enum.Material.Neon
 
 local function spire(ctx: any, base: Vector3): Model
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder.Parent, "CrystalSpire")
+	local m = P.Model(ctx.ZoneFolder, "CrystalSpire")
 	local cols = D.Crystal
 	local y = 0
 	for i, t in { { 26, 80 }, { 22, 60 }, { 17, 45 }, { 12, 35 }, { 7, 25 } } do
@@ -43,9 +44,36 @@ local function spire(ctx: any, base: Vector3): Model
 	return m
 end
 
-local function flower(ctx: any, pos: Vector3)
+local lights = 0
+local MAX_LIGHTS = 6 -- PointLights sparingly (phones)
+
+local function crystalCluster(ctx: any, m: Model, pos: Vector3, i: number)
+	local P, D, rng = ctx.Props, ctx.Decor, ctx.Rng
+	local tallest: BasePart? = nil
+	local best = 0
+	for k = 1, 4 do
+		local h = rng:NextNumber(3, 8)
+		local o = Vector3.new(rng:NextNumber(-1.8, 1.8), 0, rng:NextNumber(-1.8, 1.8))
+		local p = P.Block(m, "Crystal", Vector3.new(1.6, h, 1.6), CFrame.new(pos + o + Vector3.new(0, h / 2, 0))
+			* CFrame.Angles(math.rad(rng:NextNumber(-15, 15)), math.rad(45), math.rad(rng:NextNumber(-15, 15))),
+			D.Crystal[(k + i) % #D.Crystal + 1], NEON)
+		if h > best then
+			best, tallest = h, p
+		end
+	end
+	if i % 3 == 1 and lights < MAX_LIGHTS and tallest then
+		lights += 1
+		local l = Instance.new("PointLight")
+		l.Range = 14
+		l.Brightness = 1.4
+		l.Color = (tallest :: BasePart).Color
+		l.Shadows = false
+		l.Parent = tallest
+	end
+end
+
+local function flower(ctx: any, m: Model, pos: Vector3)
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder, "GiantFlower")
 	local h = ctx.Rng:NextNumber(9, 14)
 	local petal = ({ D.Flower, rgb(170, 200, 255), rgb(255, 240, 150) })[ctx.Rng:NextInteger(1, 3)]
 	P.Cylinder(m, "Stem", pos, h, 0.9, rgb(110, 200, 120))
@@ -58,12 +86,10 @@ local function flower(ctx: any, pos: Vector3)
 			Vector3.new(4, 0.8, 2.6), petal)
 	end
 	P.Ball(m, "Center", c + Vector3.new(0, 0.4, 0), 2.2, D.FlowerCenter, NEON)
-	Kit.Decor(ctx, m, true)
 end
 
-local function islet(ctx: any, pos: Vector3)
+local function islet(ctx: any, m: Model, pos: Vector3)
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder, "FloatingIslet")
 	local y = ctx.Rng:NextNumber(18, 32)
 	local c = pos + Vector3.new(0, y, 0)
 	P.Block(m, "Top", Vector3.new(12, 1.2, 12), CFrame.new(c), D.IslandGrass)
@@ -72,12 +98,11 @@ local function islet(ctx: any, pos: Vector3)
 	P.Block(m, "Earth3", Vector3.new(2.6, 3, 2.6), CFrame.new(c - Vector3.new(0, 7.4, 0)) * CFrame.Angles(0, math.rad(10), 0), D.Island)
 	P.Block(m, "Crystal", Vector3.new(1.8, 4, 1.8), CFrame.new(c + Vector3.new(2, 2.6, -1)) * CFrame.Angles(0, math.rad(45), 0),
 		D.Crystal[ctx.Rng:NextInteger(1, #D.Crystal)], NEON)
-	Kit.Decor(ctx, m)
+	P.Cylinder(m, "Glow", pos, 0.05, 6, D.IslandGrass, NEON)
 end
 
-local function stoneCircle(ctx: any, pos: Vector3)
+local function stoneCircle(ctx: any, m: Model, pos: Vector3)
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder, "StandingStones")
 	local stone = rgb(205, 200, 220)
 	for k = 0, 5 do
 		local a = math.rad(60 * k)
@@ -87,62 +112,55 @@ local function stoneCircle(ctx: any, pos: Vector3)
 	end
 	P.Block(m, "Lintel", Vector3.new(9, 1.4, 2), CFrame.new(pos + Vector3.new(0, 8.7, 0)), stone, Enum.Material.Slate)
 	P.Ball(m, "Orb", pos + Vector3.new(0, 2.2, 0), 2.4, D.Crystal[2], NEON)
-	Kit.Decor(ctx, m)
+end
+
+local function glowShroom(ctx: any, m: Model, pos: Vector3, i: number)
+	local P, D = ctx.Props, ctx.Decor
+	local s = ctx.Rng:NextNumber(0.9, 1.5)
+	P.Cylinder(m, "Stem", pos, 2.4 * s, 1 * s, rgb(250, 240, 255))
+	P.Ellipsoid(m, "Cap", CFrame.new(pos + Vector3.new(0, 2.6 * s, 0)), Vector3.new(3.6, 1.8, 3.6) * s,
+		D.Crystal[(i - 1) % #D.Crystal + 1], NEON)
 end
 
 return function(ctx: any)
-	local P, D, f, Y = ctx.Props, ctx.Decor, ctx.Folder, ctx.Y
+	local P, D, Y = ctx.Props, ctx.Decor, ctx.Y
 	local rng = ctx.Rng
+	local g = ctx.GroundModel
+	lights = 0
 
 	-- landmark (west edge)
 	local lz = ctx.MinZ + 330
 	spire(ctx, Vector3.new(Kit.CenterX - 130, Y, lz))
-	Kit.Reserve(ctx, Kit.CenterX - 120, lz, 20)
 
-	-- pastel flower-meadow patches (flat dressing)
-	for i = 1, 8 do
-		local side = if i % 2 == 0 then 1 else -1
-		local cz = ctx.MinZ + (ctx.MaxZ - ctx.MinZ) * (i - 0.5) / 8
-		local cx = Kit.CenterX + side * 92
-		Kit.Flat(P, f.Parent, "Bloom", cx - 22, cx + 22, cz - 16, cz + 16, Y + 0.04,
+	-- pastel bloom patches across the whole plot (flat dressing)
+	for i = 1, 12 do
+		local col = (i - 1) % 3 - 1
+		local cz = ctx.MinZ + (ctx.MaxZ - ctx.MinZ) * (i - 0.5) / 12
+		local cx = Kit.CenterX + col * 76 + rng:NextNumber(-10, 10)
+		Kit.Flat(P, g, "Bloom", math.max(cx - 28, -Kit.FieldHalf), math.min(cx + 28, Kit.FieldHalf), cz - 18, cz + 18, Y + 0.04,
 			({ rgb(255, 190, 235), rgb(190, 230, 255), rgb(255, 240, 180) })[i % 3 + 1], Enum.Material.Grass)
 	end
 
-	-- glowing crystal clusters (6)
-	for _, s in Kit.Band(ctx, 6, 18, 4) do
-		local m = P.Model(f, "CrystalCluster")
-		for k = 1, 3 do
-			local h = rng:NextNumber(3, 7)
-			local o = Vector3.new(rng:NextNumber(-1.4, 1.4), 0, rng:NextNumber(-1.4, 1.4))
-			P.Block(m, "Crystal", Vector3.new(1.6, h, 1.6), CFrame.new(s.Pos + o + Vector3.new(0, h / 2, 0))
-				* CFrame.Angles(math.rad(rng:NextNumber(-15, 15)), math.rad(45), math.rad(rng:NextNumber(-15, 15))),
-				D.Crystal[(k - 1) % #D.Crystal + 1], NEON)
-		end
-		Kit.Decor(ctx, m, true)
-	end
-	-- giant flowers (6)
-	for _, s in Kit.Band(ctx, 6, 14, 6) do
-		flower(ctx, s.Pos)
-	end
-	-- floating islets (4)
-	for _, s in Kit.Band(ctx, 4, 40, 9) do
-		islet(ctx, s.Pos)
-	end
-	-- standing-stone circles (2)
-	for _, s in Kit.Band(ctx, 2, 80, 9) do
-		stoneCircle(ctx, s.Pos)
-	end
-	-- glowing mushrooms (3)
-	for _, s in Kit.Band(ctx, 3, 10, 3) do
-		local m = P.Model(f, "GlowShroom")
-		P.Cylinder(m, "Stem", s.Pos, 2.4, 1, rgb(250, 240, 255))
-		P.Ellipsoid(m, "Cap", CFrame.new(s.Pos + Vector3.new(0, 2.6, 0)), Vector3.new(3.6, 1.8, 3.6), D.Crystal[2], NEON)
-		Kit.Decor(ctx, m, true)
-	end
-	-- candy-coloured trees (2)
-	for _, s in Kit.Band(ctx, 2, 30, 7) do
-		Kit.Decor(ctx, P.Tree(f, s.Pos, rng:NextNumber(1, 1.2), rgb(240, 220, 250), rgb(255, 170, 220)))
-	end
+	-- props (40)
+	Kit.PlaceAll(ctx, {
+		{ Name = "FloatingIslet", Count = 5, R = 6, Tall = true, MinAbsX = 40, Build = islet },
+		{ Name = "StandingStones", Count = 3, R = 7.5, Build = stoneCircle },
+		{ Name = "CandyTree", Count = 4, R = 6, Tall = true, Build = function(c, m, pos)
+			P.Tree(m, pos, rng:NextNumber(1, 1.2), rgb(240, 220, 250), rgb(255, 170, 220))
+		end },
+		{ Name = "GiantFlower", Count = 8, R = 4, Tall = true, Build = flower },
+		{ Name = "CrystalCluster", Count = 10, R = 2.5, Build = crystalCluster },
+		{ Name = "GlowShroom", Count = 10, R = 2, Build = glowShroom },
+	})
+
+	-- ground cover (densest, glowing clumps): glow flowers, crystal chips, lavender tufts, petals, sparkle stones
+	Kit.Cover(ctx, { Count = 520, Mode = "Clumps", Clumps = 22, ClumpRadius = 9, ClumpShare = 0.7, Items = {
+		Kit.Weight(Kit.Bead({ rgb(255, 120, 230), rgb(140, 220, 255), rgb(255, 230, 120) }, 0.7, 1.1, 0.3, NEON), 4),
+		Kit.Weight(Kit.Spike({ rgb(255, 150, 240), rgb(150, 230, 255) }, 0.7, 1.6, NEON), 3),
+		Kit.Weight(Kit.Spike({ rgb(200, 170, 250), rgb(170, 140, 230) }, 1.1, 1.5, Enum.Material.Grass), 3),
+		Kit.Weight(Kit.Chip({ rgb(255, 190, 235), rgb(255, 255, 255) }, 0.9, 0.6, 0.06), 2),
+		Kit.Weight(Kit.Dome({ rgb(235, 230, 255) }, 0.7, 1.2, Enum.Material.Glass), 1),
+	} })
 
 	-- sparkles drifting over the band (required)
 	Kit.Particles(ctx, { Name = "Sparkles", Y0 = 1, Y1 = 40, HalfWidth = Kit.LandmarkMaxAbsX, Rate = 40,

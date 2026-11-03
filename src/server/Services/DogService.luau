@@ -69,7 +69,7 @@ local function partPosition(inst: Instance): Vector3?
 end
 
 function DogService.GetYardCenter(index: number): Vector3
-	return Vector3.new(Layout.Yards.CentersX[index] or 0, Layout.GroundY, Layout.Yards.CenterZ)
+	return Vector3.new(Layout.Yards.CentersX[index] or 0, Layout.HubY, Layout.Yards.CenterZ) -- yards are on the plateau
 end
 
 -- Position for spot 1..12 of a yard: tagged DogSpot if present, else a 4x3 grid in the yard.
@@ -425,7 +425,8 @@ end
 
 -- Adds a dog. Returns (record, status): status "Added" | "Held" (yard full; waits for a slot) |
 -- "PendingSale" (dupe that auto-sells after the Keep window unless DogAction "Keep" is used).
--- opts: { InstantAdult: boolean?, Defer: boolean? (skip the display refresh), SaleDelay: number? }
+-- opts: { InstantAdult: boolean?, Defer: boolean? (skip the display refresh), Quiet: boolean? (skip the state push
+--   and the DogAdded signal: the caller does both later, e.g. ThrowService after firing ThrowResult), SaleDelay: number? }
 function DogService.AddDog(player: Player, dogId: string, variant: string?, opts: any?): (any, string)
 	local state = DataService.Get(player)
 	local def = DogCatalog.Get(dogId)
@@ -462,8 +463,10 @@ function DogService.AddDog(player: Player, dogId: string, variant: string?, opts
 	if not opts.Defer then
 		DogService.RefreshDisplay(player)
 	end
-	DataService.Push(player)
-	DogService.DogAdded:Fire(player, record, status)
+	if not opts.Quiet then
+		DataService.Push(player)
+		DogService.DogAdded:Fire(player, record, status)
+	end
 	return record, status
 end
 

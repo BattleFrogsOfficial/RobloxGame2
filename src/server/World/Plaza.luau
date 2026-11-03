@@ -72,7 +72,9 @@ local function buildShop(parent: Instance)
 	Props.Part({ Parent = m, Name = "ShopSignTrim", Size = Vector3.new(S.Width + 1, 6, 0.5),
 		CFrame = CFrame.lookAt(boardPos + Vector3.new(0, 0, 0.4), boardPos + Vector3.new(0, 0, -1)),
 		Color = colors[1], Material = WorldTheme.AccentMaterial })
-	local _ = board -- blank coloured board (no world text)
+	-- the shop's name, big and cartoony (one of the few allowed world texts; tools/worldcheck allowlists ShopLabel)
+	Props.Label(board, "BALL SHOP", { LabelName = "ShopLabel", PixelsPerStud = 20, TextColor = Color3.new(1, 1, 1),
+		StrokeColor = colors[1]:Lerp(Color3.new(0, 0, 0), 0.55) })
 
 	-- display balls on the counter
 	local ballColors = { Color3.fromRGB(210, 240, 60), Color3.fromRGB(255, 90, 90), Color3.fromRGB(80, 170, 255),
@@ -125,8 +127,10 @@ local function buildTraining(parent: Instance)
 	end
 
 	-- sign across the back edge, facing the street (-Z)
-	Props.Sign(m, "TrainingSign", Vector3.new(c.X, Y, c.Z + half + 1), Vector3.new(0, 0, -1), Vector3.new(20, 4, 0.6),
-		10, T.ShopSign, T.EquipmentAccent, nil) -- blank board (no world text)
+	-- the area's name, big and cartoony (allowed world text; tools/worldcheck allowlists TrainingLabel)
+	Props.Sign(m, "TrainingSign", Vector3.new(c.X, Y, c.Z + half + 1), Vector3.new(0, 0, -1), Vector3.new(22, 5, 0.6),
+		9, T.ShopSign, T.EquipmentAccent, "TRAINING", { LabelName = "TrainingLabel", PixelsPerStud = 20,
+			TextColor = T.EquipmentAccent, StrokeColor = Color3.fromRGB(20, 20, 35) })
 end
 
 local function buildLawn(parent: Instance)

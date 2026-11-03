@@ -4,6 +4,8 @@
 --     their spot, runaway dogs run; Rainbow / Gold / Shadow dogs get their VariantFX. Client-side only
 --     (procedural DogAnimator + local PivotTo).
 --   * ShopStand proximity prompts in the plaza open the Shop panel on the matching tab.
+-- Every dog animated here lives on the hub plateau (yards, runaway lawn): they walk at their server-placed
+-- height, never lower than the plateau surface Layout.HubY (the field 40 studs below is scenery).
 local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 
@@ -11,6 +13,7 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local DogFolder = Shared:WaitForChild("Dog")
 local DogAnimator = require(DogFolder:WaitForChild("DogAnimator"))
 local VariantFX = require(DogFolder:WaitForChild("VariantFX"))
+local Layout = require(Shared:WaitForChild("Config"):WaitForChild("Layout"))
 
 local WorldController = {}
 
@@ -51,6 +54,13 @@ local function track(inst: Instance, roams: boolean)
 		return
 	end
 	local pivot = model:GetPivot()
+	-- walking height: as placed, but the paws never below the plateau surface
+	local bbCf, bbSize = model:GetBoundingBox()
+	local lift = math.max(0, Layout.HubY - (bbCf.Position.Y - bbSize.Y / 2))
+	if lift > 0 then
+		pivot += Vector3.new(0, lift, 0)
+		model:PivotTo(pivot)
+	end
 	local home = model:GetAttribute("HomePosition")
 	local variant = model:GetAttribute("Variant")
 	local unbind = VariantFX.Bind(model, if type(variant) == "string" and variant ~= "" then variant else nil)

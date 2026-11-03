@@ -60,7 +60,7 @@ local function runawayArea(): Area
 		end
 	end
 	local pl = Layout.Plaza
-	return { MinX = pl.MinX + 20, MaxX = pl.MaxX - 20, MinZ = pl.MinZ + 15, MaxZ = pl.MaxZ - 25, Y = Layout.GroundY }
+	return { MinX = pl.MinX + 20, MaxX = pl.MaxX - 20, MinZ = pl.MinZ + 15, MaxZ = pl.MaxZ - 25, Y = Layout.HubY } -- plaza on the plateau
 end
 
 local function randomPoint(a: Area): Vector3
@@ -183,7 +183,7 @@ local function squirrelPath(): { Vector3 }
 	end
 	if #out < 2 then
 		local pl = Layout.Plaza
-		local y = Layout.GroundY
+		local y = Layout.HubY -- plaza on the plateau
 		out = {
 			Vector3.new(pl.MinX + 15, y, pl.MinZ + 15), Vector3.new(pl.MaxX - 15, y, pl.MinZ + 15),
 			Vector3.new(pl.MaxX - 15, y, pl.MaxZ - 20), Vector3.new(pl.MinX + 15, y, pl.MaxZ - 20),

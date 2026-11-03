@@ -37,7 +37,8 @@ local DECK_TAGS = { ThrowPad = true, QueueSpot = true }
 
 local EPS = 0.02
 WorldCheck.SpawnClearance = 6
-WorldCheck.GroundTolerance = 0.5 -- the ground under an item may sit this far below its surface (underlay / plateau top)
+WorldCheck.GroundTolerance = 1.05 -- the ground under an item may sit this far below its surface (underlay / plateau top,
+-- 1 stud under the floors)
 
 -- the surface a tagged part stands on
 function WorldCheck.SurfaceY(tag: string): number

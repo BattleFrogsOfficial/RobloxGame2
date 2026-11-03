@@ -1,14 +1,18 @@
 --!nocheck
--- Raised-launch ball flight test (Util/BallFlight + the throw distance maths).
+-- Plateau-to-field ball flight test (Util/BallFlight + the throw distance maths).
 --   lune run tools/tests/ballflight.luau       (from the repo root; exit code 1 on any failure)
 -- Proves:
 --   1. the horizontal landing distance for a given meter elapsed time is EXACTLY the old (pre-platform) formula
 --      Distance = clamp(ThrowPower x RangeMult x Quality(elapsed) x (1 + scatter), MinDistance, Field.MaxZ - ThrowLine.Z)
 --      measured from Layout.ThrowLine.Z, for every ball, several powers, scatters and elapsed times (tutorial too);
---   2. the arc starts on the deck at hand height (ThrowSpot.Y + Game.Throw.LaunchHeight = 44, above the 43.2
---      railing caps) and ends on the field (Y = 0) at that distance;
+--   2. the arc starts at LaunchPos = hand height on the deck (deck surface Layout.ThrowLine.Y = Layout.HubY = 40,
+--      + Game.Throw.LaunchHeight = 44, above the 43.35 railing caps) and ends at LandPos on the field
+--      (Y = Layout.GroundY = 0) at that distance;
 --   3. Z is monotone (strictly increasing) along the flight; X is linear; the apex is above the deck;
---   4. Solve() honours ApexHeight / FlightTime in every parameter combination.
+--   4. the drop is ADDED to the flight: the arc's Duration (= ThrowResult.FlightTime) is longer than the old flat
+--      pacing DefaultFlightTime(d), by exactly the extra fall time of the same throw (same apex, same gravity) over
+--      the 40 extra studs; a hand-height drop over flat ground gives back DefaultFlightTime exactly;
+--   5. Solve() honours ApexHeight / FlightTime in every parameter combination.
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 local Loader = require("./loader")
@@ -24,10 +28,13 @@ local PlayerStats = Loader.Require(Shared.Util.PlayerStats)
 local BallFlight = Loader.Require(Shared.Util.BallFlight)
 
 local EPS = 1e-9
-check(Layout.ThrowLine.Y == 40, "Layout.ThrowLine.Y is 40 (deck)", tostring(Layout.ThrowLine.Y))
+check(Layout.HubY == 40 and Layout.GroundY == 0, "hub plateau at Y 40, field at Y 0", ("%s / %s"):format(Layout.HubY, Layout.GroundY))
+check(Layout.ThrowLine.Y == Layout.HubY, "Layout.ThrowLine.Y is the (flush) deck surface = HubY", tostring(Layout.ThrowLine.Y))
 local spot = Layout.Platform.ThrowSpot
-local DECK_Y = spot.Y + Game.Throw.LaunchHeight -- launch height
-check(DECK_Y == 44 and DECK_Y > 43.2, "launch height 44, above the railing caps", tostring(DECK_Y))
+check(spot.Y == Layout.ThrowLine.Y, "ThrowSpot on the deck surface")
+local DECK_Y = Layout.ThrowLine.Y + Game.Throw.LaunchHeight -- launch height
+check(DECK_Y == 44 and DECK_Y > 43.35, "launch height 44, above the railing caps", tostring(DECK_Y))
+check(BallFlight.ReferenceDrop == Game.Throw.LaunchHeight, "reference throw drops LaunchHeight (hand height on flat ground)")
 
 -- The OLD formula, written out independently of Meter/PlayerStats (docs/DESIGN.md §4.2-4.4).
 local function oldQuality(elapsed: number, tutorial: boolean): number
@@ -62,7 +69,8 @@ local F32 = function(z: number): number
 	return math.max(1e-5, math.abs(z) * 2e-7)
 end
 local cases, worstDiff, worstVecDiff = 0, 0, 0
-local monotoneFails, endFails, startFails = 0, 0, 0
+local monotoneFails, endFails, startFails, longerFails, extraFails = 0, 0, 0, 0, 0
+local minExtra, maxExtra = math.huge, 0
 for _, power in { 60, 145, 385, 1000, 2000 } do
 	for _, ballId in Balls.Order do
 		local rm = Balls.ById[ballId].RangeMult
@@ -78,7 +86,21 @@ for _, power in { 60, 145, 385, 1000, 2000 } do
 					worstDiff = math.max(worstDiff, math.abs(distance - old))
 					worstVecDiff = math.max(worstVecDiff, math.abs(horiz - old) - F32(land.Z))
 					local p0, p1 = arc.Position(0), arc.Position(arc.Duration)
-					if math.abs(p0.Y - DECK_Y) > EPS or math.abs(p0.Z - launch.Z) > EPS then
+					-- the drop is added: longer than the flat pacing, by the extra fall of the same throw
+					local horizD = math.sqrt((land.X - launch.X) ^ 2 + (land.Z - launch.Z) ^ 2)
+					local T0 = BallFlight.DefaultFlightTime(horizD)
+					local g = BallFlight.FlatGravity(horizD)
+					local H = BallFlight.DefaultApex(horizD)
+					local expect = T0 - math.sqrt(2 * (H + Game.Throw.LaunchHeight) / g) + math.sqrt(2 * (H + (DECK_Y - Layout.GroundY)) / g)
+					if arc.Duration <= T0 then
+						longerFails += 1
+					end
+					if math.abs(arc.Duration - expect) > 1e-9 or math.abs(arc.Gravity - g) > 1e-9 then
+						extraFails += 1
+					end
+					minExtra = math.min(minExtra, arc.Duration - T0)
+					maxExtra = math.max(maxExtra, arc.Duration - T0)
+					if (p0 - launch).Magnitude > EPS then
 						startFails += 1
 					end
 					if math.abs(p1.Y - 0) > EPS or math.abs(p1.Z - (Layout.ThrowLine.Z + old)) > F32(p1.Z)
@@ -107,8 +129,17 @@ end
 check(worstDiff == 0, "distance identical to the old formula for every case", ("worst diff %g over %d cases"):format(worstDiff, cases))
 check(worstVecDiff <= 0, "LandPos.Z - ThrowLine.Z = distance (to float32 precision)", ("excess %g"):format(worstVecDiff))
 print(("%d throws compared with the old formula: max |new - old| = %g"):format(cases, worstDiff))
-check(startFails == 0, "arc starts on the deck at Y = 44", tostring(startFails) .. " bad")
-check(endFails == 0, "arc ends at Y = 0 at ThrowLine.Z + distance", tostring(endFails) .. " bad")
+check(startFails == 0, "arc starts at LaunchPos (deck, Y = 44)", tostring(startFails) .. " bad")
+check(endFails == 0, "arc ends at LandPos (Y = GroundY at ThrowLine.Z + distance)", tostring(endFails) .. " bad")
+check(longerFails == 0, "every flight is longer than the flat pacing (the ball stays in the air longer)", tostring(longerFails) .. " bad")
+check(extraFails == 0, "Duration = flat pacing + the extra fall time over the drop (same apex, same gravity)", tostring(extraFails) .. " bad")
+print(("flight time added by the 40-stud drop: %.3f .. %.3f s"):format(minExtra, maxExtra))
+-- the reference: a hand-height throw over flat ground keeps the old pacing exactly
+do
+	local a = BallFlight.ForThrow(Vector3.new(0, Game.Throw.LaunchHeight, 56), Vector3.new(0, 0, 556))
+	check(math.abs(a.Duration - BallFlight.DefaultFlightTime(500)) < 1e-9, "flat reference throw = DefaultFlightTime",
+		tostring(a.Duration))
+end
 check(monotoneFails == 0, "Z strictly increasing along the flight", tostring(monotoneFails) .. " bad")
 
 -- A typical throw in detail.
@@ -117,7 +148,8 @@ do
 	check(math.abs(distance - 385 * 1.25) < EPS, "perfect 0.8 s release: 385 x 1.25 studs", tostring(distance))
 	check(arc.ApexHeight > 0 and arc.Apex.Y > DECK_Y, "apex above the deck", tostring(arc.Apex.Y))
 	local horiz = math.sqrt((land.X - launch.X) ^ 2 + (land.Z - launch.Z) ^ 2)
-	check(math.abs(arc.Duration - BallFlight.DefaultFlightTime(horiz)) < EPS, "duration = default flight time")
+	check(arc.Duration > BallFlight.DefaultFlightTime(horiz), "duration longer than the flat pacing")
+	check(math.abs(arc.Gravity - BallFlight.FlatGravity(horiz)) < 1e-9, "gravity = flat reference gravity")
 	check(math.abs(arc.ApexHeight - BallFlight.DefaultApex(horiz)) < 1e-6, "apex height = default apex", tostring(arc.ApexHeight))
 	-- parabola: sample-based apex never exceeds the analytic one
 	local maxY = -math.huge
@@ -129,8 +161,8 @@ do
 	local mid = arc.Position(arc.Duration / 2)
 	check(math.abs(mid.X - (launch.X + land.X) / 2) < 1e-6 and math.abs(mid.Z - (launch.Z + land.Z) / 2) < 1e-6,
 		"horizontal motion is uniform")
-	print(("typical throw: %.1f studs, flight %.2f s, apex %.1f studs above the deck, launch vy %.1f, g %.1f"):format(
-		distance, arc.Duration, arc.ApexHeight, arc.Velocity.Y, arc.Gravity))
+	print(("typical throw: %.1f studs, flight %.2f s (flat pacing %.2f s), apex %.1f studs above the deck, launch vy %.1f, g %.1f"):format(
+		distance, arc.Duration, BallFlight.DefaultFlightTime(horiz), arc.ApexHeight, arc.Velocity.Y, arc.Gravity))
 end
 
 -- Parameter combinations.

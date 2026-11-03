@@ -1,14 +1,15 @@
 --!strict
--- Space Station (1900-2500): a diamond-plate deck with neon trim, station modules, solar panel arrays,
--- dish antennas, floating rocks, cargo crates, glass domes and beacons; twinkling stars and slow drifting
--- debris over the band. Landmark: a rocket on its launch pad at the east edge.
+-- Space Station (1900-2500): a diamond-plate deck with neon seams, floor lights, bolts, vent grates, cables and
+-- moon rocks over the whole plot; station modules, solar arrays, dish antennas, cargo crates, glass domes, fuel
+-- tanks, beacons and floating rocks; twinkling stars and slow drifting debris over the band.
+-- Boundary: a low bulkhead wall with a neon band across the field. Landmark: a rocket on its pad (east).
 local Kit = require((script.Parent :: Instance):WaitForChild("Kit")) :: any
 
 local rgb = Color3.fromRGB
 
 local function rocket(ctx: any, base: Vector3): Model
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder.Parent, "Rocket")
+	local m = P.Model(ctx.ZoneFolder, "Rocket")
 	local hull, red, dark = rgb(240, 240, 248), rgb(225, 60, 55), rgb(60, 66, 100)
 	P.Block(m, "Pad", Vector3.new(30, 2, 30), CFrame.new(base + Vector3.new(0, 1, 0)), dark, Enum.Material.DiamondPlate)
 	P.Block(m, "PadTrim", Vector3.new(30.4, 0.4, 30.4), CFrame.new(base + Vector3.new(0, 2.1, 0)), D.Glow, Enum.Material.Neon)
@@ -39,33 +40,28 @@ local function rocket(ctx: any, base: Vector3): Model
 	return m
 end
 
-local function module(ctx: any, pos: Vector3, side: number)
+local function module(ctx: any, m: Model, pos: Vector3, _i: number, side: number)
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder, "StationModule")
 	local c = pos + Vector3.new(0, 4.5, 0)
-	Kit.LyingCylinder(P, m, "Hull", c, 16, 7, math.pi / 2, D.Hull, Enum.Material.Metal)
-	P.Ball(m, "CapA", c + Vector3.new(0, 0, -8), 7, D.Hull, Enum.Material.Metal)
-	P.Ball(m, "CapB", c + Vector3.new(0, 0, 8), 7, D.Hull, Enum.Material.Metal)
-	P.Block(m, "Windows", Vector3.new(0.4, 1.2, 12), CFrame.new(c + Vector3.new(-side * 3.45, 0.6, 0)), D.Glow, Enum.Material.Neon)
-	P.Block(m, "Stand", Vector3.new(4, 1.2, 10), CFrame.new(pos + Vector3.new(0, 0.6, 0)), D.Panel, Enum.Material.DiamondPlate)
-	Kit.Decor(ctx, m)
+	Kit.LyingCylinder(P, m, "Hull", c, 14, 7, math.pi / 2, D.Hull, Enum.Material.Metal)
+	P.Ball(m, "CapA", c + Vector3.new(0, 0, -7), 7, D.Hull, Enum.Material.Metal)
+	P.Ball(m, "CapB", c + Vector3.new(0, 0, 7), 7, D.Hull, Enum.Material.Metal)
+	P.Block(m, "Windows", Vector3.new(0.4, 1.2, 10), CFrame.new(c + Vector3.new(-side * 3.45, 0.6, 0)), D.Glow, Enum.Material.Neon)
+	P.Block(m, "Stand", Vector3.new(4, 1.2, 9), CFrame.new(pos + Vector3.new(0, 0.6, 0)), D.Panel, Enum.Material.DiamondPlate)
 end
 
-local function solarPanel(ctx: any, pos: Vector3)
+local function solarPanel(ctx: any, m: Model, pos: Vector3)
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder, "SolarPanel")
 	P.Cylinder(m, "Post", pos, 5, 0.8, D.Antenna, Enum.Material.Metal)
 	for _, dz in { -3.4, 3.4 } do
 		P.Block(m, "Panel", Vector3.new(8, 0.3, 6), CFrame.new(pos + Vector3.new(0, 5.6, dz)) * CFrame.Angles(0, 0, math.rad(-20)),
 			rgb(40, 70, 170), Enum.Material.Glass)
 	end
 	P.Block(m, "Spine", Vector3.new(0.5, 0.5, 13.6), CFrame.new(pos + Vector3.new(0, 5.5, 0)), D.Glow, Enum.Material.Neon)
-	Kit.Decor(ctx, m, true)
 end
 
-local function dish(ctx: any, pos: Vector3, side: number)
+local function dish(ctx: any, m: Model, pos: Vector3, _i: number, side: number)
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder, "DishAntenna")
 	P.Cylinder(m, "Mast", pos, 9, 1, D.Antenna, Enum.Material.Metal)
 	local c = pos + Vector3.new(0, 10, 0)
 	local tilt = CFrame.new(c) * CFrame.Angles(0, if side > 0 then math.pi else 0, 0) * CFrame.Angles(0, 0, math.rad(55))
@@ -73,70 +69,86 @@ local function dish(ctx: any, pos: Vector3, side: number)
 		Color = D.Antenna, Material = Enum.Material.Metal })
 	P.Block(m, "Feed", Vector3.new(3, 0.4, 0.4), tilt * CFrame.new(1.6, 0, 0), D.Antenna, Enum.Material.Metal)
 	P.Ball(m, "Tip", (tilt * CFrame.new(3.2, 0, 0)).Position, 0.9, D.Glow, Enum.Material.Neon)
-	Kit.Decor(ctx, m)
+end
+
+local function crate(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	local cf = CFrame.new(pos + Vector3.new(0, 2, 0)) * Kit.Yaw(ctx)
+	P.Block(m, "Box", Vector3.new(4, 4, 4), cf, D.Hull, Enum.Material.Metal)
+	P.Block(m, "Band", Vector3.new(4.2, 0.6, 4.2), cf, D.Glow, Enum.Material.Neon)
+end
+
+local function dome(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	P.Ball(m, "Glass", pos, 14, rgb(150, 220, 255), Enum.Material.Glass).Transparency = 0.35
+	P.Cylinder(m, "Ring", pos, 1, 15, D.Panel, Enum.Material.DiamondPlate)
+	P.Block(m, "Core", Vector3.new(3, 4, 3), CFrame.new(pos + Vector3.new(0, 2, 0)), D.Glow, Enum.Material.Neon)
+end
+
+local function beacon(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	P.Cylinder(m, "Post", pos, 6, 0.6, D.Antenna, Enum.Material.Metal)
+	P.Ball(m, "Light", pos + Vector3.new(0, 6.6, 0), 1.6, rgb(255, 80, 80), Enum.Material.Neon)
+end
+
+local function fuelTank(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	local yaw = ctx.Rng:NextNumber(0, math.pi)
+	Kit.LyingCylinder(P, m, "Tank", pos + Vector3.new(0, 2.2, 0), 7, 4, yaw, rgb(240, 150, 60), Enum.Material.Metal)
+	Kit.LyingCylinder(P, m, "Band", pos + Vector3.new(0, 2.2, 0), 0.6, 4.2, yaw, D.Glow, Enum.Material.Neon)
+	P.Block(m, "Cradle", Vector3.new(3, 0.6, 3), CFrame.new(pos + Vector3.new(0, 0.3, 0)) * CFrame.Angles(0, yaw, 0), D.Panel)
+end
+
+local function floatingRock(ctx: any, m: Model, pos: Vector3)
+	local P, D, rng = ctx.Props, ctx.Decor, ctx.Rng
+	local sc = rng:NextNumber(0.9, 1.5)
+	P.Block(m, "FloatingRock", Vector3.new(5, 3.6, 4.2) * sc,
+		CFrame.new(pos + Vector3.new(0, rng:NextNumber(16, 30), 0)) * CFrame.Angles(rng:NextNumber(0, 1), rng:NextNumber(0, 6), rng:NextNumber(0, 1)),
+		D.Planet[rng:NextInteger(1, #D.Planet)]:Lerp(rgb(120, 110, 120), 0.5), Enum.Material.Slate)
+	-- its shadow ring on the deck so the footprint reads from above
+	P.Cylinder(m, "Marker", pos, 0.05, 3, D.Glow, Enum.Material.Neon)
 end
 
 return function(ctx: any)
-	local P, D, f, Y = ctx.Props, ctx.Decor, ctx.Folder, ctx.Y
-	local rng = ctx.Rng
+	local P, D, Y = ctx.Props, ctx.Decor, ctx.Y
+	local g = ctx.GroundModel
 
 	-- landmark (east edge)
 	local lz = ctx.MinZ + 290
 	rocket(ctx, Vector3.new(Kit.CenterX + 134, Y, lz))
-	Kit.Reserve(ctx, Kit.CenterX + 124, lz, 16)
 
-	-- neon deck seams across the outer bands (flat dressing)
-	for _, side in { -1, 1 } do
-		local xa, xb = Kit.CenterX + side * (Kit.LaneHalf + 2), Kit.CenterX + side * Kit.DecorMaxAbsX
-		local z = ctx.MinZ + 25
-		while z < ctx.MaxZ - 10 do
-			Kit.Flat(P, f.Parent, "DeckSeam", math.min(xa, xb), math.max(xa, xb), z - 0.3, z + 0.3, Y + 0.05, D.Glow, Enum.Material.Neon)
-			z += 60
-		end
+	-- neon deck seams across the whole deck + darker panel squares (flat dressing)
+	local z = ctx.MinZ + 25
+	while z < ctx.MaxZ - 10 do
+		Kit.Flat(P, g, "DeckSeam", Kit.CenterX - Kit.FieldHalf, Kit.CenterX + Kit.FieldHalf, z - 0.3, z + 0.3, Y + 0.05, D.Glow,
+			Enum.Material.Neon)
+		z += 60
+	end
+	for _, x in { -60, 0, 60 } do
+		Kit.Flat(P, g, "DeckPanel", Kit.CenterX + x - 0.3, Kit.CenterX + x + 0.3, ctx.StartZ, ctx.MaxZ, Y + 0.05,
+			D.Panel:Lerp(D.Glow, 0.3))
 	end
 
-	-- station modules (4)
-	for _, s in Kit.Band(ctx, 4, 40, 12) do
-		module(ctx, s.Pos, s.Side)
-	end
-	-- solar panel arrays (5)
-	for _, s in Kit.Band(ctx, 5, 18, 8) do
-		solarPanel(ctx, s.Pos)
-	end
-	-- dish antennas (3)
-	for _, s in Kit.Band(ctx, 3, 30, 7) do
-		dish(ctx, s.Pos, s.Side)
-	end
-	-- floating rocks (5)
-	for _, s in Kit.Band(ctx, 5, 20, 5) do
-		local sc = rng:NextNumber(0.9, 1.5)
-		local r = P.Block(f, "FloatingRock", Vector3.new(5, 3.6, 4.2) * sc,
-			CFrame.new(s.Pos + Vector3.new(0, rng:NextNumber(14, 30), 0)) * CFrame.Angles(rng:NextNumber(0, 1), rng:NextNumber(0, 6), rng:NextNumber(0, 1)),
-			D.Planet[rng:NextInteger(1, #D.Planet)]:Lerp(rgb(120, 110, 120), 0.5), Enum.Material.Slate)
-		Kit.Decor(ctx, r)
-	end
-	-- cargo crates (3)
-	for _, s in Kit.Band(ctx, 3, 12, 4) do
-		local m = P.Model(f, "Crate")
-		P.Block(m, "Box", Vector3.new(4, 4, 4), CFrame.new(s.Pos + Vector3.new(0, 2, 0)) * Kit.Yaw(ctx), D.Hull, Enum.Material.Metal)
-		P.Block(m, "Band", Vector3.new(4.2, 0.6, 4.2), CFrame.new(s.Pos + Vector3.new(0, 2, 0)), D.Glow, Enum.Material.Neon)
-		Kit.Decor(ctx, m, true)
-	end
-	-- glass domes (2)
-	for _, s in Kit.Band(ctx, 2, 40, 9) do
-		local m = P.Model(f, "Dome")
-		P.Ball(m, "Glass", s.Pos, 15, rgb(150, 220, 255), Enum.Material.Glass).Transparency = 0.35
-		P.Cylinder(m, "Ring", s.Pos, 1, 16, D.Panel, Enum.Material.DiamondPlate)
-		P.Block(m, "Core", Vector3.new(3, 4, 3), CFrame.new(s.Pos + Vector3.new(0, 2, 0)), D.Glow, Enum.Material.Neon)
-		Kit.Decor(ctx, m)
-	end
-	-- beacons (2)
-	for _, s in Kit.Band(ctx, 2, 30, 2) do
-		local m = P.Model(f, "Beacon")
-		P.Cylinder(m, "Post", s.Pos, 6, 0.6, D.Antenna, Enum.Material.Metal)
-		P.Ball(m, "Light", s.Pos + Vector3.new(0, 6.6, 0), 1.6, rgb(255, 80, 80), Enum.Material.Neon)
-		Kit.Decor(ctx, m, true)
-	end
+	-- props (34)
+	Kit.PlaceAll(ctx, {
+		{ Name = "StationModule", Count = 4, R = 10, Build = module },
+		{ Name = "Dome", Count = 2, R = 7.5, Build = dome },
+		{ Name = "DishAntenna", Count = 3, R = 4.5, Tall = true, Build = dish },
+		{ Name = "FloatingRock", Count = 4, R = 3.5, Tall = true, MinAbsX = 40, Build = floatingRock },
+		{ Name = "SolarPanel", Count = 6, R = 6, Build = solarPanel },
+		{ Name = "FuelTank", Count = 3, R = 4, Build = fuelTank },
+		{ Name = "Crate", Count = 8, R = 2.6, Build = crate },
+		{ Name = "Beacon", Count = 4, R = 1, Build = beacon },
+	})
+
+	-- ground cover: floor lights, bolts, vent grates, cables, moon rocks
+	Kit.Cover(ctx, { Count = 400, Mode = "Random", Items = {
+		Kit.Weight(Kit.Disc({ D.Glow, rgb(255, 120, 200) }, 0.6, 1, Enum.Material.Neon), 3),
+		Kit.Weight(Kit.Nugget({ rgb(170, 176, 196) }, 0.5, Enum.Material.Metal), 3),
+		Kit.Weight(Kit.Chip({ rgb(30, 34, 56), rgb(80, 88, 120) }, 2, 1.4, 0.1, Enum.Material.DiamondPlate), 2),
+		Kit.Weight(Kit.Chip({ rgb(25, 25, 35), rgb(200, 70, 70) }, 3.6, 0.25, 0.25), 1.5),
+		Kit.Weight(Kit.Dome({ rgb(150, 140, 170), rgb(120, 115, 140) }, 0.8, 1.6, Enum.Material.Slate), 2.5),
+	} })
 
 	-- twinkling stars high over the band and slow drifting debris (required)
 	Kit.Particles(ctx, { Name = "Stars", Y0 = 30, Y1 = 150, HalfWidth = Kit.LandmarkMaxAbsX, Rate = 24,

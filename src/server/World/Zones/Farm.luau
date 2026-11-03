@@ -1,14 +1,14 @@
 --!strict
--- Farm (450-700): tilled ground, split-rail fences on the lane edges, a red barn and silo, crop rows, hay bales,
--- scarecrows, a tractor, pumpkins and a water trough. Landmark: a windmill at the east edge, sails facing
--- the throwing platform.
+-- Farm (450-700): tilled ground with ploughed furrow stripes, hay tufts, clods, sprouts and stones over the
+-- whole plot; a red barn, a silo, crop patches, hay bales, scarecrows, a tractor, pumpkin patches, a water
+-- trough and crates. Boundary: a split-rail ranch fence across the field. Landmark: a windmill (east).
 local Kit = require((script.Parent :: Instance):WaitForChild("Kit")) :: any
 
 local rgb = Color3.fromRGB
 
 local function windmill(ctx: any, base: Vector3): Model
 	local P = ctx.Props
-	local m = P.Model(ctx.Folder.Parent, "Windmill")
+	local m = P.Model(ctx.ZoneFolder, "Windmill")
 	local wall, trim, roof, sail = rgb(245, 238, 220), rgb(170, 120, 70), rgb(200, 60, 50), rgb(255, 250, 240)
 	local y = 0
 	for i, t in { { 18, 22 }, { 16, 22 }, { 14, 22 }, { 12, 18 } } do
@@ -35,22 +35,29 @@ local function windmill(ctx: any, base: Vector3): Model
 	return m
 end
 
-local function barn(ctx: any, pos: Vector3)
+local function barn(ctx: any, m: Model, pos: Vector3, _i: number, side: number)
 	local P, D = ctx.Props, ctx.Decor
-	local m = P.Model(ctx.Folder, "Barn")
-	-- long axis along Z, doors facing the lane (+X for a west-side barn)
-	P.Block(m, "Body", Vector3.new(22, 16, 30), CFrame.new(pos + Vector3.new(0, 8, 0)), D.Barn)
-	Kit.GableZ(P, m, "Roof", pos + Vector3.new(0, 16, 0), 24, 31, 9, D.Barn:Lerp(Color3.new(0, 0, 0), 0.3))
-	P.Block(m, "Door", Vector3.new(0.4, 11, 10), CFrame.new(pos + Vector3.new(11.1, 5.5, 0)), D.BarnTrim)
-	P.Block(m, "DoorX", Vector3.new(0.5, 14.5, 1), CFrame.new(pos + Vector3.new(11.4, 5.5, 0)) * CFrame.Angles(math.rad(40), 0, 0), D.Barn)
-	P.Block(m, "DoorX2", Vector3.new(0.5, 14.5, 1), CFrame.new(pos + Vector3.new(11.4, 5.5, 0)) * CFrame.Angles(math.rad(-40), 0, 0), D.Barn)
-	P.Block(m, "Loft", Vector3.new(0.4, 4, 5), CFrame.new(pos + Vector3.new(11.1, 13, 0)), D.BarnTrim)
-	Kit.Decor(ctx, m)
+	-- long axis along Z, doors facing the field centre
+	local f = -side
+	P.Block(m, "Body", Vector3.new(18, 13, 24), CFrame.new(pos + Vector3.new(0, 6.5, 0)), D.Barn)
+	Kit.GableZ(P, m, "Roof", pos + Vector3.new(0, 13, 0), 20, 25, 7, D.Barn:Lerp(Color3.new(0, 0, 0), 0.3))
+	P.Block(m, "Door", Vector3.new(0.4, 9, 8), CFrame.new(pos + Vector3.new(f * 9.1, 4.5, 0)), D.BarnTrim)
+	P.Block(m, "DoorX", Vector3.new(0.5, 11.5, 1), CFrame.new(pos + Vector3.new(f * 9.4, 4.5, 0)) * CFrame.Angles(math.rad(40), 0, 0), D.Barn)
+	P.Block(m, "DoorX2", Vector3.new(0.5, 11.5, 1), CFrame.new(pos + Vector3.new(f * 9.4, 4.5, 0)) * CFrame.Angles(math.rad(-40), 0, 0), D.Barn)
+	P.Block(m, "Loft", Vector3.new(0.4, 3.4, 4), CFrame.new(pos + Vector3.new(f * 9.1, 10.6, 0)), D.BarnTrim)
 end
 
-local function tractor(ctx: any, pos: Vector3)
+local function silo(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	P.Cylinder(m, "Tower", pos, 26, 10, D.Silo, Enum.Material.Metal)
+	P.Ball(m, "Dome", pos + Vector3.new(0, 26, 0), 10, D.Barn)
+	for _, y in { 7, 14, 21 } do
+		P.Cylinder(m, "Hoop", pos + Vector3.new(0, y, 0), 0.6, 10.4, rgb(150, 150, 160))
+	end
+end
+
+local function tractor(ctx: any, m: Model, pos: Vector3)
 	local P = ctx.Props
-	local m = P.Model(ctx.Folder, "Tractor")
 	local body, dark = rgb(60, 160, 70), rgb(40, 40, 45)
 	P.Block(m, "Body", Vector3.new(4, 3, 7), CFrame.new(pos + Vector3.new(0, 2.6, 0)), body)
 	P.Block(m, "Cab", Vector3.new(4, 3.4, 3.4), CFrame.new(pos + Vector3.new(0, 5.8, 1.6)), body)
@@ -61,80 +68,88 @@ local function tractor(ctx: any, pos: Vector3)
 		P.Part({ Parent = m, Name = "Wheel", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.2, d, d),
 			CFrame = CFrame.new(pos + Vector3.new(w[1], d / 2, w[2])), Color = dark })
 	end
-	Kit.Decor(ctx, m)
+end
+
+local function cropPatch(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	P.Block(m, "Soil", Vector3.new(14, 0.3, 18), CFrame.new(pos + Vector3.new(0, 0.15, 0)), D.Soil, Enum.Material.Ground)
+	for r = -1.5, 1.5 do
+		P.Block(m, "Crop", Vector3.new(2, 1.8, 16), CFrame.new(pos + Vector3.new(r * 3.4, 1, 0)), D.Crop, Enum.Material.Grass)
+	end
+end
+
+local function scarecrow(ctx: any, m: Model, pos: Vector3)
+	local P, D = ctx.Props, ctx.Decor
+	P.Cylinder(m, "Pole", pos, 7, 0.6, D.Fence)
+	P.Block(m, "Arms", Vector3.new(6, 0.6, 0.6), CFrame.new(pos + Vector3.new(0, 5.2, 0)), D.Fence)
+	P.Block(m, "Shirt", Vector3.new(2.4, 2.6, 1.2), CFrame.new(pos + Vector3.new(0, 4.6, 0)), rgb(80, 130, 220))
+	P.Ball(m, "Head", pos + Vector3.new(0, 7, 0), 1.8, D.Hay)
+	P.Block(m, "Hat", Vector3.new(2.6, 0.4, 2.6), CFrame.new(pos + Vector3.new(0, 7.9, 0)), rgb(140, 95, 60))
+end
+
+local function pumpkins(ctx: any, m: Model, pos: Vector3)
+	local P = ctx.Props
+	for k = 1, 3 do
+		local o = Vector3.new(ctx.Rng:NextNumber(-1.6, 1.6), 0, ctx.Rng:NextNumber(-1.6, 1.6))
+		local s = ctx.Rng:NextNumber(0.8, 1.2)
+		P.Ellipsoid(m, "Pumpkin", CFrame.new(pos + o + Vector3.new(0, 0.9 * s, 0)), Vector3.new(2.6, 1.8, 2.6) * s, rgb(255, 140, 30))
+	end
+end
+
+local function trough(ctx: any, m: Model, pos: Vector3)
+	local P = ctx.Props
+	P.Block(m, "Tub", Vector3.new(2.4, 1.4, 5), CFrame.new(pos + Vector3.new(0, 0.7, 0)), rgb(150, 150, 160), Enum.Material.Metal)
+	P.Block(m, "Water", Vector3.new(2, 0.1, 4.6), CFrame.new(pos + Vector3.new(0, 1.35, 0)), rgb(90, 180, 240))
+end
+
+local function crate(ctx: any, m: Model, pos: Vector3)
+	local P = ctx.Props
+	local cf = CFrame.new(pos) * Kit.Yaw(ctx)
+	P.Block(m, "Crate", Vector3.new(3, 3, 3), cf * CFrame.new(0, 1.5, 0), rgb(190, 140, 80), Enum.Material.Wood)
+	P.Block(m, "Apples", Vector3.new(2.6, 0.5, 2.6), cf * CFrame.new(0, 3.1, 0), rgb(220, 50, 40))
 end
 
 return function(ctx: any)
-	local P, D, f, Y = ctx.Props, ctx.Decor, ctx.Folder, ctx.Y
+	local P, D, Y = ctx.Props, ctx.Decor, ctx.Y
 	local rng = ctx.Rng
+	local g = ctx.GroundModel
 
 	-- landmark (east edge)
 	local lz = (ctx.MinZ + ctx.MaxZ) / 2 + 6
 	windmill(ctx, Vector3.new(Kit.CenterX + 136, Y, lz))
-	Kit.Reserve(ctx, Kit.CenterX + 128, lz, 14)
 
-	-- barn + silo (west side, fixed, between marker lines)
-	local bz = ctx.MinZ + 80
-	barn(ctx, Vector3.new(Kit.CenterX - 96, Y, bz))
-	Kit.Reserve(ctx, Kit.CenterX - 96, bz, 20)
-	do
-		local m = P.Model(f, "Silo")
-		local sb = Vector3.new(Kit.CenterX - 100, Y, bz + 26)
-		P.Cylinder(m, "Tower", sb, 30, 11, D.Silo, Enum.Material.Metal)
-		P.Ball(m, "Dome", sb + Vector3.new(0, 30, 0), 11, D.Barn)
-		for _, y in { 8, 16, 24 } do
-			P.Cylinder(m, "Hoop", sb + Vector3.new(0, y, 0), 0.6, 11.4, rgb(150, 150, 160))
-		end
-		Kit.Decor(ctx, m)
-		Kit.Reserve(ctx, sb.X, sb.Z, 7)
+	-- ploughed furrows across the whole plot (flat dressing, every 12 studs)
+	local z = ctx.MinZ + 14
+	while z < ctx.MaxZ - 4 do
+		Kit.Flat(P, g, "Furrow", Kit.CenterX - Kit.FieldHalf, Kit.CenterX + Kit.FieldHalf, z - 1.2, z + 1.2, Y + 0.04,
+			ctx.Ground:Lerp(Color3.new(0, 0, 0), 0.18), Enum.Material.Ground)
+		z += 12
 	end
 
-	-- split-rail fences just outside the lane edges (2)
-	for _, side in { -1, 1 } do
-		local x = Kit.CenterX + side * (Kit.LaneHalf + 1.5)
-		Kit.Decor(ctx, P.FenceLine(f, Vector3.new(x, Y, ctx.MinZ + 4), Vector3.new(x, Y, ctx.MaxZ - 6), 20, 3.4, D.Fence, false))
-	end
-	-- crop patches (4): soil + rows
-	for _, s in Kit.Band(ctx, 4, 40, 16) do
-		local m = P.Model(f, "CropPatch")
-		local cx, cz = s.Pos.X, s.Pos.Z
-		P.Slab(m, "Soil", cx - 10, cx + 10, cz - 15, cz + 15, Y + 0.25, 0.25, D.Soil, Enum.Material.Ground, false)
-		for r = -1.5, 1.5 do
-			P.Block(m, "Crop", Vector3.new(2.2, 1.8, 27), CFrame.new(cx + r * 4.8, Y + 1, cz), D.Crop, Enum.Material.Grass)
-		end
-		Kit.Decor(ctx, m, true)
-	end
-	-- hay bales (6)
-	for _, s in Kit.Band(ctx, 6, 9, 3) do
-		Kit.Decor(ctx, P.Part({ Parent = f, Name = "HayBale", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3.4, 3.6, 3.6),
-			CFrame = CFrame.new(s.Pos + Vector3.new(0, 1.8, 0)) * Kit.Yaw(ctx), Color = D.Hay, Material = Enum.Material.Fabric }), true)
-	end
-	-- scarecrows (2)
-	for _, s in Kit.Band(ctx, 2, 40, 4) do
-		local m = P.Model(f, "Scarecrow")
-		P.Cylinder(m, "Pole", s.Pos, 7, 0.6, D.Fence)
-		P.Block(m, "Arms", Vector3.new(6, 0.6, 0.6), CFrame.new(s.Pos + Vector3.new(0, 5.2, 0)), D.Fence)
-		P.Block(m, "Shirt", Vector3.new(2.4, 2.6, 1.2), CFrame.new(s.Pos + Vector3.new(0, 4.6, 0)), rgb(80, 130, 220))
-		P.Ball(m, "Head", s.Pos + Vector3.new(0, 7, 0), 1.8, D.Hay)
-		P.Block(m, "Hat", Vector3.new(2.6, 0.4, 2.6), CFrame.new(s.Pos + Vector3.new(0, 7.9, 0)), rgb(140, 95, 60))
-		Kit.Decor(ctx, m, true)
-	end
-	-- tractor (1)
-	for _, s in Kit.Band(ctx, 1, 10, 6) do
-		tractor(ctx, s.Pos)
-	end
-	-- pumpkins (3)
-	for _, s in Kit.Band(ctx, 3, 6, 2) do
-		Kit.Decor(ctx, P.Ellipsoid(f, "Pumpkin", CFrame.new(s.Pos + Vector3.new(0, 0.9, 0)), Vector3.new(2.6, 1.8, 2.6),
-			rgb(255, 140, 30)), true)
-	end
-	-- water trough (1)
-	for _, s in Kit.Band(ctx, 1, 10, 3) do
-		local m = P.Model(f, "Trough")
-		P.Block(m, "Tub", Vector3.new(2.4, 1.4, 5), CFrame.new(s.Pos + Vector3.new(0, 0.7, 0)), rgb(150, 150, 160), Enum.Material.Metal)
-		P.Block(m, "Water", Vector3.new(2, 0.1, 4.6), CFrame.new(s.Pos + Vector3.new(0, 1.35, 0)), rgb(90, 180, 240))
-		Kit.Decor(ctx, m, true)
-	end
+	-- props (26)
+	Kit.PlaceAll(ctx, {
+		{ Name = "Barn", Count = 1, R = 13, Tall = true, MinAbsX = 60, Build = barn },
+		{ Name = "Silo", Count = 1, R = 5.5, Tall = true, MinAbsX = 60, Build = silo },
+		{ Name = "CropPatch", Count = 4, R = 9, Build = cropPatch },
+		{ Name = "Tractor", Count = 1, R = 4, Build = tractor },
+		{ Name = "Scarecrow", Count = 3, R = 3, Build = scarecrow },
+		{ Name = "HayBale", Count = 8, R = 2, Build = function(c, m, pos)
+			P.Part({ Parent = m, Name = "HayBale", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3.4, 3.6, 3.6),
+				CFrame = CFrame.new(pos + Vector3.new(0, 1.8, 0)) * Kit.Yaw(c), Color = D.Hay, Material = Enum.Material.Fabric })
+		end },
+		{ Name = "PumpkinPatch", Count = 4, R = 3, Build = pumpkins },
+		{ Name = "Crate", Count = 3, R = 2.2, Build = crate },
+		{ Name = "Trough", Count = 1, R = 2.6, Build = trough },
+	})
+
+	-- ground cover: hay tufts, soil clods, green sprouts, stones, straw
+	Kit.Cover(ctx, { Count = 300, Mode = "Random", Items = {
+		Kit.Weight(Kit.Spike({ rgb(240, 205, 100), rgb(220, 180, 80) }, 1.1, 1.3, Enum.Material.Grass), 4),
+		Kit.Weight(Kit.Nugget({ rgb(120, 85, 55), rgb(100, 70, 45) }, 1.1, Enum.Material.Ground), 3),
+		Kit.Weight(Kit.Spike({ rgb(110, 190, 60), rgb(140, 210, 70) }, 0.7, 1.1, Enum.Material.Grass), 3),
+		Kit.Weight(Kit.Dome({ rgb(160, 155, 150) }, 0.7, 1.1), 1),
+		Kit.Weight(Kit.Chip({ rgb(245, 215, 120) }, 1.8, 0.25, 0.15), 2),
+	} })
 
 	-- drifting chaff (light, cheap)
 	Kit.Particles(ctx, { Name = "Chaff", Y0 = 1, Y1 = 10, Rate = 5, Lifetime = { 5, 8 }, Speed = { 0.5, 1.5 },
