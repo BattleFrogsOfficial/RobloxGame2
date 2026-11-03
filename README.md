@@ -15,6 +15,9 @@ The project uses a standard [Rojo](https://rojo.space) layout, defined in `defau
 | `src/server`  | `ServerScriptService.Server`                      |
 | `src/client`  | `StarterPlayer.StarterPlayerScripts.Client`       |
 
+First-time setup: install [Rokit](https://github.com/rojo-rbx/rokit), then run `rokit install` in this folder
+to get the pinned Rojo version (`rokit.toml`), and `rojo plugin install` to add the Rojo plugin to Studio.
+
 ```sh
 rojo serve                      # then click "Connect" in the Rojo Studio plugin
 rojo build -o ThrowABallForDogs.rbxl # or build a place file
