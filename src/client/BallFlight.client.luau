@@ -1,7 +1,8 @@
 --!strict
 -- Renders every throw's ball for everyone (thrower + spectators) on ThrowResult: a ball coloured per
 -- Balls.ById[result.BallId].Color with a small trail, flown along the SAME arc the server timed
--- (Util/BallFlight.ForThrow(result.LaunchPos, result.LandPos)): it leaves the raised deck (Y = 40) and lands on
+-- (Util/BallFlight.ForThrow(result.LaunchPos, result.LandPos)): it leaves the thrower's hand on the raised deck
+-- (Y = 44) and lands on
 -- the field (Y = 0) at the horizontal distance of the throw. Purely visual; the outcome is already decided.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -13,10 +14,10 @@ local Util = Shared:WaitForChild("Util")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Balls = require(Config:WaitForChild("Balls"))
 local Layout = require(Config:WaitForChild("Layout"))
+local Game = require(Config:WaitForChild("Game"))
 local BallFlight = require(Util:WaitForChild("BallFlight"))
 
 local BALL_SIZE = 1.2
-local HAND_HEIGHT = 3 -- visual only: starts at hand height and blends to 0 by the landing
 local MAX_LATENCY_SKIP = 0.5 -- catch up at most this much of the flight for network delay
 
 local folder = Instance.new("Folder")
@@ -27,9 +28,8 @@ local function endpoints(result: any): (Vector3, Vector3)
 	local launch = result.LaunchPos
 	local land = result.LandPos
 	if typeof(launch) ~= "Vector3" then
-		local plat = (Layout :: any).Platform
-		local spot = if plat and typeof(plat.ThrowSpot) == "Vector3" then plat.ThrowSpot else Vector3.new(0, 40, Layout.ThrowLine.Z)
-		launch = Vector3.new(spot.X, (Layout.ThrowLine :: any).Y or 40, spot.Z)
+		local spot = Layout.Platform.ThrowSpot
+		launch = Vector3.new(spot.X, spot.Y + Game.Throw.LaunchHeight, spot.Z)
 	end
 	if typeof(land) ~= "Vector3" then
 		land = Vector3.new(launch.X, Layout.GroundY, Layout.DistanceToZ(tonumber(result.Distance) or 0))
@@ -86,7 +86,7 @@ local function play(result: any)
 	local arc = BallFlight.ForThrow(launch, land)
 	local lift = Vector3.new(0, BALL_SIZE / 2, 0)
 	local ball = makeBall(result.BallId)
-	ball.CFrame = CFrame.new(arc.Position(0) + lift + Vector3.new(0, HAND_HEIGHT, 0))
+	ball.CFrame = CFrame.new(arc.Position(0) + lift)
 	ball.Parent = folder
 
 	local skip = 0
@@ -98,8 +98,7 @@ local function play(result: any)
 	local conn: RBXScriptConnection
 	conn = RunService.RenderStepped:Connect(function()
 		local t = os.clock() - t0
-		local alpha = math.clamp(t / arc.Duration, 0, 1)
-		local pos = arc.Position(t) + lift + Vector3.new(0, HAND_HEIGHT * (1 - alpha), 0)
+		local pos = arc.Position(t) + lift
 		local vel = arc.VelocityAt(t)
 		ball.CFrame = if vel.Magnitude > 1e-3 then CFrame.lookAt(pos, pos + vel) else CFrame.new(pos)
 		if t >= arc.Duration then

@@ -5,7 +5,8 @@
 --   1. the horizontal landing distance for a given meter elapsed time is EXACTLY the old (pre-platform) formula
 --      Distance = clamp(ThrowPower x RangeMult x Quality(elapsed) x (1 + scatter), MinDistance, Field.MaxZ - ThrowLine.Z)
 --      measured from Layout.ThrowLine.Z, for every ball, several powers, scatters and elapsed times (tutorial too);
---   2. the arc starts at the deck (Y = Layout.ThrowLine.Y = 40) and ends on the field (Y = 0) at that distance;
+--   2. the arc starts on the deck at hand height (ThrowSpot.Y + Game.Throw.LaunchHeight = 44, above the 43.2
+--      railing caps) and ends on the field (Y = 0) at that distance;
 --   3. Z is monotone (strictly increasing) along the flight; X is linear; the apex is above the deck;
 --   4. Solve() honours ApexHeight / FlightTime in every parameter combination.
 local process = require("@lune/process")
@@ -23,9 +24,10 @@ local PlayerStats = Loader.Require(Shared.Util.PlayerStats)
 local BallFlight = Loader.Require(Shared.Util.BallFlight)
 
 local EPS = 1e-9
-local DECK_Y = Layout.ThrowLine.Y
-check(DECK_Y == 40, "Layout.ThrowLine.Y is 40", tostring(DECK_Y))
-local spot = (Layout.Platform and Layout.Platform.ThrowSpot) or Vector3.new(0, DECK_Y, Layout.ThrowLine.Z - 4)
+check(Layout.ThrowLine.Y == 40, "Layout.ThrowLine.Y is 40 (deck)", tostring(Layout.ThrowLine.Y))
+local spot = Layout.Platform.ThrowSpot
+local DECK_Y = spot.Y + Game.Throw.LaunchHeight -- launch height
+check(DECK_Y == 44 and DECK_Y > 43.2, "launch height 44, above the railing caps", tostring(DECK_Y))
 
 -- The OLD formula, written out independently of Meter/PlayerStats (docs/DESIGN.md §4.2-4.4).
 local function oldQuality(elapsed: number, tutorial: boolean): number
@@ -105,7 +107,7 @@ end
 check(worstDiff == 0, "distance identical to the old formula for every case", ("worst diff %g over %d cases"):format(worstDiff, cases))
 check(worstVecDiff <= 0, "LandPos.Z - ThrowLine.Z = distance (to float32 precision)", ("excess %g"):format(worstVecDiff))
 print(("%d throws compared with the old formula: max |new - old| = %g"):format(cases, worstDiff))
-check(startFails == 0, "arc starts at the deck (Y = 40)", tostring(startFails) .. " bad")
+check(startFails == 0, "arc starts on the deck at Y = 44", tostring(startFails) .. " bad")
 check(endFails == 0, "arc ends at Y = 0 at ThrowLine.Z + distance", tostring(endFails) .. " bad")
 check(monotoneFails == 0, "Z strictly increasing along the flight", tostring(monotoneFails) .. " bad")
 

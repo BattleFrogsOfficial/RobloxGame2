@@ -47,6 +47,7 @@ Game.Throw = {
 	MinSecondsBetweenThrows = 2, -- hard floor measured release -> next ChargeBegin; also the gap after a turn ends
 	Scatter = 0.02, -- distance * (1 + U(-Scatter, Scatter))
 	MinDistance = 5,
+	LaunchHeight = 4, -- ball leaves at Layout.Platform.ThrowSpot.Y + this (44: above the deck's 43.2 railing caps)
 	LateralScatter = 40, -- landing X = 0.5 x platform X + 0.5 x U(-n, n), clamped into the clear centre lane (|x| <= 56)
 }
 

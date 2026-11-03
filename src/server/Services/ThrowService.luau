@@ -14,7 +14,6 @@
 -- or the server timeout) and the thrower goes to the back; a turn-holder who does not start charging within
 -- Game.Platform.TurnStartSeconds also goes to the back. Leaving the platform (or the server) leaves the line.
 -- Player attributes: "OnPlatform" (boolean), "ThrowQueuePos" (0 = not queued, 1 = your turn, 2+ = waiting).
-local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -94,62 +93,31 @@ local function zoneById(id: string): any
 end
 
 ----------------------------------------------------------------------------------------------------
--- Platform geometry (Layout.Platform; falls back to the ThrowPad part / ThrowLine if a field is missing)
+-- Platform geometry: Layout.Platform only (the ThrowPad-tagged deck part's centre is NOT the throw spot)
 ----------------------------------------------------------------------------------------------------
 local function deckY(): number
-	return (Layout.ThrowLine :: any).Y or 40
-end
-
-local function throwPadPart(): BasePart?
-	for _, inst in CollectionService:GetTagged("ThrowPad") do
-		if inst:IsA("BasePart") then
-			return inst
-		end
-	end
-	return nil
+	return Layout.ThrowLine.Y
 end
 
 function ThrowService.ThrowSpot(): Vector3
-	local plat = (Layout :: any).Platform
-	if plat and typeof(plat.ThrowSpot) == "Vector3" then
-		return plat.ThrowSpot
-	end
-	local pad = throwPadPart()
-	if pad then
-		return Vector3.new(pad.Position.X, deckY(), pad.Position.Z)
-	end
-	return Vector3.new((Layout.ThrowLine :: any).X or 0, deckY(), Layout.ThrowLine.Z - 8)
+	return Layout.Platform.ThrowSpot
+end
+
+-- The ball leaves the thrower's hand: ThrowSpot.Y + Game.Throw.LaunchHeight (= 44, above the 43.2 railing caps).
+function ThrowService.LaunchY(): number
+	return Layout.Platform.ThrowSpot.Y + Game.Throw.LaunchHeight
 end
 
 local function standRadius(): number
-	local plat = (Layout :: any).Platform
-	if plat and type(plat.StandRadius) == "number" then
-		return plat.StandRadius
-	end
-	local pad = throwPadPart()
-	if pad then
-		return math.max(pad.Size.X, pad.Size.Z) / 2
-	end
-	return 24
+	return Layout.Platform.StandRadius
 end
 
 local function queueSpot(waitIndex: number): Vector3?
-	local plat = (Layout :: any).Platform
-	local spots = plat and plat.QueueSpots
-	if type(spots) == "table" and #spots > 0 then
-		return spots[math.clamp(waitIndex, 1, #spots)]
+	local spots = Layout.Platform.QueueSpots
+	if #spots == 0 then
+		return nil
 	end
-	local tagged = {}
-	for _, inst in CollectionService:GetTagged("QueueSpot") do
-		local order = inst:GetAttribute("Order")
-		if inst:IsA("BasePart") and type(order) == "number" then
-			tagged[order] = inst.Position
-		end
-	end
-	if #tagged > 0 then
-		return tagged[math.clamp(waitIndex, 1, #tagged)]
-	end
-	return nil
+	return spots[math.clamp(waitIndex, 1, #spots)]
 end
 
 local function rootOf(player: Player): BasePart?
@@ -330,8 +298,8 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 	local laneHalf = (Layout.Field.MaxX - Layout.Field.MinX) * 0.25 - 4
 	local landX = math.clamp(fieldCX + (spot.X - fieldCX) * 0.5
 		+ rng:Range(-Game.Throw.LateralScatter, Game.Throw.LateralScatter) * 0.5, fieldCX - laneHalf, fieldCX + laneHalf)
-	-- Raised launch: same horizontal distance, the arc starts on the deck and drops to the field.
-	local launchPos, landPos = BallFlight.Endpoints(spot, deckY(), Layout.ThrowLine.Z, Layout.GroundY, distance, landX)
+	-- Raised launch: same horizontal distance, the arc starts at hand height on the deck and drops to the field.
+	local launchPos, landPos = BallFlight.Endpoints(spot, ThrowService.LaunchY(), Layout.ThrowLine.Z, Layout.GroundY, distance, landX)
 	local flightTime = BallFlight.ForThrow(launchPos, landPos).Duration
 	local adult = DogCatalog.AdultIncome(def, outcome.Variant) * PlayerStats.IncomeMult(ctx)
 	local throwId = HttpService:GenerateGUID(false)
@@ -362,7 +330,7 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		Band = band,
 		BallId = ball.Id,
 		BallsLeft = ballsLeft, -- remaining throws of a consumable ball (nil for Tennis)
-		LaunchPos = launchPos, -- deck height (Layout.ThrowLine.Y)
+		LaunchPos = launchPos, -- (ThrowSpot.X, ThrowSpot.Y + Game.Throw.LaunchHeight = 44, ThrowSpot.Z)
 		LandPos = landPos, -- Y = GroundY, Z = ThrowLine.Z + Distance
 		FlightTime = flightTime, -- BallFlight.ForThrow(LaunchPos, LandPos).Duration
 		StartPosition = launchPos, -- legacy names (cutscene contract)

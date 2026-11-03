@@ -393,10 +393,10 @@ function DogService.RefreshDisplay(player: Player)
 			model:SetAttribute("IsPuppy", isPuppy)
 			model:SetAttribute("GrownAt", dog.GrownAt)
 			model:SetAttribute("HomePosition", pos)
-			-- roam reach (radius + half the dog's footprint) <= 9.5 studs, so neighbouring spots (20-24 apart)
+			-- roam reach (radius + half the dog's footprint) <= 8 studs, so neighbouring spots (16 apart)
 			-- never overlap and dogs stay clear of the kennel, trophy and corner bushes (QA overlap fix)
 			local ext = model:GetExtentsSize()
-			model:SetAttribute("RoamRadius", math.clamp(9.5 - math.max(ext.X, ext.Z) / 2, 1.5, 6))
+			model:SetAttribute("RoamRadius", math.clamp(8 - math.max(ext.X, ext.Z) / 2, 1.5, 6))
 			local rate = DogCatalog.AdultIncome(def, dog.Variant) * (if isPuppy then Timers.PuppyIncomeFraction else 1)
 			local tierColor = (Rarities.Tiers :: any)[def.Rarity].Color
 			DogService.AddNameplate(model, def.Name, (if isPuppy then "Puppy • " else "") .. FormatNumber.PerSecond(rate),

@@ -24,7 +24,7 @@
 -- type ThrowResult = { ThrowId, ThrowerUserId, PadIndex (always 1: the one platform), Distance, ZoneId, DogId,
 --   Rarity, Variant: string?, Caught, CatchChance, Boosts: {string}, LuckyStreakTriggered, WhistleOwned,
 --   WhistleCount, IsTutorial, BallId, BallsLeft: number? (consumable throws left after this one),
---   LaunchPos: Vector3 (deck, Y = Layout.ThrowLine.Y), LandPos: Vector3 (Y = 0, Z = ThrowLine.Z + Distance),
+--   LaunchPos: Vector3 (ThrowSpot + (0, Game.Throw.LaunchHeight, 0): Y = 44), LandPos: Vector3 (Y = 0, Z = ThrowLine.Z + Distance),
 --   FlightTime: number (= Util/BallFlight.ForThrow(LaunchPos, LandPos).Duration), ... }
 -- type PlayerState = { Cash, Bones, ThrowPower,
 --   Balls: {[ballId]: number}  -- remaining throws of each CONSUMABLE ball (> 0; absent = 0). The Tennis Ball is

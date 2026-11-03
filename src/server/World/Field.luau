@@ -3,7 +3,7 @@
 -- and colour, themed apron strips outside the field, a zone-name arch + a themed gate (Kit.Gate) at each band
 -- start, distance lines + DistanceMarker signs every 100 studs, and a backdrop at the far end. Each zone's
 -- decorations, landmark and particles come from Zones/<ZoneId>.luau. The centre lane (|x| <= Kit.LaneHalf)
--- only ever holds flat (<= 1 stud), non-colliding dressing; the arch spans it with a 220 x 34 opening.
+-- only ever holds flat (<= 1 stud), non-colliding dressing; nothing at all crosses it above that.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -22,9 +22,9 @@ local Field = {}
 local Y = Layout.GroundY
 local T = WorldTheme.Field
 
--- The throwing platform is raised to Y = 40 (eye ~45): the arch beam sits above eye level so no arch ever
--- hides the field ground or the zones behind it (see Kit.ZoneArch).
-Field.ArchHeight = 56
+-- The throwing platform is raised to Y = 40: arches are side-only sign gantries (Kit.ZoneArch), nothing
+-- crosses the lane, so they never enter the platform camera's view or the ball arc.
+Field.ArchHeight = 34
 Field.FirstArchOffset = 12 -- the Backyard arch sits just past the throw-line wall
 
 local function zoneStartZ(zone: any): number
@@ -128,7 +128,7 @@ local function buildEnd(parent: Instance)
 	local z = F.MaxZ
 	local width = Kit.ApronHalf * 2
 	local wall = Props.Block(m, "Backdrop", Vector3.new(width, 36, 4), CFrame.new(Kit.CenterX, Y + 18, z + 2), T.EndWall)
-	Props.Block(m, "BackdropTrim", Vector3.new(width, 3, 4.4), CFrame.new(Kit.CenterX, Y + 36, z + 2),
+	Props.Block(m, "BackdropTrim", Vector3.new(width, 3, 4), CFrame.new(Kit.CenterX, Y + 36, z + 2),
 		ZonesCfg[#ZonesCfg].Theme.Accent, WorldTheme.AccentMaterial)
 	local label = Props.Label(wall, tostring(math.floor(Layout.Field.MaxZ - Layout.ThrowLine.Z)) .. "! THE EDGE OF THE MAP ... FOR NOW", { PixelsPerStud = 4,
 		TextColor = Color3.fromRGB(150, 110, 210), StrokeColor = Color3.new(1, 1, 1) })

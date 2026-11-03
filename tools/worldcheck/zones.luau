@@ -7,7 +7,8 @@
 --     non-colliding
 --   * exactly one landmark (Landmark=true), |x| <= 150, tall enough for its distance, and not hidden behind
 --     anything nearer when seen from the throwing platform (eye at Y = 45, Z = throw line)
---   * a boundary at the band start (BoundaryKind "Arch" with a >= 130 x 30 opening + a themed gate)
+--   * a boundary at the band start (BoundaryKind "Arch" with a >= 130 x 30 opening + a themed gate); arches
+--     within the first 3 zones (platform camera / ball arc) must not cross the lane at all
 --   * the centre lane |x| <= 60 holds nothing collidable or taller than 1 stud (except the arch board,
 --     which must clear 30 studs, and invisible non-colliding non-queryable particle volumes)
 --   * the part budget (<= 350 per zone, <= 3000 for the field)
@@ -418,7 +419,10 @@ for _, zone in Zones do
 				innerX = math.min(innerX, if a.x0 > 0 then a.x0 elseif a.x1 < 0 then -a.x1 else 0)
 			end
 		end
-		row.opening = ("%.0fx%.0f"):format(innerX * 2, lowest)
+		row.opening = if lowest == math.huge then ("%.0fxopen"):format(innerX * 2) else ("%.0fx%.0f"):format(innerX * 2, lowest)
+		if zone.Order <= 3 and lowest ~= math.huge then
+			fail(zone.Id, "arch crosses the lane near the platform (camera view / ball arc)")
+		end
 		if innerX * 2 < 130 or lowest < 30 then
 			fail(zone.Id, ("arch opening %.0f wide x %.0f tall (want >= 130 x 30)"):format(innerX * 2, lowest))
 		end

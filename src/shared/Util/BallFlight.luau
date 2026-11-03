@@ -4,7 +4,7 @@
 --
 -- The horizontal landing distance is decided by the throw maths (PlayerStats.ThrowDistance, measured from
 -- Layout.ThrowLine.Z) and is NOT changed by the deck height: the arc simply starts at the deck
--- (Layout.ThrowLine.Y) and ends on the field (Y = 0) at that same horizontal point. The launch velocity is
+-- (hand height above Layout.Platform.ThrowSpot) and ends on the field (Y = 0) at that same horizontal point. The launch velocity is
 -- solved for the drop, so the arc is a true ballistic parabola:
 --   P(t) = Launch + Velocity * t - (0, Gravity * t^2 / 2, 0),   0 <= t <= Duration,   P(Duration) = Land
 -- Horizontal speed is constant, so X and Z are linear (monotone) in t.
@@ -17,7 +17,8 @@
 --       FlightTime only          -> Gravity (default), launch angle derived
 --       neither                  -> BallFlight.DefaultFlightTime(d) + BallFlight.DefaultApex(d), d = horizontal distance
 --   BallFlight.ForThrow(launchPos, landPos) -> Arc            (= Solve with the defaults; what the game uses)
---   BallFlight.Endpoints(throwSpot, deckY, throwLineZ, groundY, distance, landX) -> (launchPos, landPos)
+--   BallFlight.Endpoints(throwSpot, launchY, throwLineZ, groundY, distance, landX) -> (launchPos, landPos)
+--     (the game passes launchY = Layout.Platform.ThrowSpot.Y + Game.Throw.LaunchHeight = 44)
 --   Arc = { Launch, Land, Duration, Gravity, Velocity (initial), ApexHeight (above launch), Apex (Vector3),
 --           Position: (t) -> Vector3, VelocityAt: (t) -> Vector3 }   (t is clamped to [0, Duration])
 local BallFlight = {}
@@ -114,11 +115,11 @@ function BallFlight.ForThrow(launchPos: Vector3, landPos: Vector3): Arc
 	return BallFlight.Solve(launchPos, landPos, nil)
 end
 
--- Launch = the thrower's spot at deck height; land = (landX, groundY, throwLineZ + distance). The distance is
+-- Launch = the thrower's spot at launchY (hand height on the deck); land = (landX, groundY, throwLineZ + distance). The distance is
 -- horizontal and measured from the throw line, exactly as before the platform was raised.
-function BallFlight.Endpoints(throwSpot: Vector3, deckY: number, throwLineZ: number, groundY: number,
+function BallFlight.Endpoints(throwSpot: Vector3, launchY: number, throwLineZ: number, groundY: number,
 	distance: number, landX: number): (Vector3, Vector3)
-	return Vector3.new(throwSpot.X, deckY, throwSpot.Z), Vector3.new(landX, groundY, throwLineZ + distance)
+	return Vector3.new(throwSpot.X, launchY, throwSpot.Z), Vector3.new(landX, groundY, throwLineZ + distance)
 end
 
 return BallFlight
