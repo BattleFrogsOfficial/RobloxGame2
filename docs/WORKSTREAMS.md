@@ -5,20 +5,22 @@ session's paths only through a PR note.
 
 | Area | Paths | Owner |
 |---|---|---|
-| Design doc, balance, roster, server services, world builder, cutscene | `docs/DESIGN.md`, `docs/WORLD.md`, `data/**`, `tools/roster.py`, `tools/balance_sim.py`, `tools/world_bounds.py`, `tools/worldcheck/**`, `src/server/**`, `src/shared/Cutscene/**`, `src/client/Controllers/**`, `src/client/BallFlight.client.luau`, `src/client/ZoneAmbience.client.luau` | Session A |
+| Design doc, balance, roster, server services, world builder, cutscene | `docs/DESIGN.md`, `docs/WORLD.md`, `data/**`, `tools/roster.py`, `tools/balance_sim.py`, `tools/world_bounds.py`, `tools/worldcheck/**`, `src/server/**`, `src/shared/Cutscene/**`, `src/client/Cutscene/**`, `src/client/Controllers/**`, `src/client/BallFlight.client.luau`, `src/client/ZoneAmbience.client.luau` | Session A |
 | HUD / UI, pixel icons, UI layout checker | `src/client/UI/**`, `src/client/Main.client.luau`, `src/shared/UI/**`, `src/shared/Config/Icons.luau`, `assets/icons/**`, `tools/icons.py`, `tools/uicheck/**`, `docs/UI_STYLE_GUIDE.md`, `docs/qa/hud/**` | Session B |
 | Shared maths and configs | `src/shared/Config/**`, `src/shared/Util/**`, `src/shared/Remotes.luau`, `tools/tests/**` | Either, with a note in the PR |
 
 Integration points:
 
 - `src/client/Main.client.luau` is the only client entry script. It starts the UI with
-  `require(Client.UI).Start{ PlaceholderCutscene = false }`, then `Controllers/CutsceneController` and
-  `Controllers/WorldController` with the UI handle. `BallFlight.client.luau` (renders every thrown ball) and
+  `require(Client.UI).Start{ PlaceholderCutscene = false }`, then `Cutscene` (`src/client/Cutscene/init.luau`)
+  and `Controllers/WorldController` with the UI handle (if the cutscene fails to start, the UI's built-in end
+  card is switched back on). `BallFlight.client.luau` (other players' throws via `Cutscene/Spectator`) and
   `ZoneAmbience.client.luau` (per-zone colour grading) are standalone LocalScripts.
-- `CutsceneController` plays the thrower's cutscene through `src/shared/Cutscene/CutsceneContract.luau`
-  (without the cutscene's own end card), then calls `ui:ShowReveal(result, { OnClose = ... })` and
-  `ui:FinishThrow(throwId)` and fires `CutsceneFinished`. The cutscene draws no ball of its own; it follows
-  the same arc (`Util/BallFlight.ForThrow(result.LaunchPos, result.LandPos)`) and waits `result.FlightTime`.
+- `Cutscene` starts a `Director` session at the meter release (`ui.ThrowReleased`), buffers the `ThrowResult`
+  into it, plays wind-up -> ball POV -> landing -> dog -> odds counter -> outcome, then
+  `ui:ShowReveal(result, { OnClose = ... })` and `ui:FinishThrow(throwId)`, which fires `CutsceneFinished`
+  exactly once for a server throw (never for test-panel fakes). Every timing is in `Config/Cutscene.luau`;
+  the server's timeout (`Config/Timers.Cutscene`) is computed from it.
 - The HUD owns throw input (`UI/Screens/HUD.luau` + `UI/Components/PowerMeter.luau`): the prompt and the
   vertical meter only show while the `OnPlatform` attribute is true and `ThrowQueuePos == 1`. First click /
   tap / Space / gamepad R2 fires `ChargeBegin`, the second fires `ChargeRelease`.

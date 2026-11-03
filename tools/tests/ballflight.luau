@@ -78,7 +78,7 @@ for _, power in { 60, 145, 385, 1000, 2000 } do
 			for _, tutorial in { false, true } do
 				for step = 0, 600, 7 do
 					local elapsed = step / 100
-					local landX = ((step % 23) - 11) * 5 -- inside the clear lane |x| <= 56
+					local landX = ((step % 23) - 11) * 5 -- inside the landing band |x| <= 56
 					local old = oldDistance(power, rm, elapsed, tutorial, scatter)
 					local distance, arc, launch, land = newThrow(power, rm, elapsed, tutorial, scatter, landX)
 					cases += 1

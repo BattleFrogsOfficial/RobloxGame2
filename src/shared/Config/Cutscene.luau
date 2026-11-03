@@ -132,11 +132,11 @@ Cutscene.Landing = {
 	GroundProbe = 30, -- raycast this far above / below LandPos to find the real ground top
 }
 
+local DUST = "rbxasset://textures/particles/smoke_main.dds" -- soft puff texture (grass / sand / snow / grit)
+local SPARK = "rbxasset://textures/particles/sparkles_main.dds" -- glitter texture (metal / crystal)
 -- Dust / splash / sparks on touchdown, per zone. Colors: particle colour range; Texture: particle texture;
 -- Count: particles emitted; Speed: min/max particle speed; Size: start size; Lifetime: seconds;
 -- Gravity: particle Acceleration Y; Sound: SoundIds key; Pitch: PlaybackSpeed; Sparks: extra Neon sparks.
-local DUST = "rbxasset://textures/particles/smoke_main.dds"
-local SPARK = "rbxasset://textures/particles/sparkles_main.dds"
 Cutscene.ImpactFX = {
 	Backyard = { Colors = { Color3.fromRGB(110, 175, 70), Color3.fromRGB(80, 140, 50) }, Texture = DUST, Count = 22,
 		Speed = { 6, 14 }, Size = 0.5, Lifetime = 0.7, Gravity = -30, Sound = "ImpactGrass", Pitch = 1.0, Sparks = false }, -- grass bits
@@ -210,6 +210,16 @@ Cutscene.Outcome = {
 	FlourishLucky = "Saved by your Lucky Streak!", -- text under the counter on a Lucky Streak catch
 	FlourishTreat = "Saved by a Treat Pocket!", -- text under the counter on a Treat Pocket catch
 	FlourishTime = 0.3, -- the flourish line pops in this long into the outcome
+}
+
+----------------------------------------------------------------------------------------------------
+-- END CARD (ui:ShowReveal, starts at the timeline Total): waits for OK / Keep / Whistle, but always closes
+-- itself after AutoClose. Read by UI/Screens/Reveal.luau and by Config/Timers (the server timeout).
+----------------------------------------------------------------------------------------------------
+Cutscene.EndCard = {
+	-- s, the thrower's Reveal card closes itself after this (the player can close it sooner)
+	AutoClose = { Common = 5, Uncommon = 6, Rare = 7, Epic = 8, Legendary = 9, Mythic = 10 },
+	SpectatorAutoClose = 3, -- s, the compact card other players see for a Rare+ throw
 }
 
 ----------------------------------------------------------------------------------------------------

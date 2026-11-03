@@ -27,7 +27,7 @@
 17. Social and broadcasts
 18. Monetisation and fair-odds disclosure
 19. FTUE: the first two minutes
-20. CUTSCENE CONTRACT (placeholder; TBD items for the user)
+20. CUTSCENE CONTRACT (the throw cutscene: beats, timings, rules)
 21. Tech architecture
 22. Data storage (schema v2)
 23. Live-ops ideas
@@ -58,40 +58,46 @@
 
 ## 2. The world: compact T map, one shared platform, 6-player server
 
-The source of truth is `src/shared/Config/Layout.luau` (module-level detail: `docs/WORLD.md`). Units are studs. Origin is the centre of the T junction, +Z runs down the stem away from the yards, and the ground top is Y = 0 everywhere except the platform deck (Y = 40).
+The source of truth is `src/shared/Config/Layout.luau` (module-level detail: `docs/WORLD.md`). Units are studs. Origin is the centre of the T junction, +Z runs down the stem away from the yards.
+
+**Two levels.** The whole hub (six yards, street, plaza with the ball shop and training area, and the throwing platform) sits on a **plateau at `Layout.HubY` = 40**. The fetch field stays at **`Layout.GroundY` = 0**. The plateau ends along the throw line (Z = 60) in a **stepped rock cliff** (`World/Cliff.luau`: four layered strata of irregular slabs, each stepping further out than the one above, moss caps on the ledges, from under the west wall to under the east wall) that drops 40 studs to the field. Players never go down: railings and an invisible edge wall (`Layout.Edge.GuardHeight` 20, taller than any jump) close the whole plaza front.
 
 ```
- Z -180  ~~~~~~~~~~~~~~ scenery wall ~~~~~~~~~~~~~~
+ Z -180  ~~~~~~~~~~~~~~ scenery wall ~~~~~~~~~~~~~~           } hub PLATEAU, walking surface Y = HubY (40)
  Z -154 ┌Y1┬Y2┬Y3┬Y4┬Y5┬Y6┐   6 player pens (yards) 52 x 100, centres X -140..140, gates face the street
  Z  -54 ├──── STREET ─────┤   X -170..170
- Z  -34     └─ PLAZA ─┘       X -60..60: ONE ball shop (west), ONE training area (east), 2 spawns,
-             │ ramp │         runaway lawn + squirrel loop; a ~30 deg ramp runs up the middle
- Z   34      [DECK  ]         ONE raised throwing platform, deck top Y = 40 (X -18..18, Z 34..60)
- Z   60  ===throw line===     front edge of the deck = distance 0
+ Z  -34     └─ PLAZA ─┘       X -60..60: ONE ball shop (west, "BALL SHOP" sign), ONE training area (east,
+             │      │         "TRAINING" sign), 2 spawns, runaway lawn + squirrel loop
+ Z   34      [DECK  ]         ONE throwing platform, deck FLUSH with the plaza paving (X -18..18, Z 34..60)
+ Z   60  ===throw line=== ▼   deck front edge = plateau edge = distance 0; stepped rock cliff drops 40 studs
              │      │
-             │FIELD │         stem X -120..120, 9 zone bands by distance
+             │FIELD │         stem X -120..120 at Y = GroundY (0), 9 zone bands by distance
  Z 3260      └──────┘
- Z 3310  ~~~ scenery wall ~~~ side walls from |X| 236 outward, all >= 200 studs tall
+ Z 3310  ~~~ scenery wall ~~~ side walls from |X| 236 outward, all >= 200 studs tall (hub side on the plateau,
+                              field side on the field)
 ```
 
 | Area | Bounds / values | Contents (world tags) |
 |------|-----------------|-----------------------|
 | Pens / yards (crossbar) | 6 yards 52 x 100, centres X = -140, -84, -28, 28, 84, 140; CenterZ -104; 4-stud hedge gaps; gates open south onto the street | `YardPlot`, `YardSign` (OwnerLabel), `DogSpot` x12, kennel with `KennelSign` (CountLabel), `TrophySpot` |
 | Street | X -170..170, Z -54..-34 | Walkway between the yards and the plaza. |
-| Plaza | X -60..60, Z -34..60 | `PlazaSpawn` x2, **one** `ShopStand` (ShopId `"Balls"`, at `Layout.Shop`), **one** `TrainingStation` (StationId `"Main"`, at `Layout.Training`), `RunawayArea` lawn, `SquirrelPath` waypoints (`Order`) |
-| Throwing platform | `Layout.Platform`: deck 36 x 26, top Y = 40, front edge on the throw line (Z = 60); ramp 12 wide from (0, 0, -34) to (0, 40, 34) | `ThrowPad` (PadIndex 1 = the deck), marked throw spot at (0, 40, 56), `QueueSpot` x5 (`Order` 1-5) beside it |
+| Plaza | X -60..60, Z -34..60, Y 40 | `PlazaSpawn` x2, **one** `ShopStand` (ShopId `"Balls"`, at `Layout.Shop`, with its "BALL SHOP" sign), **one** `TrainingStation` (StationId `"Main"`, at `Layout.Training`, with its "TRAINING" sign), `RunawayArea` lawn, `SquirrelPath` waypoints (`Order`) |
+| Throwing platform | `Layout.Platform`: deck 36 x 26 set **flush** into the plaza paving (surface Y = 40, `Flush = true`), front edge on the throw line and the cliff edge (Z = 60). No ramp, no steps: players walk straight on from three sides. Low non-colliding front railing (caps below the launch height 44) | `ThrowPad` (PadIndex 1 = the deck), marked throw spot at (0, 40, 56), `QueueSpot` x5 (`Order` 1-5) at X 10, Y 40, beside it |
+| Cliff | Z = 60, Y 0..40, from wall to wall; foot reaches Z ~63.8 | Stepped rock strata (`Cliff.luau`); pure scenery (non-colliding, non-queryable). The shortest throw (5 studs) lands past the foot and every arc clears the ledges (`tools/worldcheck/run.luau`). |
 | Fetch field (stem) | X -120..120, Z 60..3260; themed aprons out to \|X\| 266 (they run under the walls) | `ZoneBand` (ZoneId) x9, a zone-name arch + themed gate at each band start, `DistanceMarker` (Distance) boards every 100 studs |
-| Scenery walls | \|X\| >= 236, Z <= -180, Z >= 3310; >= 200 studs tall | Stepped cliff / hedge tiers coloured by the zone they border; non-colliding scenery |
+| Scenery walls | \|X\| >= 236, Z <= -180, Z >= 3310; >= 200 studs tall | Stepped cliff / hedge tiers coloured by the zone they border; the hub-side runs rise from the plateau, the field runs from the field, cut at the throw line where the cliff joins them; non-colliding scenery |
 
-**Feel target:** a compact social hub with one very long "how far can you throw" runway. Every walk between a yard gate, the platform, the shop and the training area is at most 300 studs (under 10 s at WalkSpeed 32; `tools/worldcheck/run.luau` measures it). From the deck you look down the stem over nine distinct biomes that fade into an `Atmosphere` haze; the tall themed walls mean the horizon is never flat ground. Colours come from `Zones.luau` `Theme` and `src/shared/Config/WorldTheme.luau`.
+**Feel target:** a compact social hub with one very long "how far can you throw" runway. Every walk between a yard gate, the platform, the shop and the training area is at most 300 studs (under 10 s at WalkSpeed 32; `tools/worldcheck/run.luau` measures it). From the deck, 40 studs up, you look out and down the stem over nine distinct biomes that fade into an `Atmosphere` haze; the tall themed walls mean the horizon is never flat ground. Colours come from `Zones.luau` `Theme` and `src/shared/Config/WorldTheme.luau`.
 
 **Movement:** every character spawns with WalkSpeed 32 and JumpPower 60 (`Config/Game.luau` `WalkSpeed` / `JumpPower`, applied by `CharacterService` on every spawn).
 
-**No text in the world** except the zone name on each zone arch board, the yard owner signs and the kennel count. Shop, training area, platform, queue spots, distance markers and the field end are blank, colour-coded boards; the UI carries all other text.
+**No text in the world** except the zone name on each zone arch board, the yard owner signs, the kennel count and the two plaza name signs, **"BALL SHOP"** (`ShopLabel`) and **"TRAINING"** (`TrainingLabel`). The platform, queue spots, distance markers and the field end are blank, colour-coded boards; the UI carries all other text. `tools/worldcheck/run.luau` enforces this allowlist.
+
+**Streaming:** `Workspace.StreamingEnabled` with `StreamingMinRadius` 448 / `StreamingTargetRadius` 1024 (`default.project.json`). The scenery walls, the cliff and the outskirts (plateau block, field underlay, treeline, clouds) are Persistent models, as are each zone's ground, arch, boundary line and landmark, so the horizon and the field silhouette never stream out (about 1,700 always-streamed parts of ~7,100). Field props and ground cover are Atomic models that stream in around the player and around the landing spot (the cutscene calls `RequestStreamAroundAsync(LandPos)`).
 
 **Server size:** public servers hold **6 players**, one yard each, all sharing the one throwing platform. **"Max players = 6" is a Studio Game Settings value** (Game Settings → Places → Max Players). It cannot be set from code, so it must be set by hand before publishing. On join the server gives the player the lowest free yard index. That yard is theirs until they leave, when it is cleared and the `YardSign` resets.
 
-**Platform queue:** a player is *on the platform* while their root is within `Layout.Platform.StandRadius` (XZ) of the throw spot and no lower than the deck minus `Game.Platform.YTolerance`. Players join a FIFO queue as they arrive (`ThrowQueue`). Position 1 has the turn and is moved onto the throw spot; the others are moved onto the queue spots in order. Each turn is one throw. The turn ends `Game.Throw.MinSecondsBetweenThrows` after that throw finishes, and the thrower goes to the back. A turn-holder who does not start within `Game.Platform.TurnStartSeconds` (15 s) also goes to the back, and walking off the platform leaves the line. The server publishes the player attributes `OnPlatform` (boolean) and `ThrowQueuePos` (0 = not queued, 1 = your turn, 2+ = place in line).
+**Platform queue:** a player is *on the platform* while their root is inside the deck rectangle (`Layout.Platform` Center / Size grown by `Game.Platform.EdgeMargin` 1.5) and no lower than the deck minus `Game.Platform.YTolerance` (the deck is flush, so the rectangle, not the height, decides). Players join a FIFO queue as they arrive (`ThrowQueue`). Position 1 has the turn and is moved onto the throw spot; the others are moved onto the queue spots in order. Each turn is one throw. The turn ends `Game.Throw.MinSecondsBetweenThrows` after that throw finishes, and the thrower goes to the back. A turn-holder who does not start within `Game.Platform.TurnStartSeconds` (15 s) also goes to the back, and walking off the platform leaves the line. The server publishes the player attributes `OnPlatform` (boolean) and `ThrowQueuePos` (0 = not queued, 1 = your turn, 2+ = place in line).
 
 **World tags contract** (created by `src/server/World/**`, consumed by services and the client): `YardPlot`, `YardSign`, `DogSpot`, `KennelSign`, `TrophySpot`, `ThrowPad`, `QueueSpot`, `TrainingStation`, `ShopStand`, `PlazaSpawn`, `RunawayArea`, `SquirrelPath`, `ZoneBand`, `DistanceMarker`. Services look things up by tag and attribute, never by instance path. `src/server/World/WorldCheck.luau` checks after every build that each tagged part sits on its ground (the deck for `ThrowPad` / `QueueSpot`), that spawn volumes are clear and that the tag counts match.
 
@@ -100,15 +106,15 @@ The source of truth is `src/shared/Config/Layout.luau` (module-level detail: `do
 ## 3. Core loop
 
 ```
- ┌─► Walk up the ramp ─► Queue on the platform ─► Your turn: "Click to throw"
+ ┌─► Walk onto the deck ─► Queue on the platform ─► Your turn: "Click to throw"
  │                                                              │
  │          click: the vertical meter starts (0-100) ─► click again to release
  │                                                              │
- │     equipped consumable ball used up (back to Tennis at 0) ─► ball arcs from the deck (Y 44) to the field
+ │     equipped consumable ball used up (back to Tennis at 0) ─► ball arcs off the cliff (Y 44) to the field (Y 0)
  │                                                              │
  │          server rolls: breed (tier -> dog) -> variant -> catch (all before any visuals)
  │                                                              │
- │                         Cutscene: suspense -> dog+rarity -> variant -> catch/fumble -> reveal card
+ │     Cutscene: wind-up -> ball POV -> landing -> dog hops in -> "1 out of N" -> caught/missed -> reveal card
  │                                   │                                      │
  │                            CAUGHT: dog to your pen            MISSED: runs into the plaza 60 s
  │                            (puppy, 20% income, grows)         (whistle prompt if owned)
@@ -117,7 +123,7 @@ The source of truth is `src/shared/Config/Layout.luau` (module-level detail: `do
  └──────────────── ThrowPower up, better ball ─► reach further zones ◄──┘
 ```
 
-**Session rhythm:** a throw takes about 3-20 s including the cutscene, then the next player in line throws. Training reps at the one training station fill the gaps between turns. Every 15 min a squirrel event pulls everyone into the plaza. The daily walk is a once-a-day reason to come back. Puppy growth is a "come back later" reason.
+**Session rhythm:** a throw takes about 5-25 s including the cutscene (5.5 s Common ... 12 s Mythic to the end card, plus the card), then the next player in line throws. Training reps at the one training station fill the gaps between turns. Every 15 min a squirrel event pulls everyone into the plaza. The daily walk is a once-a-day reason to come back. Puppy growth is a "come back later" reason.
 
 ---
 
@@ -158,7 +164,7 @@ scatter  ~ Uniform(-0.02, +0.02)   -- server-side only (proposed)
 Distance = clamp(Distance, 5, Layout.Field.MaxZ - Layout.ThrowLine.Z)   -- 5 .. 3200
 ```
 
-The small scatter means a player standing on a zone boundary sometimes lands either side, so "barely missed the next zone" moments happen naturally. The landing point is `Z = Layout.DistanceToZ(Distance)` with a small random X inside the clear centre lane (|x| ≤ 56). The zone is the `Zones` entry where `MinDistance ≤ Distance < MaxDistance`. The last zone includes 3200.
+The small scatter means a player standing on a zone boundary sometimes lands either side, so "barely missed the next zone" moments happen naturally. The landing point is `Z = Layout.DistanceToZ(Distance)` with a small random X in the middle half of the field (|x| ≤ 56; the field around it is filled, but nothing there collides or answers raycasts). The zone is the `Zones` entry where `MinDistance ≤ Distance < MaxDistance`. The last zone includes 3200.
 
 **Distance is horizontal** and measured from the throw line (the deck's front edge), so raising the platform did not change any distance or zone. The deck only changes the flight: the ball leaves the hand at `LaunchPos = ThrowSpot + (0, Game.Throw.LaunchHeight, 0)` (Y = 44) and lands at `LandPos = (landX, 0, ThrowLine.Z + Distance)`. `src/shared/Util/BallFlight.luau` solves a true ballistic parabola between the two (flight time `0.7 + d/1800` s clamped to 0.7-2.2 s, apex `0.22 × d` clamped to 15-260 studs above the launch). The server times the throw with it and sends `LaunchPos`, `LandPos` and `FlightTime` in `ThrowResult`; every client draws the ball on that same arc (`src/client/BallFlight.client.luau`) and the cutscene camera follows it.
 
@@ -180,9 +186,15 @@ Source: `src/shared/Config/Zones.luau` (bands, income, theme colours); look: `sr
 | 8 | SpaceStation | Space Station | 1900 – 2500 | 16,384 | 54/13/7/3/2/1 | diamond-plate deck · modules, solar arrays, dishes, domes, stars · rocket on its pad |
 | 9 | MythicMeadow | Mythic Meadow | 2500 – 3200 | 65,536 | **53**/13/7/3/2/**2** | pastel glacier ground · crystals, giant flowers, floating islets · crystal spire |
 
-Every zone has its own ground material and colour, a zone-name arch plus a themed gate at its start, 15-30 decorations in the outer 25% of the field on each side (the centre lane |x| < 60 stays clear for the ball and the dogs), one landmark at the field edge, particles where it fits, and a matching section of the scenery walls. When the camera is over a zone (the cutscene flies into it), `ZoneAmbience.client.luau` tweens Lighting (ClockTime, Ambient), the Atmosphere colour and a client-only `ZoneAmbienceCC` colour correction toward that zone's preset (e.g. sunset Farm, dusk City, night Space, violet Meadow), and back to the server's defaults over the platform, plaza and yards. `tools/worldcheck/zones.luau` checks each zone.
+Every zone's plot (the **whole field width**, |x| ≤ 120, over its distance band) is **filled** in three layers (`src/server/World/Zones/Kit.luau`, seeded so every build is identical):
 
-First-reach pacing (median F2P, `tools/balance_sim.py`): Farm ~45 min, Snowy Peaks ~2 h, City Rooftops ~3 h, Space Station ~7 h, Mythic Meadow ~16 h. These are simulation results, not values in code; they come from ThrowPower and the ball tiers (sections 11 and 12).
+1. **Ground cover:** 200+ tiny one-part items (flowers, tufts, pebbles, shells, snow lumps, leaves, cracks, puddles) over the whole plot, density rising zone by zone; grouped into Atomic `CoverCell` models (80 × 60 studs).
+2. **Spaced props:** 20-40 mid-size props per zone (trees, boulders, bales, umbrellas, AC units, crystals…), each an Atomic model, at least `Kit.PropGap` (6) studs apart edge to edge and as far from the landmark, boundary, arch pillars and distance markers, so every landing spot has open ground for the dog. Inside the ball-POV corridor (|x| ≤ 30) only low props (≤ 10 studs).
+3. **One landmark** at the field edge (doghouse tower, clock tower, lighthouse, windmill, giant tree, mountain peak, skyscraper, rocket, crystal spire), Persistent so it is visible from the platform.
+
+Each zone starts with a **full-width boundary** (a low picket / hedge / dune / rail / logs / ice / parapet / bulkhead / crystal line across x -120..120) plus a side-only zone-name gantry (nothing crosses the middle). Everything in the field except the `ZoneBand` floors is non-colliding and non-queryable, so the ball, the landing raycast and the camera pass through; each zone's ground model, arch, boundary and landmark are Persistent, props and cover stream (section 2). Particles where they fit, and a matching section of the scenery walls. When the camera is over a zone (the cutscene flies into it), `ZoneAmbience.client.luau` tweens Lighting (ClockTime, Ambient), the Atmosphere colour and a client-only `ZoneAmbienceCC` colour correction toward that zone's preset (e.g. sunset Farm, dusk City, night Space, violet Meadow), and back to the server's defaults over the platform, plaza and yards. `tools/worldcheck/zones.luau` checks each zone (ground, cover and prop counts and spacing, landmark, boundary, streaming modes, part budget < 8,000 for the field).
+
+First-reach pacing (median F2P, `tools/balance_sim.py`, throw cycle = the real cutscene budgets): Farm ~28 min, Forest ~1 h, Snowy Peaks ~1.1 h, City Rooftops ~2 h, Space Station ~3.5 h, Mythic Meadow ~6 h. These are simulation results, not values in code; they come from ThrowPower and the ball tiers (sections 11 and 12).
 
 Total roster: **720 base dogs** (9 × 80). Mythic Meadow trades one Common for a second Mythic, so it still has 80 dogs. The roster is generated by `tools/roster.py` into `src/shared/Data/Dogs.luau`, with the source data in `data/**`.
 
@@ -499,9 +511,9 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 
 | Time | Beat | Notes |
 |------|------|-------|
-| 0:00 | Spawn at a `PlazaSpawn` at the foot of the ramp. Arrow up the ramp to the throwing platform. | The yard is auto-assigned and the YardSign shows your name. |
+| 0:00 | Spawn at a `PlazaSpawn` on the plaza. An arrow points to the throwing platform at the cliff edge (walk straight onto the flush deck). | The yard is auto-assigned and the YardSign shows your name. |
 | 0:10 | On the deck (queue if others are there). **Tutorial throw:** "Click to throw", then click again near the top of the meter. The meter runs at half speed for this throw only, client and server alike (`IsTutorial`). | Server forces Backyard, a Common and **a guaranteed catch**. |
-| 0:20 | **Cutscene** (Common length, ~2 s) → end card "+$1/s". | It cannot be skipped this first time. |
+| 0:20 | **Cutscene** (Common length, ~5.5 s) → end card "+$1/s". | It cannot be skipped this first time. |
 | 0:30 | Guide arrow to your yard. The puppy appears at a DogSpot, a "+$" floater appears, and a tooltip explains puppy → adult (Common: 5 min). | |
 | 0:50 | "Throw again!" Second turn (back of the line if others are queued) with normal odds and normal meter. The catch chance line on the HUD is highlighted. | |
 | 1:20 | Cash ≥ the first training upgrade price (starter cash $50). Arrow to the training station → a few reps, then the shop panel's Yard tab → **first training purchase** → the power cap rises and the reach line updates. | Starter cash could instead buy one Rubber Ball throw; the guide points at training first. |
@@ -511,7 +523,7 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 
 ## 20. CUTSCENE CONTRACT
 
-> **The throw cutscene (v1, built).** Client: `src/client/Cutscene/**` (controller `init`, `Director` = the thrower's sequence, `Spectator`, `Rig` = avatar throw, `Ball`, `DogActor`, `Effects`, `Sfx`, `Overlay` = counter / Skip / fallback UI, `TestPanel`, `Janitor`). Shared pure maths, Lune-tested: `src/shared/Cutscene/` (`Timeline`, `OddsCounter`, `Path`, `Shots`, `FakeResult`). **Every timing and tunable is one commented table: `src/shared/Config/Cutscene.luau`.** The old placeholder (`CutsceneContract` / `PlaceholderCutscene` / `Controllers/CutsceneController`) is retired.
+> **The throw cutscene (v1, built).** Client: `src/client/Cutscene/**` (controller `init`, `Director` = the thrower's sequence, `Spectator`, `Rig` = avatar throw, `Ball`, `DogActor`, `Effects`, `Sfx`, `Overlay` = counter / Skip / fallback UI, `TestPanel`, `Janitor`). Shared pure maths, Lune-tested: `src/shared/Cutscene/` (`Timeline`, `OddsCounter`, `Path`, `Shots`, `FakeResult`). **Every timing and tunable is one commented table: `src/shared/Config/Cutscene.luau`.**
 
 ### 20.1 Inputs and authority
 
@@ -543,7 +555,9 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 | Legendary | 0.95 | 1.5 | 0.4 | 1.4 | 3.5 | 0.75 | 2.0 | **10.5 s** |
 | Mythic | 0.95 | 1.5 | 0.5 | 1.5 | 4.0 | 1.05 | 2.5 | **12.0 s** |
 
-A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums every beat per rarity against `Budget`.
+A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums every beat per rarity against `Budget`. The Reveal end card then closes itself after `EndCard.AutoClose` (5 s Common ... 10 s Mythic) unless the player closes it first.
+
+**Server timeout.** `Config/Timers.luau` computes `Timers.Cutscene[rarity]` from this file: `Budget + (Flight.Max - ReferenceFlight) + Fallback.HoldMax + EndCard.AutoClose + Return.Time` = **16.5 / 18.5 / 20.5 / 23 / 25.5 / 28 s** (Common ... Mythic). `ThrowService` finishes a throw on its own at release + `FlightTime` + that + `Timers.CutscenePadding` (5 s) if no `CutsceneFinished` arrives, so it never cuts a real cutscene short. A `CutsceneFinished` sooner than `0.9 × Timeline.EarliestEnd` (the Skip point, or the short-Common end, at this throw's on-screen flight) is held to that time. The platform turn ends `MinSecondsBetweenThrows` after the throw finishes, so the next player in line waits for the real cutscene, never for the timeout unless the thrower disconnects or stalls. The HUD's own safety unlock (`ui.Config.ReleaseSafetySeconds` = `Timeline.SafetySeconds()`, ~11.6 s) only covers a release the server refused.
 
 ### 20.4 Rules
 
@@ -589,20 +603,21 @@ A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums ever
 - `ShopService`: cash / Bones purchases (balls, training, slots, boosts, items, cosmetics), `EquipBall`, `ProcessReceipt`, game passes.
 - `TrainingService`: the one station ("Main"), prompt + `Train` remote, power cap, AFK cut-off.
 - `LeaderboardService`: `leaderstats` only.
-- `World/**`: the world builder (`WorldBuilder`, `Platform`, `Plaza`, `Yards`, `Field`, `Zones/*`, `Walls`, `Lighting`, `WorldCheck`; see `docs/WORLD.md`).
+- `World/**`: the world builder (`WorldBuilder`, `Outskirts`, `Yards`, `Street`, `Plaza`, `Platform`, `ThrowLine`, `Cliff`, `Field`, `Zones/*`, `Boundaries`, `Walls`, `Lighting`, `WorldCheck`; see `docs/WORLD.md`).
 
 **Shared (`src/shared/`)**
-- `Config/*`: Layout, Zones, Rarities, Game, Balls, Training, Shop, Timers, Products, WorldTheme, Icons.
+- `Config/*`: Layout, Zones, Rarities, Game, Balls, Training, Shop, Timers, Products, WorldTheme, Icons, Cutscene.
 - `Data/Dogs.luau`: generated roster.
 - `Dog/`: `DogFactory`, `BodyTypes`, `DogAnimator`, `VariantFX`.
-- `Cutscene/`: `CutsceneContract` + `PlaceholderCutscene`.
+- `Cutscene/`: pure, Lune-tested cutscene maths: `Timeline` (beat plan, skip / short-Common / fallback rules, `EarliestEnd`, `Validate`), `OddsCounter` ("1 out of N" target, ticks, colour steps), `Path` (arc sampling, retarget, bounces, endpoints), `Shots` (camera shots, pose), `FakeResult` (test-panel fakes). All numbers from `Config/Cutscene.luau`.
 - `Util/`: `BallFlight` (the throw arc), `Meter`, `PlayerStats` (derived stats incl. `Ball` / `BallCount`), `Odds`, `DogCatalog`, `FormatNumber`, `Rng`, `RateLimiter`, `Signal`, `Table`.
 - `UI/PixelIcons.luau` (generated by `tools/icons.py`), `Remotes.luau`.
 
 **Client (`src/client/`)**
-- `Main.client.luau`: the only entry script. Starts the UI, then `Controllers/CutsceneController` (thrower cutscene → Reveal card → `CutsceneFinished`) and `Controllers/WorldController` (yard / runaway dog animation, shop counter prompt).
+- `Main.client.luau`: the only entry script. Starts the UI (`PlaceholderCutscene = false`), then `Cutscene` (`src/client/Cutscene/init.luau`: the thrower's cutscene → Reveal card → `ui:FinishThrow` → `CutsceneFinished`; if it fails to start, the UI's built-in end card takes over so throws still finish) and `Controllers/WorldController` (yard / runaway dog animation, shop counter prompt).
+- `Cutscene/`: `init` (controller: release → `Director` session, ThrowResult buffering, `RequestStreamAroundAsync(LandPos)`, test panel), `Director` (the thrower's sequence, camera, skip, fallback, cleanup), `Spectator` (other players' throws: avatar + ball, no camera), `Rig` (procedural / uploaded throw), `Ball`, `DogActor`, `Effects` (impact FX, ground raycast with a `GroundY` fallback), `Sfx`, `Overlay` (counter / Skip / fallback UI), `TestPanel` (only when `Game.CutsceneTestMode`), `Janitor`.
 - `UI/`: `init.luau` (wires remotes), `State`, `Router`, `Theme`, `Motion`, `Make`; `Screens/` HUD (currencies, boost chips, Lucky Streak, event banner, throw prompt + `Components/PowerMeter` vertical meter, queue line), Shop, Dogs, Book, Odds, Settings, Reveal, Spectator; `Components/` (Button, Card, Panel, Tabs, VirtualGrid, Toast, Icon, …).
-- `BallFlight.client.luau`: renders every thrown ball on the server-timed arc.
+- `BallFlight.client.luau`: other players' throws: hands each `ThrowResult` to `Cutscene/Spectator` (the thrower's own throw is the cutscene's).
 - `ZoneAmbience.client.luau`: per-zone lighting ambience (section 5).
 
 **Dog visuals are data.** There is one shared quadruped rig with 14 body types (toy, small_terrier, long_low, small_fluffy, corgi_type, medium_lean, medium_stocky, medium_fluffy, large_lean, large_athletic, large_fluffy, giant, giant_fluffy, poodle_type). Each dog is defined by body + scale + two coat colours + pattern + accessory + vfx tier, plus unique parts for Mythic. Rarity visual budget:
@@ -680,7 +695,7 @@ Anti-autofarm measures:
 | R3 | Paid luck seen as gambling or not allowed in some regions | Disclosed before/after odds, PolicyService gating, cash-priced alternatives. |
 | R4 | 720 dogs × 3 variants in-world is too heavy | One rig + data, 12-dog render cap per yard, kennel for the rest, VFX budgets per rarity, and runaway/spectator rigs pooled. |
 | R5 | Exponential income (×4 per zone, up to ×3,000 multipliers) makes numbers overflow display or balance | Compact number formatter, Luau doubles (safe to ~1e15 exactly; display beyond is fine), and a balance pass on ball/upgrade prices. |
-| R6 | Cutscene is a placeholder and might get coupled to gameplay | A strict contract (section 20). The server never waits on the cutscene to save. |
+| R6 | The cutscene gets coupled to gameplay, or a client never reports `CutsceneFinished` | The cutscene only displays the `ThrowResult` (section 20). The server commits and saves the outcome before sending it, finishes the throw on its own after `Timers.Cutscene[rarity]` + padding (computed from `Config/Cutscene.luau`), and ignores a `CutsceneFinished` sooner than `Timeline.EarliestEnd`. |
 | R7 | MessagingService limits during a burst of Legendaries | Throttle and queue (section 17); drop stale items. |
 | R8 | "Max players = 6" forgotten at publish | Pre-publish checklist item: Studio Game Settings → Max Players = 6. The server also handles more than 6 gracefully (extra players get no yard and see a "server full" notice and teleport). |
 | R9 | Form count mismatch: the brief says 1,422 forms, but the 53C/2M Meadow gives 27 non-Commons, so 720 + 3 × 235 = **1,425** | The roster generator (`tools/roster.py`) is authoritative. Variant badges are computed from data, not hard-coded. |
@@ -693,7 +708,7 @@ Anti-autofarm measures:
 
 | File | Owns | Owner workstream |
 |------|------|------------------|
-| `src/shared/Config/Layout.luau` | world coordinates: yards, street, plaza, throw line (Y 40), platform (deck, throw spot, queue spots, ramp), shop + training positions, field, render cap | shared contract |
+| `src/shared/Config/Layout.luau` | world coordinates: `HubY` (plateau 40) / `GroundY` (field 0), yards, street, plaza, throw line (Y 40), flush platform (deck, throw spot, queue spots), cliff edge guard, shop + training positions, field, render cap | shared contract |
 | `src/shared/Config/Zones.luau` | 9 zones, distance bands, BaseIncome, theme colours | shared contract |
 | `src/shared/Config/Rarities.luau` | tier odds, catch, IncomeMult, PerZone, variants, LuckyStreakMisses | shared contract |
 | `src/shared/Remotes.luau` | remote names + payload shapes | shared contract |
@@ -701,7 +716,8 @@ Anti-autofarm measures:
 | `src/shared/Config/Balls.luau` | ball RangeMult, luck shift, price per purchase, Consumable / Uses, MaxOwned | C1 server |
 | `src/shared/Config/Training.luau` | the one station ("Main"): gain, cooldown, range; upgrades (cost, mult, power caps) | C1 server |
 | `src/shared/Config/Shop.luau` | in-game shop items, prices, boost effects, slot prices | C1 server |
-| `src/shared/Config/Timers.luau` | growth times, daily walk, squirrel cadence, runaway seconds, offline cap | C1 server |
+| `src/shared/Config/Timers.luau` | growth times, daily walk, squirrel cadence, runaway seconds, offline cap; the server cutscene timeout `Cutscene[rarity]` (computed from `Config/Cutscene.luau`) + `CutscenePadding` | C1 server |
+| `src/shared/Config/Cutscene.luau` | every throw-cutscene timing and tunable, one comment each: per-rarity beats + budgets, wind-up / pose, flight remap + POV camera, landing + impact FX, dog, odds counter, outcome, end card auto-close, return, skip / short Common / fallback / reduced motion / spectator / test rules, sound ids | cutscene |
 | `src/shared/Config/Products.luau` | gamepass & dev product IDs → effects | C1 server |
 | `src/shared/Config/WorldTheme.luau` | materials and colours for the world builder: plaza, platform, walls (per zone), field, lighting + Atmosphere haze | D world |
 | `src/shared/Config/Icons.luau` | uploaded pixel-icon asset ids (icons are generated by `tools/icons.py`) | UI |

@@ -25,10 +25,15 @@ local function start(name: string, module: Instance)
 		local started, err = pcall(c.Start, ui)
 		if not started then
 			warn(("[Client] %s.Start failed: %s"):format(name, tostring(err)))
+			return nil
 		end
 	end
 	return c
 end
 
 ui.Cutscene = start("Cutscene", Client:WaitForChild("Cutscene"))
+if ui.Cutscene == nil then
+	-- The cutscene failed to load: fall back to the UI's built-in end card so throws still finish and unlock.
+	ui.Config.PlaceholderCutscene = true
+end
 start("WorldController", Client:WaitForChild("Controllers"):WaitForChild("WorldController"))

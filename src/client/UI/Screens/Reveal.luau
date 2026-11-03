@@ -7,6 +7,7 @@ local Config = Shared:WaitForChild("Config")
 local Util = Shared:WaitForChild("Util")
 local Rarities = require(Config:WaitForChild("Rarities"))
 local Zones = require(Config:WaitForChild("Zones"))
+local CutsceneConfig = require(Config:WaitForChild("Cutscene")) -- EndCard.AutoClose (also the server timeout)
 local DogCatalog = require(Util:WaitForChild("DogCatalog"))
 local FormatNumber = require(Util:WaitForChild("FormatNumber"))
 
@@ -170,7 +171,9 @@ function Reveal.new(parent: Instance)
 			flash.BackgroundTransparency = 0.4
 			Motion.Tween(flash, { BackgroundTransparency = 1 }, 0.5)
 		end
-		local seconds = o.AutoCloseSeconds or (if o.Spectator then 3 else 4 + idx)
+		local ec = CutsceneConfig.EndCard
+		local seconds = o.AutoCloseSeconds
+			or (if o.Spectator then ec.SpectatorAutoClose else ((ec.AutoClose :: any)[rarity] or ec.AutoClose.Common))
 		task.delay(seconds, function()
 			if closeTimer == myTimer then
 				close()

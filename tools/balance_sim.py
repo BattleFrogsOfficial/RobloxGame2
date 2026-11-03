@@ -177,8 +177,13 @@ def load_config():
     gr = block(tm, "Timers.Growth")
     c["Growth"] = {k: field(gr, k) for k in c["Order"]}
     c["PuppyFrac"] = field(tm, "Timers.PuppyIncomeFraction")
-    cu = block(tm, "Timers.Cutscene")
-    c["Cutscene"] = {k: field(cu, k) for k in c["Order"]}
+    # Throw-cycle cutscene length = the real cutscene's per-rarity budget (release -> end card, Config/Cutscene.luau);
+    # Timers.Cutscene is now only the server timeout. A short Common (HideCommonReveals) = release + flight + settle.
+    cs = read("Cutscene.luau")
+    bu = block(cs, "Cutscene.Budget")
+    c["Cutscene"] = {k: field(bu, k) for k in c["Order"]}
+    c["ShortCommon"] = (field(block(cs, "Cutscene.WindUp"), "ReleaseAt") + field(bu, "ReferenceFlight")
+                        + field(block(cs, "Cutscene.ShortCommon"), "AfterTouchdown"))
     c["SkipAfter"] = field(tm, "Timers.CommonSkippableAfter")
     c["SquirrelInterval"] = field(tm, "Timers.SquirrelInterval")
     c["OfflineCap"] = field(tm, "Timers.OfflineCapSeconds")
@@ -498,7 +503,7 @@ class Player:
         if tier == "Common":
             self.common_seen += 1
             if self.common_seen > c["SkipAfter"] and not tutorial:
-                cut = 0.6
+                cut = c["ShortCommon"]
         charge = c["Meter"]["Period"] / 2 * (2 if tutorial else 1)
         return charge + max(c["Throw"]["MinSecondsBetweenThrows"], cut) + REACTION
 

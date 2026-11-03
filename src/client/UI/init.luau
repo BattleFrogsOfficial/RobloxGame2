@@ -18,7 +18,7 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = Shared:WaitForChild("Config")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Game = require(Config:WaitForChild("Game"))
-local Timers = require(Config:WaitForChild("Timers"))
+local CutsceneConfig = require(Config:WaitForChild("Cutscene"))
 local Rarities = require(Config:WaitForChild("Rarities"))
 local Signal = require(Shared:WaitForChild("Util"):WaitForChild("Signal"))
 
@@ -42,7 +42,8 @@ local UI = {}
 export type StartDeps = {
 	Parent: Instance?, -- defaults to PlayerGui
 	OwnsThrowInput: boolean?, -- default true
-	PlaceholderCutscene: boolean?, -- default true: show the end card after Timers.Cutscene[rarity] seconds
+	PlaceholderCutscene: boolean?, -- default true: no cutscene module; show the end card after Cutscene.Budget[rarity] s
+	                               -- (Main.client turns it back on only if src/client/Cutscene fails to start)
 	Remotes: { [string]: Instance }?, -- test injection; defaults to Remotes.Get
 	IsTouch: boolean?, -- test injection
 	Viewport: Vector2?, -- test injection
@@ -263,7 +264,7 @@ function UI.Start(deps: StartDeps?)
 				serverThrows[result.ThrowId] = true
 			end
 			local rarity = result.Rarity or "Common"
-			local wait = (Timers.Cutscene :: any)[rarity] or 2
+			local wait = (CutsceneConfig.Budget :: any)[rarity] or CutsceneConfig.Budget.Common
 			if ui.Config.PlaceholderCutscene then
 				local hideCommon = State.Settings.HideCommonReveals and rarity == "Common"
 				task.delay(if hideCommon then 0.5 else wait, function()

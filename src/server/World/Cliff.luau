@@ -54,7 +54,9 @@ local function part(f: Instance, name: string, minX: number, maxX: number, minZ:
 end
 
 function Cliff.Build(parent: Instance)
-	local f = Props.Folder(parent, "Cliff")
+	-- Persistent Model: always streamed to every client (seen from the whole field and from the ball POV).
+	local f = Props.Model(parent, "Cliff")
+	f.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	local rng = Random.new(60606)
 	local hub, ground = Layout.HubY, Layout.GroundY
 	local lipY = hub - 1 -- the plateau top (Outskirts.Plateau, just under the 1-stud hub floors)

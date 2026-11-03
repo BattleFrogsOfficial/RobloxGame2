@@ -6,6 +6,8 @@
 --   Timeline.IsShort(rarity, hideCommonReveals) -> boolean  (Settings.HideCommonReveals)
 --   Timeline.FallbackAfter(flightSeconds) -> seconds after the meter release at which a missing ThrowResult
 --     gives up (release frame + estimated flight + Fallback.HoldMax)
+--   Timeline.EarliestEnd(rarity, flightSeconds) -> soonest a real client can finish (skip / short Common); the
+--     server's CutsceneFinished floor
 --   Timeline.SafetySeconds() -> the longest the HUD may stay locked waiting for a ThrowResult
 --   Timeline.Validate(raw) -> (true, normalised) | (false, reason)
 -- Every number comes from Config/Cutscene.luau.
@@ -35,7 +37,7 @@ local function perRarity(row: { [string]: number }, rarity: string): number
 	return row[rarity] or row.Common or 0
 end
 
--- result.FlightTime (server seconds, BallFlight.DefaultFlightTime: 0.7..2.2) -> on-screen seconds (Min..Max),
+-- result.FlightTime (server seconds, Util/BallFlight.ForThrow incl. the plateau drop: ~1.0..2.3) -> on-screen (Min..Max),
 -- linear in between, so longer throws fly longer. Missing / bad input -> Flight.Min.
 function Timeline.FlightSeconds(serverFlight: number?): number
 	local f = C.Flight
@@ -104,6 +106,24 @@ end
 
 function Timeline.FallbackAfter(flightSeconds: number): number
 	return C.WindUp.ReleaseAt + math.clamp(flightSeconds, C.Flight.Min, C.Flight.Max) + C.Fallback.HoldMax
+end
+
+-- The soonest a real client can end this throw's cutscene (seconds after the meter release): skipping at
+-- Skip.FromBeat (never for Skip.Never rarities) or a short Common (Settings.HideCommonReveals), then closing the
+-- end card at once. ThrowService ignores an earlier CutsceneFinished (it finishes the throw at this point).
+function Timeline.EarliestEnd(rarity: string, flightSeconds: number): number
+	local full = Timeline.Build(rarity, flightSeconds)
+	local t = full.Total
+	if rarity == "Common" then
+		t = math.min(t, Timeline.Build(rarity, flightSeconds, { Short = true }).Total)
+	end
+	if not (C.Skip.Never :: any)[rarity] then
+		local from = full.ByName[C.Skip.FromBeat]
+		if from then
+			t = math.min(t, from.Start)
+		end
+	end
+	return t
 end
 
 function Timeline.SafetySeconds(): number

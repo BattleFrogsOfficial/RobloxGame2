@@ -4,7 +4,8 @@
 -- Proves: every beat per rarity sums to Config.Budget (release -> end card) at the reference flight; every
 -- config value is a number in range; the flight remap stays in Flight.Min..Max and grows with distance;
 -- skip rules (from the counter on, never Legendary / Mythic); HideCommonReveals shortens Commons only;
--- the fallback / HUD-safety deadlines; Validate never changes an outcome; fake results are well formed.
+-- the fallback / HUD-safety deadlines; Validate never changes an outcome; fake results are well formed; the
+-- server timeout (Config/Timers.Cutscene) covers the longest real cutscene and EarliestEnd never blocks a skip.
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 local Loader = require("./loader")
@@ -215,6 +216,41 @@ for _, rar in Rarities.Order do
 			check(not f.Caught or not f.WhistleOwned, "whistle only on a miss")
 		end
 	end
+end
+
+-- Server timeout (Config/Timers.Cutscene, computed from Config/Cutscene) and the CutsceneFinished floor
+-- (Timeline.EarliestEnd): the server never finishes before the longest real client cutscene, and never holds an
+-- honest skip / short Common back.
+do
+	local Timers = Loader.Require(Shared.Config.Timers)
+	print("server timeout (s): " .. table.concat((function()
+		local t = {}
+		for _, r in Rarities.Order do
+			table.insert(t, ("%s %.1f"):format(r, Timers.Cutscene[r]))
+		end
+		return t
+	end)(), ", "))
+	for _, r in Rarities.Order do
+		local longest = Timeline.Build(r, C.Flight.Max).Total + C.Fallback.HoldMax + C.EndCard.AutoClose[r] + C.Return.Time
+		check(type(Timers.Cutscene[r]) == "number" and Timers.Cutscene[r] + 1e-9 >= longest,
+			"server timeout covers the longest " .. r .. " cutscene", ("%s < %s"):format(tostring(Timers.Cutscene[r]), longest))
+		check(C.EndCard.AutoClose[r] < 30, r .. " end card closes before the Director's 30 s guard")
+		for _, sf in { 0.99, 1.4, 2.3 } do
+			local fl = Timeline.FlightSeconds(sf)
+			local e = Timeline.EarliestEnd(r, fl)
+			local full = Timeline.Build(r, fl)
+			check(e > C.WindUp.ReleaseAt + fl and e <= full.Total + 1e-9, r .. " earliest end after touchdown, <= full")
+			if C.Skip.Never[r] then
+				check(near(e, full.Total), r .. " (never skippable) earliest end = the full timeline")
+			else
+				check(e <= full.ByName[C.Skip.FromBeat].Start + 1e-9, r .. " earliest end <= the Skip point")
+			end
+			if r == "Common" then
+				check(e <= Timeline.Build(r, fl, { Short = true }).Total + 1e-9, "Common earliest end <= short Common")
+			end
+		end
+	end
+	check(Timers.CutscenePadding > 0, "server timeout padding > 0")
 end
 
 process.exit(Loader.Done("cutscene") > 0 and 1 or 0)

@@ -6,23 +6,28 @@ folder detached, applies lighting (server only), runs `WorldCheck`, then parents
 coordinate comes from `Config/Layout.luau` + `Config/Zones.luau`; every colour/material from
 `Config/WorldTheme.luau`. The design view of the same map is `docs/DESIGN.md` section 2.
 
+**Two levels:** the hub (yards, street, plaza, shop, training, platform deck, spawns) is a plateau at
+`Layout.HubY` = 40; the fetch field is at `Layout.GroundY` = 0. The plateau ends at the throw line
+(Z = 60) in a stepped rock cliff; the platform deck is flush with the plaza at the very edge (no ramp).
+
 ## Modules (`src/server/World/`)
 
 | File | Builds |
 |---|---|
 | `WorldBuilder.luau` | entry point; runs each step in `pcall`, prints the part count, sets `Map.PartCount`, runs WorldCheck |
 | `Props.luau` | anchored, smooth, non-colliding-by-default helpers: Slab, Block, Cylinder, Ball, Ellipsoid, Sign, Label, Tree, Pine, Bush, Rock, FenceLine, Arch, Tag |
-| `Outskirts.luau` | grass underlay under everything, treeline behind the yards, tree clumps beside the plaza, clouds |
+| `Outskirts.luau` | the hub plateau block (top just under HubY, front face behind the cliff), the field-level underlay, treeline behind the yards, tree clumps beside the plaza, clouds (Persistent Model) |
 | `Yards.luau` | 6 yards (52 x 100) side by side + the hedge strips between them |
 | `Street.luau` | crossbar street, centre dashes, zebra crossings at every gate |
-| `Plaza.luau` | ONE ball shop (west), ONE training area (east), two spawns, the runaway lawn + squirrel loop |
-| `Platform.luau` | the ONE raised throwing platform: tower, deck (Y = 40), 30 degree ramp, throw spot, 5 queue spots, railings + invisible guards |
-| `ThrowLine.luau` | ground-level throw line in front of the tower, low fence + invisible wall along the plaza's field edge |
-| `Field.luau` | 9 ZoneBand floors, apron strips (run under the walls), zone-name arches + themed gates, distance lines + blank marker boards, end backdrop |
-| `Zones/Kit.luau` | placement rules for decorators (outer 25% bands, landmark edge, arch / gate helpers) |
-| `Zones/<ZoneId>.luau` | one themed decorator per zone (`return function(ctx)`): ground, 15-30 decorations, one landmark, particles |
-| `Walls.luau` | 200+ stud stepped cliff / hedge walls around the whole map, coloured per zone; pure scenery |
-| `Boundaries.luau` | invisible walls around the crossbar and the plaza |
+| `Plaza.luau` | ONE ball shop (west, "BALL SHOP" sign), ONE training area (east, "TRAINING" sign), two spawns, the runaway lawn + squirrel loop; paving laid around the flush deck |
+| `Platform.luau` | the ONE throwing platform: deck flush with the plaza (Y = 40, no ramp, no steps), front edge on the cliff edge, throw spot, 5 queue spots (X 10, Y 40), low non-colliding front railing |
+| `ThrowLine.luau` | white throw line across the plaza front, low railings either side of the deck, ONE invisible edge wall (`Layout.Edge.GuardHeight` 20) so nobody walks or jumps off the cliff |
+| `Cliff.luau` | the plateau cliff along the throw line: four stepped rock strata of irregular slabs from wall to wall, moss caps, grass lip; pure scenery (Persistent Model) |
+| `Field.luau` | 9 ZoneBand floors, apron strips (run under the walls), side-only zone-name gantries + full-width boundary lines, distance lines + blank marker boards, end backdrop; runs the zone decorators |
+| `Zones/Kit.luau` | the fill rules: ground cover over the whole plot (Atomic CoverCells), 20-40 spaced props (Atomic, `PropGap` 6 edge to edge, low props only in the ball-POV corridor), one Persistent landmark at the field edge, boundary + arch helpers; everything non-colliding and non-queryable |
+| `Zones/<ZoneId>.luau` | one themed decorator per zone (`return function(ctx)`, seeded): ground, cover, props, landmark, boundary style, particles |
+| `Walls.luau` | 200+ stud stepped cliff / hedge walls around the whole map, coloured per zone; hub-side runs on the plateau, field runs on the field; pure scenery (Persistent Model) |
+| `Boundaries.luau` | invisible walls around the crossbar and the plaza, on the plateau |
 | `Lighting.luau` | ClockTime, ambient, Atmosphere haze, Sky, Bloom, ColorCorrection, SunRays (server only; adopts effects by name, never the client's `ZoneAmbienceCC`) |
 | `WorldCheck.luau` | post-build check: tagged parts on their ground, spawn volumes clear, tag counts |
 
@@ -32,20 +37,20 @@ correction toward a per-zone preset while the camera is over the field.
 ## Map (top view, +Z down the stem, origin = T junction)
 
 ```
- Z -180  ~~~~~~~~~~~~~ scenery wall (hedge) ~~~~~~~~~~~~~
+ Z -180  ~~~~~~~~~~~~~ scenery wall (hedge) ~~~~~~~~~~~~~        } plateau, Y = HubY (40)
  Z -154  +-Y1-+-Y2-+-Y3-+-Y4-+-Y5-+-Y6-+     yards 52 x 100, centres x -140..140 (56 apart)
          | 12 DogSpots, kennel, trophy  |     YardSign over each gate faces the street
  Z  -54  +=GATE=========================+
          |  STREET  x -170..170          |
- Z  -34  +------+  ramp foot  +----------+
-                | spawn |  | spawn |            plaza x -60..60
-                | BALL  |R |  TRAINING|         ramp x -6..6, ~30 deg, Z -34..34
-                | SHOP  |A |  (Main)  |
-                | lawn  |M |          |         lawn (x -56..-24, z 18..56) = RunawayArea + squirrel loop
- Z   34         |      [ DECK Y=40 ]   |        deck x -18..18, Z 34..60, queue spots at x 10
- Z   60  =========== throw line ==========      front edge of the deck = distance 0
-                |deco| centre lane |deco|       field x -120..120, aprons to |x| 266
-                |25% | |x| < 60    |25% |       9 zone bands, arch at each band start
+ Z  -34  +-------------------------------+
+                | spawn          spawn |        plaza x -60..60
+                | BALL SHOP   TRAINING |        shop (-34, -4), training (34, 2), name signs
+                | lawn                 |        lawn (x -56..-24, z 18..56) = RunawayArea + squirrel loop
+ Z   34         |    [ DECK flush ]    |        deck x -18..18, Z 34..60, queue spots at x 10
+ Z   60  ====== throw line / cliff edge ======  deck front edge = distance 0; edge wall + railings
+         \\\\\ stepped rock cliff 40 -> 0 \\\\  foot at Z ~63.8
+                | cover + spaced props |        field x -120..120 at Y = GroundY (0), aprons to |x| 266
+                | landmark, boundary   |        9 filled zone bands, boundary line + gantry at each start
  Z 3260         +----- END BACKDROP ----+
  Z 3310  ~~~~~~~~~~~~~ scenery wall ~~~~~~~~~~~  side walls from |x| 236 outward
 ```
@@ -60,28 +65,39 @@ correction toward a per-zone preset while the camera is over the field.
 
 ## World text
 
-The only text in the world is the zone name on each zone arch board, the yard owner signs (`OwnerLabel`)
-and the kennel count (`CountLabel`). Shop, training, platform, queue spots, distance markers and the end
-backdrop are blank coloured boards. `tools/worldcheck/run.luau` enforces this.
+The only text in the world is the zone name on each zone arch board, the yard owner signs (`OwnerLabel`),
+the kennel count (`CountLabel`) and the two plaza name signs "BALL SHOP" (`ShopLabel`) and "TRAINING"
+(`TrainingLabel`). Platform, queue spots, distance markers and the end backdrop are blank coloured boards.
+`tools/worldcheck/run.luau` enforces this allowlist.
 
-## Part count
+## Part count and streaming
 
-About 3,600 parts (budget 6,000): walls ~630, field + zones ~1,700, yards ~1,000, the rest plaza,
-platform, street and outskirts. The real number is printed at startup and stored in
-`workspace.Map:GetAttribute("PartCount")`.
+About 7,100 parts: field + zones ~5,000 (budget 8,000, `tools/worldcheck/zones.luau`), walls ~630
+(budget 1,500), cliff ~320, yards ~1,000, the rest plaza, platform, street and outskirts. The real number is
+printed at startup and stored in `workspace.Map:GetAttribute("PartCount")`.
+
+`Workspace.StreamingEnabled` (`default.project.json`: `StreamingMinRadius` 448, `StreamingTargetRadius` 1024).
+Persistent Models (always streamed): `Walls`, `Cliff`, `Outskirts`, and per zone the `Ground` model, arch,
+boundary line and landmark: ~1,730 parts (`tools/worldcheck/run.luau` prints the split and fails above 6,000).
+Props and ground-cover cells are Atomic and stream in around the player; the cutscene calls
+`RequestStreamAroundAsync(LandPos)` when the ThrowResult arrives, and its ground raycast falls back to
+`LandPos.Y` (= `Layout.GroundY`) if the landing area is not in yet.
 
 ## Checks
 
 - `lune run tools/worldcheck/run.luau` builds the real world headlessly: WorldCheck, area overlaps,
-  platform geometry vs Layout, walls (height, enclosure, outside the field, apron edge hidden under them),
-  landing lane, camera box, world text, Lighting vs `ZoneAmbienceCC`, and walking paths (every route
-  between a yard gate, the platform, the shop and the training area <= 300 studs).
-- `lune run tools/worldcheck/zones.luau`: per-zone checks (ground, decoration count, landmark, arch
-  opening, lane clear, no text outside arch boards, part budget).
+  plateau + flush platform geometry vs Layout (no ramp), the cliff face (covered, arcs clear the ledges),
+  walls (height, enclosure, outside the field, apron edge hidden under them), Persistent streaming models,
+  the landing band (Field fill is reported apart), camera box, world text allowlist, Lighting vs
+  `ZoneAmbienceCC`, and walking paths (every route between a yard gate, the platform, the shop and the
+  training area <= 300 studs).
+- `lune run tools/worldcheck/zones.luau`: per-zone checks (ground, cover and prop counts rising by zone,
+  prop spacing, corridor heights, landmark, boundary, arch opening, streaming modes, no text outside arch
+  boards, part budget).
 - `python3 tools/world_bounds.py`: fast static check of Layout / module constants.
 
 ## Known gaps / TODO
 
 - Not run in Studio (no Rojo here). The headless checks run the real builder under `@lune/roblox`.
-- The stem is 3,200 studs long: with StreamingEnabled the far zones may stream out. Consider
-  `StreamingTargetRadius` >= 1024 or `ModelStreamingMode = Persistent` for the arches only.
+- Streaming behaviour (what a phone keeps at 1024 studs, how fast a landing zone streams in during the
+  ball POV) can only be judged on a device.

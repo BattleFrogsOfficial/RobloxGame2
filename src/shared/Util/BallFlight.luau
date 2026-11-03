@@ -46,7 +46,8 @@ export type Arc = {
 	VelocityAt: (t: number) -> Vector3,
 }
 
--- Same pacing as the old flat throw line (CutsceneContract.FlightTime) so cutscene beats keep their timing.
+-- Base pacing by horizontal distance (0.7 s + d / 1800, 0.7..2.2 s); ForThrow adds the plateau -> field drop. The
+-- cutscene remaps the resulting FlightTime into its on-screen flight (Config/Cutscene.luau Flight.ServerMin..Max).
 function BallFlight.DefaultFlightTime(horizontalDistance: number): number
 	return math.clamp(0.7 + horizontalDistance / 1800, 0.7, 2.2)
 end

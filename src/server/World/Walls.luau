@@ -163,7 +163,9 @@ local function buildRun(f: Instance, name: string, origin: Vector3, u: Vector3, 
 end
 
 function Walls.Build(parent: Instance)
-	local f = Props.Folder(parent, "Walls")
+	-- Persistent Model: always streamed to every client (the horizon ring never streams out).
+	local f = Props.Model(parent, "Walls")
+	f.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	local rng = Random.new(31337)
 	local X = Walls.InnerX
 	local D = Walls.Depth

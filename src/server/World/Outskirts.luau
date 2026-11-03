@@ -24,7 +24,9 @@ Outskirts.Plateau = { MinX = -720, MaxX = 720, MinZ = -520, MaxZ = Layout.ThrowL
 	BottomY = Layout.GroundY - 2.4 }
 
 function Outskirts.Build(parent: Instance)
-	local f = Props.Folder(parent, "Outskirts")
+	-- Persistent Model: always streamed to every client (plateau, underlay, treeline, clouds).
+	local f = Props.Model(parent, "Outskirts")
+	f.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	local u = Outskirts.Underlay
 	-- split into <= 2000-stud chunks (Roblox caps a part axis at 2048)
 	local z = u.MinZ

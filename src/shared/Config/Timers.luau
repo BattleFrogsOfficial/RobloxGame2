@@ -12,10 +12,23 @@ Timers.Growth = { -- puppy -> adult
 }
 Timers.PuppyIncomeFraction = 0.2
 
--- Placeholder cutscene lengths by rarity (the Cutscene module may read these); the server waits
--- this long + CutscenePadding for CutsceneFinished before finishing the throw on its own.
-Timers.Cutscene = { Common = 2, Uncommon = 3, Rare = 5, Epic = 8, Legendary = 11, Mythic = 15 }
-Timers.CutscenePadding = 8
+-- SERVER cutscene timeout by rarity, computed from Config/Cutscene.luau (never edit numbers here): the longest
+-- a real client cutscene can run after the release = Budget (release -> end card at ReferenceFlight)
+-- + (Flight.Max - ReferenceFlight) (the longest on-screen flight) + Fallback.HoldMax (a late ThrowResult)
+-- + EndCard.AutoClose (the Reveal card closes itself) + Return.Time. ThrowService finishes the throw at
+-- release + FlightTime + Timers.Cutscene + CutscenePadding when no CutsceneFinished arrives.
+-- Values: Common 16.5, Uncommon 18.5, Rare 20.5, Epic 23, Legendary 25.5, Mythic 28 (s).
+local CutsceneConfig = require(script.Parent:WaitForChild("Cutscene"))
+Timers.Cutscene = {} :: { [string]: number }
+for _, rarity in { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" } do
+	local c = CutsceneConfig
+	Timers.Cutscene[rarity] = (c.Budget :: any)[rarity]
+		+ (c.Flight.Max - c.Budget.ReferenceFlight)
+		+ c.Fallback.HoldMax
+		+ (c.EndCard.AutoClose :: any)[rarity]
+		+ c.Return.Time
+end
+Timers.CutscenePadding = 5 -- s on top of the timeout: network latency, streaming stalls, frame hitches
 Timers.CommonSkippableAfter = 3 -- Common cutscenes become skippable after the player has seen this many
 
 Timers.SquirrelInterval = 15 * 60

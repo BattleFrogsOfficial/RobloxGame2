@@ -907,6 +907,47 @@ do
 end
 
 ----------------------------------------------------------------------------------------------------
+-- 2b. Streaming: the horizon (Walls), the cliff and the outskirts (plateau, underlay, treeline, clouds) are
+-- Persistent Models so they never stream out beyond StreamingTargetRadius; count every Persistent part.
+----------------------------------------------------------------------------------------------------
+do
+	local Enum = roblox.Enum
+	for _, key in { "Walls", "Cliff", "Outskirts" } do
+		local m = F[key]
+		if m and not (m:IsA("Model") and m.ModelStreamingMode == Enum.ModelStreamingMode.Persistent) then
+			fail(key .. " must be a Persistent Model (streams out otherwise)")
+		end
+	end
+	local persistentParts, byRoot = 0, {}
+	for _, d in map:GetDescendants() do
+		if d:IsA("BasePart") then
+			local a = d.Parent
+			while a and a ~= map do
+				if a:IsA("Model") and a.ModelStreamingMode == Enum.ModelStreamingMode.Persistent then
+					persistentParts += 1
+					local top = d
+					while top.Parent ~= map do
+						top = top.Parent
+					end
+					byRoot[top.Name] = (byRoot[top.Name] or 0) + 1
+					break
+				end
+				a = a.Parent
+			end
+		end
+	end
+	local parts = {}
+	for k, v in byRoot do
+		table.insert(parts, k .. " " .. v)
+	end
+	table.sort(parts)
+	note(("streaming: %d Persistent parts (%s)"):format(persistentParts, table.concat(parts, ", ")))
+	if persistentParts > 6000 then
+		fail(("%d Persistent parts (> 6000): too much always-streamed geometry"):format(persistentParts))
+	end
+end
+
+----------------------------------------------------------------------------------------------------
 -- 3. Walls
 ----------------------------------------------------------------------------------------------------
 local wallParts = {}
@@ -1393,7 +1434,7 @@ if #fieldProblems > 0 then
 	end
 end
 if #fieldLane > 0 then
-	print(("note: %d Field-owned parts stand in the landing lane (zone agent's call), e.g. %s"):format(#fieldLane,
+	print(("note: %d Field-owned parts (the non-colliding field fill) stand in the landing band |x| <= 56, e.g. %s"):format(#fieldLane,
 		table.concat({ fieldLane[1], fieldLane[2] or "", fieldLane[3] or "" }, ", ")))
 end
 if #fieldCam > 0 then

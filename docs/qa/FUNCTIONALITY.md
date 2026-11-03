@@ -21,8 +21,8 @@ Legend: **PASS** = verified · **FIXED** = fixed in this pass · **OPEN** = know
 | Remote | Server | Client | Result |
 |---|---|---|---|
 | ChargeBegin / ChargeRelease | ThrowService: limiter, on platform, queue pos 1 + turn holder, one throw per turn, release floor | UI/init (HUD click / tap / Space / R2) | PASS |
-| ThrowResult | ThrowService (all clients; LaunchPos / LandPos / FlightTime / BallId / BallsLeft) | CutsceneController, BallFlight.client, UI/init (spectator banner) | PASS |
-| CutsceneFinished | ThrowService (EarliestFinish, timeout) | CutsceneController | PASS |
+| ThrowResult | ThrowService (all clients; LaunchPos / LandPos / FlightTime / BallId / BallsLeft) | Cutscene (init/Director), BallFlight.client -> Cutscene/Spectator, UI/init (spectator banner) | PASS |
+| CutsceneFinished | ThrowService (EarliestFinish = 0.9 x Timeline.EarliestEnd, timeout = Timers.Cutscene from Config/Cutscene) | ui:FinishThrow (Cutscene Director / Reveal close) | PASS |
 | UseWhistle | ThrowService | Reveal card (UI/init) | PASS |
 | RequestState / StateUpdate | DataService | UI/init -> State | PASS |
 | ShopPurchase / EquipBall | ShopService (consumable counts, refuses equip at 0) | Shop screen | PASS |
@@ -45,8 +45,8 @@ sets `OnPlatform` / `ThrowQueuePos`; the HUD reads exactly those. **PASS**
 
 | # | Flow | Result |
 |---|---|---|
-| 1 | Join -> data load + migrate -> yard assigned -> CharacterService WalkSpeed 32 / JumpPower 60 -> spawn at the ramp foot | PASS |
-| 2 | Walk up the ramp -> OnPlatform -> queue (ThrowQueue) -> pos 1 moved to the throw spot -> HUD "Click to throw" | PASS |
+| 1 | Join -> data load + migrate -> yard assigned -> CharacterService WalkSpeed 32 / JumpPower 60 -> spawn on the plaza (plateau, Y 40) | PASS |
+| 2 | Walk onto the flush deck -> OnPlatform -> queue (ThrowQueue) -> pos 1 moved to the throw spot -> HUD "Click to throw" | PASS |
 | 3 | Click -> ChargeBegin -> vertical meter 0-100 -> click -> ChargeRelease -> server Meter.Evaluate -> distance -> consumable ball used up (Tennis at 0, notice) -> roll -> commit -> ThrowResult | PASS |
 | 4 | Ball arc 44 -> 0 on `BallFlight.ForThrow(LaunchPos, LandPos)` for everyone; thrower cutscene camera follows the same arc, waits FlightTime, draws no ball of its own | FIXED (the cutscene used to spawn a second ball) |
 | 5 | Cutscene -> Reveal card -> FinishThrow + CutsceneFinished -> turn ends after 2 s -> thrower to the back of the line | PASS |
@@ -59,7 +59,7 @@ sets `OnPlatform` / `ThrowQueuePos`; the HUD reads exactly those. **PASS**
 ## 5. Open / needs a Studio playtest
 
 - OPEN: v1 players who bought permanent balls lose them in the v2 migration (by design: no refund/compensation).
-- Feel of the 40-stud deck: ramp (~30 deg) climb at WalkSpeed 32, railing colliders, queue teleports.
+- Feel of the flush deck at the cliff edge: edge wall, railing colliders, queue teleports.
 - Click/click meter under real latency; prompt visibility on attribute changes; touch input near the jump button.
 - Cutscene chase camera along the arc (long throws fly ~2 s with a high apex); camera restore on every branch.
 - ZoneAmbience tweens and the Atmosphere haze over 3,200 studs; wall silhouettes; StreamingEnabled.

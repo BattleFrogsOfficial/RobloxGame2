@@ -50,7 +50,7 @@ Game.Throw = {
 	-- The ball leaves at the deck surface (Layout.ThrowLine.Y = Layout.HubY = 40) + this = 44, above the railing caps
 	-- (43.35), and lands on the field at Layout.GroundY: Util/BallFlight adds that 44-stud drop to the flight time.
 	LaunchHeight = 4,
-	LateralScatter = 40, -- landing X = 0.5 x platform X + 0.5 x U(-n, n), clamped into the clear centre lane (|x| <= 56)
+	LateralScatter = 40, -- landing X = 0.5 x platform X + 0.5 x U(-n, n), clamped to the middle half of the field (|x| <= 56)
 }
 
 -- The one shared throwing platform (Layout.Platform) and its FIFO queue (ThrowService).

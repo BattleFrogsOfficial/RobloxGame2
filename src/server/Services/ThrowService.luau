@@ -42,6 +42,7 @@ local PlayerStats = require(Util:WaitForChild("PlayerStats"))
 local DogCatalog = require(Util:WaitForChild("DogCatalog"))
 local RateLimiter = require(Util:WaitForChild("RateLimiter"))
 local BallFlight = require(Util:WaitForChild("BallFlight"))
+local Timeline = require(Shared:WaitForChild("Cutscene"):WaitForChild("Timeline")) -- pure cutscene timing
 
 local Services = script.Parent
 local DataService = require(Services:WaitForChild("DataService"))
@@ -285,7 +286,8 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 	end
 
 	local def = DogCatalog.Get(outcome.DogId)
-	local cutLen = (Timers.Cutscene :: any)[outcome.Rarity] or 3
+	-- Server timeout for the client cutscene (Config/Timers, computed from Config/Cutscene.luau).
+	local cutLen = (Timers.Cutscene :: any)[outcome.Rarity] or Timers.Cutscene.Mythic
 	local canSkip = outcome.Rarity == "Common" and not tutorial
 		and (state.CommonCutscenesSeen or 0) >= Timers.CommonSkippableAfter
 	if outcome.Rarity == "Common" then
@@ -307,8 +309,11 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 	end
 
 	local spot = ThrowService.ThrowSpot()
-	-- Land inside the clear centre lane (|x - centre| <= FieldWidth/4 - 4 = 56): the outer 25% bands hold zone
-	-- decor, distance markers and arch pillars (QA overlap fix; see docs/qa/OVERLAP.md).
+	-- Landing X: half the thrower's offset from the field centre plus a little scatter, clamped to the middle half
+	-- of the field (|x - centre| <= FieldWidth/4 - 4 = 56) so the landing wide shot and the dog's hop-in stay well
+	-- inside the zone boundaries. The field is filled edge to edge, but every prop / ground-cover part there is
+	-- non-colliding and non-queryable (World/Zones/Kit.luau), so nothing can catch the ball. Cutscene/Path.Estimate
+	-- mirrors this rule (Config/Cutscene Fallback.EstimateLaneX).
 	local fieldCX = (Layout.Field.MinX + Layout.Field.MaxX) / 2
 	local laneHalf = (Layout.Field.MaxX - Layout.Field.MinX) * 0.25 - 4
 	local landX = math.clamp(fieldCX + (spot.X - fieldCX) * 0.5
@@ -368,7 +373,9 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		Result = result,
 		StartedAt = now,
 		FinishAt = now + flightTime + cutLen + Timers.CutscenePadding,
-		EarliestFinish = if canSkip then now + flightTime else now + math.max(cutLen * 0.6, flightTime),
+		-- A CutsceneFinished before this is held to it: the soonest a real client can get there (skip / short
+		-- Common, 10% slack for frame timing). Blocks instant-finish spam without delaying an honest skip.
+		EarliestFinish = now + 0.9 * Timeline.EarliestEnd(outcome.Rarity, Timeline.FlightSeconds(flightTime)),
 		Finished = false,
 		Caught = outcome.Caught,
 		Recalled = false,
