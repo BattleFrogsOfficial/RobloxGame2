@@ -99,6 +99,19 @@ function Reveal.new(parent: Instance)
 		local o: RevealOpts = opts or {}
 		closeTimer += 1
 		local myTimer = closeTimer
+		-- Every way out (OK, Whistle, Keep, the auto-close timer) hides the card and calls OnClose exactly once,
+		-- so the cutscene waiting on it always gets its RETURN beat.
+		local closed = false
+		local function close()
+			if closed then
+				return
+			end
+			closed = true
+			handle:Hide()
+			if o.OnClose then
+				o.OnClose()
+			end
+		end
 		local def = DogCatalog.Get(result.DogId)
 		local rarity = result.Rarity or (def and def.Rarity) or "Common"
 		local color = Theme.RarityColor(rarity)
@@ -132,7 +145,7 @@ function Reveal.new(parent: Instance)
 			if o.IsDupe and o.OnKeep then
 				Button.new({ Text = "Keep", Icon = "check", IconSize = 16, Palette = "Grass", Size = UDim2.fromOffset(140, 44), ZIndex = 63, Parent = buttons, OnClick = function()
 					(o.OnKeep :: () -> ())()
-					handle:Hide()
+					close()
 				end })
 			end
 		else
@@ -141,16 +154,11 @@ function Reveal.new(parent: Instance)
 			if result.WhistleOwned and o.OnWhistle and not o.Spectator then
 				Button.new({ Text = "Whistle (" .. tostring(result.WhistleCount or 0) .. ")", Icon = "whistle", IconSize = 16, Palette = "Cash", Size = UDim2.fromOffset(180, 44), ZIndex = 63, Parent = buttons, OnClick = function()
 					(o.OnWhistle :: () -> ())()
-					handle:Hide()
+					close()
 				end })
 			end
 		end
-		Button.new({ Text = if o.Spectator then "Nice" else "OK", Palette = "Sky", Size = UDim2.fromOffset(110, 44), ZIndex = 63, Parent = buttons, OnClick = function()
-			handle:Hide()
-			if o.OnClose then
-				o.OnClose()
-			end
-		end })
+		Button.new({ Text = if o.Spectator then "Nice" else "OK", Palette = "Sky", Size = UDim2.fromOffset(110, 44), ZIndex = 63, Parent = buttons, OnClick = close })
 
 		card.Size = if o.Spectator then UDim2.fromOffset(360, 260) else UDim2.fromOffset(420, 300)
 		root.Visible = true
@@ -164,11 +172,8 @@ function Reveal.new(parent: Instance)
 		end
 		local seconds = o.AutoCloseSeconds or (if o.Spectator then 3 else 4 + idx)
 		task.delay(seconds, function()
-			if closeTimer == myTimer and root.Visible then
-				handle:Hide()
-				if o.OnClose then
-					o.OnClose()
-				end
+			if closeTimer == myTimer then
+				close()
 			end
 		end)
 	end

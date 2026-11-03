@@ -77,7 +77,7 @@ function Settings.new(deps: SettingsDeps)
 	end)
 
 	local reveals = Panel.Section(scroll, "Reveals", 2)
-	toggleRow(reveals, 1, "Skip Common reveals", "skip", function()
+	toggleRow(reveals, 1, "Short Common reveals", "skip", function()
 		return S.HideCommonReveals
 	end, function(v)
 		State.SetSetting("HideCommonReveals", v)

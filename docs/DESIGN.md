@@ -511,65 +511,56 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 
 ## 20. CUTSCENE CONTRACT
 
-> **The cutscene is deliberately a placeholder in v1.** The user will design the real one later. Gameplay code may only talk to it through this contract. Lives in `src/shared/Cutscene/**` (contract + placeholder implementation), owned by the client workstream.
+> **The throw cutscene (v1, built).** Client: `src/client/Cutscene/**` (controller `init`, `Director` = the thrower's sequence, `Spectator`, `Rig` = avatar throw, `Ball`, `DogActor`, `Effects`, `Sfx`, `Overlay` = counter / Skip / fallback UI, `TestPanel`, `Janitor`). Shared pure maths, Lune-tested: `src/shared/Cutscene/` (`Timeline`, `OddsCounter`, `Path`, `Shots`, `FakeResult`). **Every timing and tunable is one commented table: `src/shared/Config/Cutscene.luau`.** The old placeholder (`CutsceneContract` / `PlaceholderCutscene` / `Controllers/CutsceneController`) is retired.
 
-### 20.1 Inputs
+### 20.1 Inputs and authority
 
-```lua
-Cutscene.Play(result: ThrowResult, opts: { IsThrower: boolean, IsSpectator: boolean }): Handle
--- Handle: { Finished: RBXScriptSignal-like (fires once), Skip: () -> (), CanSkip: () -> boolean }
-```
+- Everything is decided by the server before the cutscene starts. The cutscene only shows the `ThrowResult` (`ThrowId, ThrowerUserId, Distance, ZoneId, DogId, Rarity, Variant, Caught, CatchChance, LaunchPos, LandPos, FlightTime, LuckyStreakTriggered, TreatPocketUsed, WhistleOwned, WhistleCount`, plus `BallId`, `Status`, `DogUid`). `Timeline.Validate` normalises flags and never changes an outcome.
+- It starts at the **meter release** (`ui.ThrowReleased`, fired by the HUD release, including the 6 s auto-release); a `ThrowResult` that arrives during the wind-up / flight is buffered into the running session. A result with no local release starts a session itself.
+- On arrival the client calls `Players.LocalPlayer:RequestStreamAroundAsync(LandPos)` (pcall, task.spawn) so the landing zone streams in.
+- The odds counter's target is display-only (posted odds); nothing the client could tamper with feeds an outcome.
+- The thrower's camera is `Scriptable` and the whole HUD is hidden while it plays; controls are off and `Humanoid.AutoRotate` is off (the avatar is turned to face the field).
 
-`ThrowResult` (from `Remotes.luau`): `ThrowId, ThrowerUserId, PadIndex (always 1), Distance, ZoneId, DogId, Rarity, Variant?, Caught, CatchChance, Boosts, LuckyStreakTriggered, WhistleOwned, WhistleCount, IsTutorial`, plus `BallId`, `BallsLeft`, `LaunchPos`, `LandPos`, `FlightTime` (section 4.4), `Income`, `DogUid`, `Status`, `CanSkip`, `CutsceneSeconds`.
+### 20.2 Beats (in order)
 
-The cutscene **only displays**. It never rolls, never changes state and never decides the outcome. When the thrower's cutscene finishes, the client fires `CutsceneFinished(throwId)`. The server does not wait on it to save anything; it only uses it to unlock the next throw early. Its own timeout is the flight time + the rarity length + `Timers.CutscenePadding` (8 s).
+1. **Wind-up** (`WindUp.Duration` 1.2 s, release frame at `ReleaseAt` 0.95 s). The camera sweeps a half circle (`SweepTime` 0.9 s, round the throwing-arm side) from the default view to a low front shot at chest height looking at the face. The avatar winds up (body turns, arm back and up, one knee up) and throws overhand: uploaded `AnimationIds.WindUp/Throw` when both are non-zero, else procedural Motor6D C0 keyframes (`Config.Pose`, R15 and R6, every C0 restored). The ball (`Balls.ById[BallId].Color`) follows the right hand until the release frame.
+2. **Launch + ball POV.** Whoosh, small camera shake, the camera whips (`WhipTime` 0.2 s) to just behind and `PovUp` 3.5 studs above the ball, looking along its travel (pitch follows 45% of the climb), FOV 78. On-screen flight = `result.FlightTime` remapped from the server's 1.0-2.3 s into **1.5-4 s**; the `Util/BallFlight` arc is time-scaled, starts in the hand, blends into the arc over 0.3 s and lands exactly on `LandPos`. Trail + looped wind whose volume / pitch rise with speed.
+3. **Landing** (last 25% of the flight). The camera eases up and back to a wide shot (30 back, 24 up) looking down at the landing spot; the ball touches `LandPos` and makes 3 decaying bounces. Per-zone dust / splash / sparks + sound (`ImpactFX`: grass, sand, snow, roof grit, metal clank + sparks on the Space Station, crystal glitter in the Meadow).
+4. **The dog arrives** (`Beats.DogArrive` 0.6-1.5 s). The real `DogId` model (`DogFactory` + `VariantFX`) hops in from off camera (inside the field edges) and stops beside the ball; the camera holds wide, then pushes in.
+5. **The odds counter** (`Beats.Counter` 1.5 s Common ... 4 s Mythic). "1 out of 1" counts up to this dog's odds: every number to 30, then growing steps (≤ 90 ticks), ease-in, always landing exactly on the target, a rising-pitch click per tick. The text starts white and snaps (scale punch + one-frame flash) to each rarity colour as it crosses that tier's "1 in X" in this zone, climbing white → grey → green → blue → purple → orange → pink, and stops on the dog's colour; then the name, rarity tag and variant badge appear under it.
+   **Target** = `floor(1 / (Odds.TierOdds(luck, DogCatalog.ZoneTiers(zone))[rarity] / #DogCatalog.ZoneTierList(zone, rarity)))`, luck = `State.Luck()` captured at the release — the Odds panel's own functions and rounding (its `FormatNumber.Compact` floors, so the counter's final number formats to the panel's text). Examples: Backyard Mythic, no luck: 0.1% / 1 = 1 in 1,000; Farm Legendary with the Golden Ball (luck 0.5): 0.6% / 2 = 1 in 333. `Counter.IncludeCatch = true` multiplies by the catch chance (the panel's "This dog" column).
+6. **Outcome** (`Beats.Outcome`). Caught: the dog picks up the ball, turns and hops toward the hub with the camera following from behind, then is removed (DogService already put the real dog in the pen). Missed: sniff, look at the camera, bolt out of frame, sad sting. Lucky Streak / Treat Pocket catches add a flourish line under the counter. Then the Reveal end card (`ui:ShowReveal`): CAUGHT, or RAN OFF with the whistle prompt only if `WhistleOwned`. Every exit from the card (OK, Whistle, Keep, timer) closes it exactly once.
+7. **Return.** The camera tweens back (`Return.Time` 0.5 s), `CameraType` / `CameraSubject` / FOV are restored, the HUD reappears and `ui:FinishThrow(throwId)` sends `CutsceneFinished` exactly once (only for throws the server sent).
 
-### 20.2 Required beats (in order)
+### 20.3 Timing per rarity (`Config/Cutscene.luau`, at the 1.5 s reference flight; release → end card)
 
-1. **Suspense:** the ball flies and lands, with distance and zone callouts. The rarity is **not yet known** to the viewer. The ball itself is drawn only by `src/client/BallFlight.client.luau` (for everyone); the cutscene draws no ball of its own. Its camera follows the same arc (`BallFlight.ForThrow(LaunchPos, LandPos)`) and the callouts wait `FlightTime` so they land with the ball. Optional teaser (rarity-coloured light leak) is TBD.
-2. **Reveal dog + rarity:** the dog rig (built via `DogFactory`) appears with its name and a rarity banner in the rarity colour.
-3. **Reveal variant badge**, if there is one. `VariantFX` applies to the rig.
-4. **Catch beat**, which branches:
-   - *Caught:* jump → catch → tail wag (Lucky-Streak flourish if `LuckyStreakTriggered`, treat toss if a Treat Pocket saved it).
-   - *Missed:* fumble → runs off toward the plaza.
-5. **End card** (the UI's Reveal card, `src/client/UI/Screens/Reveal.luau`): dog, name, rarity colour, variant badge and **multiplied $/s** (adult value, with "puppy: 20% for now" subtext). On a miss: "Ran off!" plus the Lucky Streak meter, plus the whistle prompt if `WhistleOwned` ("Use Golden Whistle? (N left)").
+| Rarity | Release | Flight | Settle | Dog | Counter | Hold | Outcome | **Total** |
+|---|---|---|---|---|---|---|---|---|
+| Common | 0.95 | 1.5 | 0.2 | 0.6 | 1.5 | 0.25 | 0.5 | **5.5 s** |
+| Uncommon | 0.95 | 1.5 | 0.25 | 0.8 | 2.0 | 0.35 | 0.65 | **6.5 s** |
+| Rare | 0.95 | 1.5 | 0.3 | 1.0 | 2.5 | 0.45 | 0.8 | **7.5 s** |
+| Epic | 0.95 | 1.5 | 0.35 | 1.2 | 3.0 | 0.6 | 1.4 | **9.0 s** |
+| Legendary | 0.95 | 1.5 | 0.4 | 1.4 | 3.5 | 0.75 | 2.0 | **10.5 s** |
+| Mythic | 0.95 | 1.5 | 0.5 | 1.5 | 4.0 | 1.05 | 2.5 | **12.0 s** |
 
-### 20.3 Timing per rarity (target total length; **[tunable: cutscene config]**)
+A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums every beat per rarity against `Budget`.
 
-| Rarity | Total length | Suspense share |
-|--------|--------------|----------------|
-| Common | ~2 s | minimal |
-| Uncommon | ~3 s | short |
-| Rare | ~5 s | |
-| Epic | ~8 s | |
-| Legendary | ~11 s | |
-| Mythic | ~15 s | long |
+### 20.4 Rules
 
-### 20.4 Skippability
+- **Skip:** a Skip button appears when the counter starts (`Skip.FromBeat`); Legendary and Mythic can never be skipped (`Skip.Never`). Skipping cleans the scene and jumps to the end card with the correct outcome.
+- **Settings.HideCommonReveals** ("Short Common reveals"): a Common plays wind-up + flight + landing, then the end card (no dog, no counter).
+- **Late result:** if no `ThrowResult` has arrived by the release frame the ball flies an estimated arc (the server's distance formula without scatter) and blends into the real one when it arrives; at touchdown it holds the landing shot up to `Fallback.HoldMax` 3 s, then shows "The ball rolled away..." and unlocks without `CutsceneFinished`. A result that still arrives later only shows the end card (and then reports once).
+- **Reduced motion** (`Settings.ReducedMotion`): no sweep / whip / push-in / follow / shakes / counter punches; hard cuts between the front, POV, wide and close shots.
+- **Cleanup:** the whole sequence is `pcall`-wrapped; finish, skip, any error, death (`Humanoid.Died`) or character removal destroy every instance, connection, sound, tween and render binding (two `Janitor`s), restore every C0, the camera and the HUD, and unlock.
+- **Spectators:** other clients get no camera work. `src/client/BallFlight.client.luau` → `Cutscene/Spectator` animates the thrower's avatar locally (procedural C0s do not replicate; uploaded animations replicate by themselves) and flies the same time-scaled ball, which bounces and rests for 6 s. The UI shows its Spectator banner.
 
-- **Commons:** skippable from the **4th Common cutscene onward**, so the first 3 Commons always play. The count is kept per player.
-- Uncommon and Rare: not skippable in v1 (TBD-5 with the user).
-- **Epic, Legendary, Mythic: never skippable.**
-- Skipping jumps straight to the end card. It never skips the whistle prompt.
+### 20.5 Test place
 
-### 20.5 Spectator version
+`Config/Game.luau → CutsceneTestMode = true` adds a "Test cutscene" pill (right-middle; under the side menu on touch) that opens a kit Panel: a button per rarity × Caught / Missed × with / without a variant (variant choice cycles Gold / Shadow / Rainbow / Random), "Play random" and "Loop random" (back-to-back outcomes; the pill becomes "Stop loop"). Every outcome is a local fake from `FakeResult` (random zone and distance, real roster dog), flagged `IsTest`, never sent to the server (no `CutsceneFinished`, whistle / keep do nothing). Must be **false** in production.
 
-Other players get a **camera-less popup / park-view banner**: a small card near the top of the screen showing "[Player] threw 812 studs → Forest", then the rarity colour, then dog and variant, then ✓ caught or ✗ ran off. It runs at about 50% of the thrower's length and never takes the camera or blocks input. Epic+ banners are larger.
+### 20.6 Checks
 
-### 20.6 Debug toggle
-
-`Config/Game.luau → CutsceneTestMode = true` adds a HUD button that plays random fake outcomes locally: random zone, dog, rarity and variant, caught or missed, thrower or spectator. Must be **false** in production. The server ignores it.
-
-### 20.7 Open questions for the user (TBD)
-
-- **TBD-1** Camera style: follow the ball, cut to a fixed field camera, or a stylised "TV replay"?
-- **TBD-2** Should the suspense beat tease the rarity (light colour, sound) or stay neutral until the reveal?
-- **TBD-3** Does the dog run *to the player* on the platform, or does the reveal happen at the landing spot (current placeholder)?
-- **TBD-4** Music and SFX direction per rarity.
-- **TBD-5** Uncommon/Rare skip rules.
-- **TBD-6** Should Mythics get per-dog bespoke beats (wings unfurl, extra heads bark)?
-- **TBD-7** Spectator banner: also a mini 3-D viewport of the dog?
-- **TBD-8** Where the whistle prompt lives: in the end card, or as a separate toast after it?
+`tools/tests/cutscene.luau` (budgets, config, flight remap, skip / short-Common / fallback rules, fakes), `cutscene_counter.luau` (target = Odds panel for every zone × tier × luck, colour climb, tick schedule), `cutscene_path.luau` (arc sampling, retarget, bounces, pose, camera shots), `cutscene_director.luau` (every branch end-to-end under the UI emulator with a virtual clock: camera / HUD / C0 restored, nothing left behind, `CutsceneFinished` exactly once), `cutscene_compile.luau`; `tools/uicheck` scenarios `cutscene-*` (counter at each colour, stopped with name / badge / flourish, Skip, fallback, test panel). PNGs in `docs/qa/cutscene/`. Camera feel, animation look, sounds and particle look can only be judged in Studio.
 
 ---
 

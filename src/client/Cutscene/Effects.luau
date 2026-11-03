@@ -56,14 +56,16 @@ local function burst(pos: Vector3, colors: { Color3 }, texture: string, count: n
 	Debris:AddItem(holder, lifetime + 1)
 end
 
-function Effects.Impact(zoneId: string, pos: Vector3, janitor: any?)
+function Effects.Impact(zoneId: string, pos: Vector3, janitor: any?, silent: boolean?)
 	local fx = (C.ImpactFX :: any)[zoneId] or C.ImpactFX.Backyard
 	burst(pos, fx.Colors, fx.Texture, fx.Count, fx.Speed, fx.Size, fx.Lifetime, fx.Gravity, janitor)
 	if fx.Sparks then
 		burst(pos + Vector3.new(0, 0.3, 0), { Color3.fromRGB(255, 240, 180), Color3.fromRGB(255, 170, 60) },
 			"rbxasset://textures/particles/sparkles_main.dds", math.floor(fx.Count * 0.6), { 14, 28 }, 0.25, 0.35, -60, janitor)
 	end
-	Sfx.Play(fx.Sound, { Volume = 0.6, Pitch = fx.Pitch, Janitor = janitor })
+	if not silent then
+		Sfx.Play(fx.Sound, { Volume = 0.6, Pitch = fx.Pitch, Janitor = janitor })
+	end
 end
 
 function Effects.Sparkle(pos: Vector3, color: Color3, janitor: any?)

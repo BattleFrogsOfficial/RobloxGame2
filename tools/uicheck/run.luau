@@ -27,6 +27,9 @@ local Shared = R.MountTree(ROOT .. "/src/shared", R.ReplicatedStorage, "Shared")
 local clientFolder = R.Instance.new("Folder")
 clientFolder.Name = "Client"
 R.MountTree(ROOT .. "/src/client/UI", clientFolder, "UI")
+-- The cutscene's screen pieces (Overlay = odds counter / Skip / fallback text, TestPanel) use the UI kit.
+-- (only those two children are required; the controller init module never runs here)
+local cutsceneFolder = R.MountTree(ROOT .. "/src/client/Cutscene", clientFolder, "Cutscene")
 clientFolder.Parent = R.PlayerGui -- anywhere; script.Parent chains stay inside UI
 
 local Remotes = R.Require(Shared:FindFirstChild("Remotes"))
@@ -103,6 +106,46 @@ local function chargeAt(ui, frac)
 	ui.HUD:SetCharging(true, os.clock() - frac * period / 2, false)
 end
 
+-- Cutscene overlay scenarios: the HUD is hidden while the cutscene plays (as in game).
+local OddsCounter = R.Require(Shared.Cutscene.OddsCounter)
+local CutsceneConfig = R.Require(Shared.Config.Cutscene)
+local function overlay(ui)
+	ui.HUD.Root.Visible = false
+	local Overlay = R.Require(cutsceneFolder:FindFirstChild("Overlay"))
+	local o = Overlay.new(ui.Root, ui.IsTouch == true)
+	o:ShowCounter()
+	return o
+end
+local function longestName(zoneId, rarity)
+	local best = nil
+	for _, d in DogCatalog.ZoneTierList(zoneId, rarity) do
+		if not best or #d.Name > #best.Name then
+			best = d
+		end
+	end
+	return best or DogCatalog.All()[1]
+end
+-- counter mid-count at value v (colour from the real thresholds of a Backyard Mythic count)
+local function midCount(v, skip)
+	return function(ui)
+		local o = overlay(ui)
+		local th = OddsCounter.Thresholds("Backyard", 0)
+		o:SetCount(v, OddsCounter.TierAt(v, th, "Mythic"), false)
+		if skip then
+			o:SetSkip(true, function() end)
+		end
+	end
+end
+local function testPanel(open)
+	return function(ui)
+		local TestPanel = R.Require(cutsceneFolder:FindFirstChild("TestPanel"))
+		ui.CutsceneTest = TestPanel.new({ Parent = ui.Root, IsTouch = ui.IsTouch == true, Router = ui.Router, OnPlay = function() end, OnLoop = function() end })
+		if open then
+			ui.Router.Open("CutsceneTest")
+		end
+	end
+end
+
 local SCENARIOS = {
 	{ name = "hud", setup = function(ui) end },
 	{ name = "throw-off-platform", setup = function(ui)
@@ -159,6 +202,42 @@ local SCENARIOS = {
 		local def = DogCatalog.ZoneTierList(Zones[3].Id, "Legendary")[1] or DogCatalog.All()[1]
 		ui:ShowReveal({ ThrowId = "t1", ThrowerUserId = 1, Distance = 412, ZoneId = Zones[3].Id, DogId = def.Id, Rarity = def.Rarity, Variant = "Rainbow", Caught = true, CatchChance = 0.45, WhistleOwned = true, WhistleCount = 2 }, { IsDupe = true })
 	end },
+	{ name = "cutscene-counter-white", setup = midCount(17) },
+	{ name = "cutscene-counter-grey", setup = midCount(73) },
+	{ name = "cutscene-counter-green", setup = midCount(101) },
+	{ name = "cutscene-counter-blue", setup = midCount(133) },
+	{ name = "cutscene-counter-purple", setup = midCount(321) },
+	{ name = "cutscene-counter-orange", setup = midCount(777) },
+	{ name = "cutscene-counter-skip", setup = midCount(142, true) },
+	{ name = "cutscene-stopped-mythic", setup = function(ui)
+		local o = overlay(ui)
+		local def = longestName("MythicMeadow", "Mythic")
+		local target = OddsCounter.Target(def.Zone, "Mythic", 0)
+		o:SetCount(target, "Mythic", false)
+		o:SetStopped(def.Name, "Mythic", "Rainbow")
+		o:SetFlourish(CutsceneConfig.Outcome.FlourishLucky)
+	end },
+	{ name = "cutscene-stopped-epic-skip", setup = function(ui)
+		local o = overlay(ui)
+		local def = longestName("SnowyPeaks", "Epic")
+		o:SetCount(OddsCounter.Target(def.Zone, "Epic", 0.5), "Epic", false)
+		o:SetStopped(def.Name, "Epic", "Gold")
+		o:SetFlourish(CutsceneConfig.Outcome.FlourishTreat)
+		o:SetSkip(true, function() end)
+	end },
+	{ name = "cutscene-stopped-common", setup = function(ui)
+		local o = overlay(ui)
+		local def = longestName("Backyard", "Common")
+		o:SetCount(OddsCounter.Target(def.Zone, "Common", 0), "Common", false)
+		o:SetStopped(def.Name, "Common", nil)
+		o:SetSkip(true, function() end)
+	end },
+	{ name = "cutscene-fallback", setup = function(ui)
+		local o = overlay(ui)
+		o:ShowMessage(CutsceneConfig.Fallback.Text)
+	end },
+	{ name = "cutscene-testmode-hud", setup = testPanel(false) },
+	{ name = "cutscene-testpanel", setup = testPanel(true) },
 	{ name = "reveal-missed", setup = function(ui)
 		local def = DogCatalog.ZoneTierList(Zones[1].Id, "Mythic")[1] or DogCatalog.All()[1]
 		ui:ShowReveal({ ThrowId = "t2", ThrowerUserId = 1, Distance = 80, ZoneId = Zones[1].Id, DogId = def.Id, Rarity = def.Rarity, Caught = false, CatchChance = 0.3, WhistleOwned = true, WhistleCount = 1 })

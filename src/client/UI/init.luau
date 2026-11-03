@@ -1,10 +1,14 @@
 --!strict
 -- Client UI entry. UI.Start(deps?) builds the ScreenGui, the HUD, every panel, and wires the remotes.
 -- Another client module (the cutscene) can take over parts of the flow through the returned handle:
---   ui.Config.PlaceholderCutscene = false   -- the cutscene module will call ui:ShowReveal and fire CutsceneFinished
+--   ui.Config.PlaceholderCutscene = false   -- the cutscene module calls ui:ShowReveal and ui:FinishThrow
+--   ui.Config.ReleaseSafetySeconds = n      -- how long the HUD stays locked waiting for a ThrowResult (default 6)
+--   ui.ThrowReleased:Connect(fn({ Clock, Elapsed, Tutorial }))   -- the meter was released (wind-up starts here)
+--   ui:FinishThrow(throwId)                 -- unlocks the HUD and sends CutsceneFinished(throwId) EXACTLY ONCE
+--                                              for a throw the server sent; nil / fakes only unlock
 --   ui.HUD:SetCharging(true, startClock)   -- if it owns throw input (pass OwnsThrowInput = false)
--- Started by Main.client.luau (the only client entry), which passes PlaceholderCutscene = false and runs
--- Controllers/CutsceneController for the thrower's 3D cutscene.
+-- Started by Main.client.luau (the only client entry), which passes PlaceholderCutscene = false and starts
+-- src/client/Cutscene (the throw cutscene).
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
@@ -16,6 +20,7 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 local Game = require(Config:WaitForChild("Game"))
 local Timers = require(Config:WaitForChild("Timers"))
 local Rarities = require(Config:WaitForChild("Rarities"))
+local Signal = require(Shared:WaitForChild("Util"):WaitForChild("Signal"))
 
 local Make = require(script:WaitForChild("Make"))
 local Theme = require(script:WaitForChild("Theme"))
@@ -121,13 +126,18 @@ function UI.Start(deps: StartDeps?)
 		end
 	end
 
-	local ui = { Gui = gui, Root = root, Config = { PlaceholderCutscene = d.PlaceholderCutscene ~= false } } :: any
+	local ui = { Gui = gui, Root = root, Config = { PlaceholderCutscene = d.PlaceholderCutscene ~= false, ReleaseSafetySeconds = 6 },
+		ThrowReleased = Signal.new() } :: any
 	local toast = function(text: string, icon: string?, palette: string?)
 		ui.HUD.Toasts:Show(text, icon, palette)
 	end
 
 	-- HUD
 	local throwInFlight: string? = nil
+	local chargeClock = 0
+	local chargeTutorial = false
+	local serverThrows: { [string]: boolean } = {} -- ThrowIds the server sent us (only these get CutsceneFinished)
+	local reported: { [string]: boolean } = {} -- ThrowIds CutsceneFinished was already sent for
 	ui.HUD = HUD.new({
 		Parent = root,
 		IsTouch = isTouch,
@@ -148,7 +158,9 @@ function UI.Start(deps: StartDeps?)
 			fire("ChargeBegin")
 			-- Same period the server uses (ThrowService: tutorial until TutorialThrowDone).
 			local tutorial = Game.Tutorial.Enabled and State.Get().TutorialThrowDone ~= true
-			ui.HUD:SetCharging(true, os.clock(), tutorial)
+			chargeClock = os.clock()
+			chargeTutorial = tutorial
+			ui.HUD:SetCharging(true, chargeClock, tutorial)
 		end,
 		OnChargeRelease = function()
 			if not ui.HUD:IsCharging() then
@@ -158,8 +170,9 @@ function UI.Start(deps: StartDeps?)
 			ui.HUD:SetCharging(false)
 			ui.HUD:SetThrowLocked(true, "Fetching...")
 			throwInFlight = "pending"
+			ui.ThrowReleased:Fire({ Clock = os.clock(), Elapsed = os.clock() - chargeClock, Tutorial = chargeTutorial })
 			-- Safety: unlock if the server refused the throw and no ThrowResult arrives.
-			task.delay(6, function()
+			task.delay(ui.Config.ReleaseSafetySeconds or 6, function()
 				if throwInFlight == "pending" then
 					throwInFlight = nil
 					ui.HUD:SetThrowLocked(false)
@@ -246,17 +259,16 @@ function UI.Start(deps: StartDeps?)
 		local mine = result.ThrowerUserId == localId
 		if mine then
 			throwInFlight = result.ThrowId
+			if type(result.ThrowId) == "string" then
+				serverThrows[result.ThrowId] = true
+			end
 			local rarity = result.Rarity or "Common"
 			local wait = (Timers.Cutscene :: any)[rarity] or 2
 			if ui.Config.PlaceholderCutscene then
 				local hideCommon = State.Settings.HideCommonReveals and rarity == "Common"
 				task.delay(if hideCommon then 0.5 else wait, function()
 					local function finish()
-						if throwInFlight == result.ThrowId then
-							throwInFlight = nil
-							fire("CutsceneFinished", result.ThrowId)
-							ui.HUD:SetThrowLocked(false)
-						end
+						ui:FinishThrow(result.ThrowId)
 					end
 					if hideCommon then
 						finish()
@@ -265,8 +277,8 @@ function UI.Start(deps: StartDeps?)
 					end
 				end)
 			end
-			if result.LuckyStreakTriggered then
-				toast("Lucky Streak!", "bolt", "Cash")
+			if result.LuckyStreakTriggered and ui.Config.PlaceholderCutscene then
+				toast("Lucky Streak!", "bolt", "Cash") -- the real cutscene shows its own flourish
 			end
 		else
 			local idx = table.find(Rarities.Order, result.Rarity or "Common") or 1
@@ -276,11 +288,16 @@ function UI.Start(deps: StartDeps?)
 			end
 		end
 	end
-	-- Lets the cutscene module release the lock itself.
+	-- Ends a throw: unlocks the HUD and tells the server CutsceneFinished(throwId) exactly once, and only for a
+	-- throw the server actually sent (CutsceneTestMode fakes and nil never reach the server).
 	function ui.FinishThrow(_, throwId: string?)
 		if throwId == nil or throwInFlight == throwId then
 			throwInFlight = nil
 			ui.HUD:SetThrowLocked(false)
+		end
+		if type(throwId) == "string" and serverThrows[throwId] and not reported[throwId] then
+			reported[throwId] = true
+			fire("CutsceneFinished", throwId)
 		end
 	end
 

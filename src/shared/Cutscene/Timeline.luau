@@ -87,7 +87,7 @@ function Timeline.BudgetTotal(rarity: string): number
 end
 
 local function beatIndex(name: string): number
-	return table.find(Timeline.Order, name) or math.huge
+	return table.find(Timeline.Order, name) or 0 -- unknown phases (e.g. "Hold") are never skippable
 end
 
 -- Skip is offered from Skip.FromBeat on, never for Skip.Never rarities. Skipping jumps to the end card.

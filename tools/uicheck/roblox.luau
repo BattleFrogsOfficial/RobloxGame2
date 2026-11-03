@@ -339,7 +339,22 @@ local HIERARCHY = {
 	Attachment = { "Instance" },
 	BasePart = { "Instance" },
 	Part = { "BasePart" },
+	MeshPart = { "BasePart" },
+	WedgePart = { "BasePart" },
+	CornerWedgePart = { "BasePart" },
+	TrussPart = { "BasePart" },
 	Model = { "Instance" },
+	-- 3D pieces the cutscene harness (tools/tests/cutscene_director.luau) creates
+	JointInstance = { "Instance" },
+	Motor6D = { "JointInstance" },
+	Weld = { "JointInstance" },
+	WeldConstraint = { "Instance" },
+	Humanoid = { "Instance" },
+	Animator = { "Instance" },
+	Trail = { "Instance" },
+	ParticleEmitter = { "Instance" },
+	PointLight = { "Instance" },
+	Tween = { "Instance" },
 }
 local function isA(className, target)
 	if className == target then
@@ -661,7 +676,7 @@ function methods.Fire(self, ...)
 	raw(self).signals.Event:Fire(...)
 end
 
-local SIGNAL_NAMES = { Activated = true, MouseButton1Click = true, MouseButton1Down = true, MouseButton1Up = true, MouseButton2Click = true, MouseEnter = true, MouseLeave = true, InputBegan = true, InputEnded = true, InputChanged = true, Changed = true, Destroying = true, ChildAdded = true, ChildRemoved = true, DescendantAdded = true, AncestryChanged = true, OnClientEvent = true, Event = true, Heartbeat = true, RenderStepped = true, Stepped = true, Completed = true, PlayerAdded = true, PlayerRemoving = true, TouchTap = true, TouchTapInWorld = true, SelectionGained = true, SelectionLost = true, FocusLost = true, Focused = true, CharacterAdded = true }
+local SIGNAL_NAMES = { Activated = true, MouseButton1Click = true, MouseButton1Down = true, MouseButton1Up = true, MouseButton2Click = true, MouseEnter = true, MouseLeave = true, InputBegan = true, InputEnded = true, InputChanged = true, Changed = true, Destroying = true, ChildAdded = true, ChildRemoved = true, DescendantAdded = true, AncestryChanged = true, OnClientEvent = true, Event = true, Heartbeat = true, RenderStepped = true, Stepped = true, Completed = true, PlayerAdded = true, PlayerRemoving = true, TouchTap = true, TouchTapInWorld = true, SelectionGained = true, SelectionLost = true, FocusLost = true, Focused = true, CharacterAdded = true, CharacterRemoving = true, Ended = true, Died = true, PreSimulation = true }
 
 instanceMeta.__index = function(self, key)
 	local r = rawget(self, "__raw")
@@ -688,6 +703,10 @@ instanceMeta.__index = function(self, key)
 		if c.Name == key then
 			return c
 		end
+	end
+	-- 3D parts: Position is derived from CFrame (the cutscene harness sets CFrame)
+	if key == "Position" and r.props.CFrame ~= nil then
+		return r.props.CFrame.Position
 	end
 	if key == "AbsoluteSize" or key == "AbsolutePosition" then
 		return r.layout and r.layout[key] or Vector2.new()
@@ -1467,4 +1486,7 @@ baseEnv = {
 }
 
 R.Services = services
+-- Exposed for tools/tests/cutscene_director.luau, which adds 3D stubs (PivotTo, Raycast, ...) and a virtual clock.
+R.Methods = methods
+R.BaseEnv = baseEnv
 return R
