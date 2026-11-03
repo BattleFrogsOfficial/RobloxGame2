@@ -1,46 +1,102 @@
 --!strict
--- Horizontal tab strip. Tabs.new(parent, {"Balls","Training",...}, onSelect) -> { Select(name), Buttons }
+-- Horizontal tab strip. Items = { { Id, Text, Icon? } }. The selected tab is Sky, the rest Bone.
+local Make = require(script.Parent.Parent:WaitForChild("Make"))
 local Theme = require(script.Parent.Parent:WaitForChild("Theme"))
-local Create = require(script.Parent:WaitForChild("Create"))
+local Decor = require(script.Parent:WaitForChild("Decor"))
 local Button = require(script.Parent:WaitForChild("Button"))
 
 local Tabs = {}
 
-export type Tabs = { Frame: Frame, Buttons: { [string]: TextButton }, Select: (name: string) -> (), Current: () -> string }
+export type TabItem = { Id: string, Text: string?, Icon: string? }
+export type TabsProps = {
+	Items: { TabItem },
+	Selected: string?,
+	OnSelect: (id: string) -> (),
+	Parent: Instance?,
+	Height: number?,
+	Size: UDim2?,
+	LayoutOrder: number?,
+	ZIndex: number?,
+	Scrollable: boolean?, -- horizontal scrolling strip for many tabs (zones)
+}
 
-function Tabs.new(parent: Instance, names: { string }, onSelect: (string) -> (), height: number?): Tabs
-	local frame = Create.New("ScrollingFrame", { Name = "Tabs", BackgroundTransparency = 1, BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 0, height or 34), ScrollingDirection = Enum.ScrollingDirection.X, ScrollBarThickness = 3, ScrollBarImageColor3 = Theme.Color.TextDim,
-		AutomaticCanvasSize = Enum.AutomaticSize.X, CanvasSize = UDim2.new(), Parent = parent })
-	Create.List(Enum.FillDirection.Horizontal, Theme.Spacing.S).Parent = frame
-	local buttons: { [string]: TextButton } = {}
-	local current = names[1]
+export type TabsHandle = {
+	Root: GuiObject,
+	Select: (self: TabsHandle, id: string) -> (),
+	Selected: () -> string?,
+}
+
+function Tabs.new(props: TabsProps): TabsHandle
+	local h = props.Height or 44
+	local root: GuiObject
+	if props.Scrollable then
+		root = Make("ScrollingFrame", {
+			Name = "Tabs",
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = props.Size or UDim2.new(1, 0, 0, h + 8),
+			CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.X,
+			ScrollingDirection = Enum.ScrollingDirection.X,
+			ScrollBarThickness = 4,
+			ScrollBarImageColor3 = Theme.Color.Ink,
+			LayoutOrder = props.LayoutOrder or 0,
+			ZIndex = props.ZIndex or 53,
+		})
+	else
+		root = Make("Frame", {
+			Name = "Tabs",
+			BackgroundTransparency = 1,
+			Size = props.Size or UDim2.new(1, 0, 0, h),
+			LayoutOrder = props.LayoutOrder or 0,
+			ZIndex = props.ZIndex or 53,
+		})
+	end
+	Decor.List(root, Enum.FillDirection.Horizontal, Theme.Space.S, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+	local buttons: { [string]: Button.ButtonHandle } = {}
+	local selected: string? = props.Selected or (props.Items[1] and props.Items[1].Id)
+	local handle = { Root = root } :: any
 	local function paint()
-		for n, b in buttons do
-			Button.SetColor(b, if n == current then Theme.Color.Accent else Theme.Color.PanelLight)
+		for id, b in buttons do
+			b:SetPalette(if id == selected then "Sky" else "Bone")
 		end
 	end
-	local function selectTab(name: string)
-		current = name
+	function handle.Select(_, id: string)
+		if not buttons[id] then
+			return
+		end
+		selected = id
 		paint()
-		onSelect(name)
+		props.OnSelect(id)
 	end
-	for i, n in names do
-		local b = Button.new({ Name = n, Text = n, LayoutOrder = i, Size = UDim2.new(0, math.max(72, #n * 10 + 24), 1, -4),
-			Color = Theme.Color.PanelLight, TextMax = 18, Parent = frame, OnClick = function()
-				selectTab(n)
-			end })
-		buttons[n] = b
+	function handle.Selected(): string?
+		return selected
+	end
+	for i, item in props.Items do
+		local text = item.Text
+		local width = if text then math.max(88, 24 + #text * 11 + (if item.Icon then 36 else 0)) else h
+		buttons[item.Id] = Button.new({
+			Name = "Tab_" .. item.Id,
+			Text = text,
+			Icon = item.Icon,
+			IconSize = 16,
+			Palette = "Bone",
+			TextSize = Theme.Text.Body,
+			Size = UDim2.fromOffset(width, h),
+			LayoutOrder = i,
+			Shadow = false,
+			ZIndex = root.ZIndex + 1,
+			Parent = root,
+			OnClick = function()
+				handle:Select(item.Id)
+			end,
+		})
 	end
 	paint()
-	return {
-		Frame = frame,
-		Buttons = buttons,
-		Select = selectTab,
-		Current = function()
-			return current
-		end,
-	}
+	if props.Parent then
+		root.Parent = props.Parent
+	end
+	return handle :: TabsHandle
 end
 
 return Tabs
