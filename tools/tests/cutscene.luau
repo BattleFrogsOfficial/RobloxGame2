@@ -26,41 +26,76 @@ local function near(a, b, eps)
 	return math.abs(a - b) <= (eps or 1e-9)
 end
 
--- 1. Budgets: sum every beat per rarity.
-print("rarity      wind  flight settle dog   count hold  outc  = total (budget)")
+-- 1. Budgets: sum every beat per rarity, per outcome. CAUGHT: grab + victory before the counter, hop away after;
+-- MISSED: the counter (the rarity) before the sniff + bolt (docs/DESIGN.md §8).
+print("rarity      wind  flight settle dog   grab  vict  count hold  hop   = caught (budget) | sniff bolt = missed (budget)")
 for _, r in Rarities.Order do
 	local b = C.Beats
-	local sum = C.WindUp.ReleaseAt + C.Budget.ReferenceFlight + b.Settle[r] + b.DogArrive[r] + b.Counter[r]
-		+ b.CounterHold[r] + b.Outcome[r]
-	local plan = Timeline.Build(r, C.Budget.ReferenceFlight)
-	print(string.format("%-10s  %.2f  %.2f   %.2f   %.2f  %.2f  %.2f  %.2f  = %.2f (%.2f)", r, C.WindUp.ReleaseAt,
-		C.Budget.ReferenceFlight, b.Settle[r], b.DogArrive[r], b.Counter[r], b.CounterHold[r], b.Outcome[r], sum, C.Budget[r]))
-	check(near(sum, C.Budget[r], C.Budget.Tolerance), r .. " beats sum to its budget", ("%.3f vs %.3f"):format(sum, C.Budget[r]))
-	check(near(plan.Total, sum, 1e-9), r .. " Timeline.Build total == summed beats")
-	check(near(Timeline.BudgetTotal(r), C.Budget[r], C.Budget.Tolerance), r .. " BudgetTotal")
-	-- beats are contiguous and in order
-	local t = 0
-	for i, beat in plan.Beats do
-		check(beat.Name == Timeline.Order[i], r .. " beat order " .. i)
-		check(near(beat.Start, t), r .. " beat " .. beat.Name .. " starts where the last ended")
-		check(beat.Length >= 0, r .. " beat " .. beat.Name .. " non-negative")
-		t += beat.Length
+	local pre = C.WindUp.ReleaseAt + C.Budget.ReferenceFlight + b.Settle[r] + b.DogArrive[r]
+	local caughtSum = pre + b.Grab[r] + b.Victory[r] + b.Counter[r] + b.CounterHold[r] + b.HopAway[r]
+	local missedSum = pre + b.Counter[r] + b.CounterHold[r] + b.Sniff[r] + b.Bolt[r]
+	print(string.format("%-10s  %.2f  %.2f   %.2f   %.2f  %.2f  %.2f  %.2f  %.2f  %.2f  = %.2f (%.2f) | %.2f  %.2f = %.2f (%.2f)", r,
+		C.WindUp.ReleaseAt, C.Budget.ReferenceFlight, b.Settle[r], b.DogArrive[r], b.Grab[r], b.Victory[r], b.Counter[r],
+		b.CounterHold[r], b.HopAway[r], caughtSum, C.Budget[r], b.Sniff[r], b.Bolt[r], missedSum, C.Budget.Missed[r]))
+	check(near(caughtSum, C.Budget[r], C.Budget.Tolerance), r .. " caught beats sum to its budget", ("%.3f vs %.3f"):format(caughtSum, C.Budget[r]))
+	check(near(missedSum, C.Budget.Missed[r], C.Budget.Tolerance), r .. " missed beats sum to Budget.Missed",
+		("%.3f vs %.3f"):format(missedSum, C.Budget.Missed[r]))
+	check(C.Budget.Missed[r] < C.Budget[r], r .. " missed is shorter than caught (Budget[r] is the longest: the server timeout)")
+	for _, caught in { true, false } do
+		local label = r .. (if caught then " caught" else " missed")
+		local plan = Timeline.Build(r, C.Budget.ReferenceFlight, { Caught = caught })
+		check(near(plan.Total, if caught then caughtSum else missedSum, 1e-9), label .. " Timeline.Build total == summed beats")
+		check(near(Timeline.BudgetTotal(r, caught), if caught then C.Budget[r] else C.Budget.Missed[r], C.Budget.Tolerance), label .. " BudgetTotal")
+		check(plan.Caught == caught, label .. " plan.Caught")
+		local order = if caught then Timeline.OrderCaught else Timeline.OrderMissed
+		local t = 0
+		for i, beat in plan.Beats do
+			check(beat.Name == order[i], label .. " beat order " .. i)
+			check(near(beat.Start, t), label .. " beat " .. beat.Name .. " starts where the last ended")
+			check(beat.Length >= 0, label .. " beat " .. beat.Name .. " non-negative")
+			t += beat.Length
+		end
+		check(near(plan.Touchdown, C.WindUp.ReleaseAt + C.Budget.ReferenceFlight), label .. " touchdown = release + flight")
+		local long = Timeline.Build(r, C.Flight.Max, { Caught = caught })
+		check(near(long.Total - plan.Total, C.Flight.Max - C.Budget.ReferenceFlight), label .. " longer flight only adds flight")
+		local by = plan.ByName
+		if caught then
+			-- dog arrives -> grab ball -> victory beat -> counter -> hop away
+			check(by.Grab.Start >= by.DogArrive.Start + by.DogArrive.Length - 1e-9 and by.Victory.Start > by.Grab.Start
+				and by.Counter.Start > by.Victory.Start and by.HopAway.Start > by.Counter.Start, label .. ": arrive < grab < victory < counter < hop away")
+			check(by.Sniff == nil and by.Bolt == nil, label .. ": no sniff / bolt")
+			check(by.Victory.Length >= 1.9 and by.Victory.Length <= 2.5, label .. ": victory beat about 2 s", tostring(by.Victory.Length))
+			check(by.HopAway.Length - C.Outcome.TurnTime >= C.Outcome.HopAwayMinSeconds - 1e-9,
+				label .. ": the dog hops in frame >= HopAwayMinSeconds before the end card")
+		else
+			-- dog arrives -> counter (rarity seen) -> sniff -> bolt
+			check(by.Counter.Start >= by.DogArrive.Start + by.DogArrive.Length - 1e-9 and by.Sniff.Start > by.Counter.Start
+				and by.Bolt.Start > by.Sniff.Start, label .. ": arrive < counter < sniff < bolt (rarity before the loss)")
+			check(by.Grab == nil and by.Victory == nil and by.HopAway == nil, label .. ": no grab / victory / hop away")
+			check(near(by.Sniff.Length, 1.5, 0.2), label .. ": sniff beat about 1.5 s")
+		end
 	end
-	check(near(plan.Touchdown, C.WindUp.ReleaseAt + C.Budget.ReferenceFlight), r .. " touchdown = release + flight")
-	-- a long throw only adds flight time
-	local long = Timeline.Build(r, C.Flight.Max)
-	check(near(long.Total - plan.Total, C.Flight.Max - C.Budget.ReferenceFlight), r .. " longer flight only adds flight")
-	-- counter budget 1.5 s (Common) .. 4 s (Mythic)
 	check(b.Counter[r] >= 1.5 - 1e-9 and b.Counter[r] <= 4 + 1e-9, r .. " counter within 1.5..4 s")
 end
 check(near(C.Beats.Counter.Common, 1.5), "Common counter is 1.5 s")
 check(near(C.Beats.Counter.Mythic, 4.0), "Mythic counter is 4 s")
-check(C.Budget.Common <= 6 and C.Budget.Common >= 4.5, "Common about 5 s", tostring(C.Budget.Common))
-check(near(C.Budget.Mythic, 12, 0.5), "Mythic about 12 s", tostring(C.Budget.Mythic))
-local prev = 0
+-- the user accepted longer totals for the catch celebration: Common catch ~9 s, Mythic catch ~15 s
+check(C.Budget.Common <= 9.5 and C.Budget.Common >= 8.5, "Common catch about 9 s", tostring(C.Budget.Common))
+check(near(C.Budget.Mythic, 14.75, 0.5), "Mythic catch about 15 s", tostring(C.Budget.Mythic))
+local prev, prevMissed = 0, 0
 for _, r in Rarities.Order do
 	check(C.Budget[r] > prev, r .. " budget grows with rarity")
-	prev = C.Budget[r]
+	check(C.Budget.Missed[r] > prevMissed, r .. " missed budget grows with rarity")
+	prev, prevMissed = C.Budget[r], C.Budget.Missed[r]
+end
+-- the leaving dog: time + distance removal, never before HopAwayMinSeconds
+do
+	local o = C.Outcome
+	check(o.HopAwayMinSeconds >= 1 and o.HopAwayMaxSeconds > o.HopAwayMinSeconds and o.RemoveDistance > 0, "leave rule config")
+	check(not Timeline.LeaveDone(0, 1e6) and not Timeline.LeaveDone(o.HopAwayMinSeconds - 1e-3, 1e6), "never removed before HopAwayMinSeconds")
+	check(not Timeline.LeaveDone(o.HopAwayMinSeconds + 0.01, o.RemoveDistance - 1), "still near: kept")
+	check(Timeline.LeaveDone(o.HopAwayMinSeconds + 0.01, o.RemoveDistance), "far enough after the minimum: removed")
+	check(Timeline.LeaveDone(o.HopAwayMaxSeconds, 0), "removed at HopAwayMaxSeconds at the latest")
 end
 check(C.WindUp.ReleaseAt < C.WindUp.Duration, "release frame inside the wind-up")
 check(near(C.WindUp.Duration, 1.5, 0.3), "wind-up about 1.5 s")
@@ -68,7 +103,6 @@ check(near(C.WindUp.Duration, 1.5, 0.3), "wind-up about 1.5 s")
 -- shot before the cocked pose (Pose[3]) so the arm wind-back is seen from a still camera
 check(C.WindUp.ReleaseAt >= 1.1, "wind-up has screen time before the release", tostring(C.WindUp.ReleaseAt))
 check(C.WindUp.SweepTime <= C.Pose[3].At * C.WindUp.Duration, "sweep settles before the cocked pose")
-check(near(C.Budget.Common - C.WindUp.ReleaseAt, 4.55, 0.06), "Common after-release beats unchanged (4.55 s)")
 check(C.Beats.DogArrive.Mythic <= 1.6, "dog arrives in about 1.5 s")
 check(C.Landing.Share > 0 and C.Landing.Share < 1 and near(C.Landing.Share, 0.25), "landing eases over the last 25%")
 check(C.Landing.Bounces >= 2 and C.Landing.Bounces <= 3, "2-3 bounces")
@@ -144,15 +178,19 @@ end
 check(minServer >= C.Flight.ServerMin - 0.05 and maxServer <= C.Flight.ServerMax + 0.05,
 	"Flight.ServerMin/Max match the server's BallFlight range", ("%.2f..%.2f"):format(minServer, maxServer))
 
--- 4. Skip rules.
+-- 4. Skip rules: from the counter on in each outcome's order, never Legendary / Mythic, never during the catch
+-- celebration (Grab / Victory come before the counter).
 for _, r in Rarities.Order do
 	local never = r == "Legendary" or r == "Mythic"
-	for _, beat in Timeline.Order do
-		local idx = table.find(Timeline.Order, beat)
-		local counterIdx = table.find(Timeline.Order, "Counter")
-		local expect = (not never) and idx >= counterIdx and beat ~= "EndCard"
-		check(Timeline.CanSkip(r, beat) == expect, ("CanSkip(%s, %s) == %s"):format(r, beat, tostring(expect)))
+	for _, order in { Timeline.OrderCaught, Timeline.OrderMissed } do
+		local counterIdx = table.find(order, "Counter")
+		for idx, beat in order do
+			local expect = (not never) and idx >= counterIdx and beat ~= "EndCard"
+			check(Timeline.CanSkip(r, beat) == expect, ("CanSkip(%s, %s) == %s"):format(r, beat, tostring(expect)))
+		end
 	end
+	check(not Timeline.CanSkip(r, "Victory") and not Timeline.CanSkip(r, "Grab"), r .. " victory beat never skippable")
+	check(not Timeline.CanSkip(r, "Hold"), r .. " unknown phase not skippable")
 end
 
 -- 5. Short Commons (Settings.HideCommonReveals): launch + landing + end card, no counter.
@@ -163,7 +201,8 @@ for _, r in Rarities.Order do
 	end
 end
 local short = Timeline.Build("Common", 1.5, { Short = true })
-check(short.ByName.Counter.Length == 0 and short.ByName.DogArrive.Length == 0 and short.ByName.Outcome.Length == 0,
+check(short.ByName.Counter.Length == 0 and short.ByName.DogArrive.Length == 0 and short.ByName.HopAway.Length == 0
+	and short.ByName.Victory.Length == 0 and Timeline.Build("Common", 1.5, { Short = true, Caught = false }).ByName.Bolt.Length == 0,
 	"short Common has no dog / counter / outcome")
 check(near(short.Total, C.WindUp.ReleaseAt + 1.5 + C.ShortCommon.AfterTouchdown), "short Common = release + flight + settle")
 check(short.Total < Timeline.Build("Common", 1.5).Total, "short Common is shorter")
@@ -236,22 +275,38 @@ do
 		return t
 	end)(), ", "))
 	for _, r in Rarities.Order do
-		local longest = Timeline.Build(r, C.Flight.Max).Total + C.Fallback.HoldMax + C.EndCard.AutoClose[r] + C.Return.Time
+		-- the longest real client cutscene: either outcome at the longest flight, a late result, the end card left to
+		-- close itself, the return tween (and the leaving dog, which only waits when the card closed at once)
+		local longest = 0
+		for _, caught in { true, false } do
+			local total = Timeline.Build(r, C.Flight.Max, { Caught = caught }).Total + C.Fallback.HoldMax + C.EndCard.AutoClose[r]
+				+ C.Return.Time
+			longest = math.max(longest, total)
+		end
 		check(type(Timers.Cutscene[r]) == "number" and Timers.Cutscene[r] + 1e-9 >= longest,
 			"server timeout covers the longest " .. r .. " cutscene", ("%s < %s"):format(tostring(Timers.Cutscene[r]), longest))
+		check(Timers.Cutscene[r] - longest < 1e-6 + 0.5, r .. " server timeout derived from the caught budget (no slack drift)")
 		check(C.EndCard.AutoClose[r] < 30, r .. " end card closes before the Director's 30 s guard")
 		for _, sf in { 0.99, 1.4, 2.3 } do
 			local fl = Timeline.FlightSeconds(sf)
-			local e = Timeline.EarliestEnd(r, fl)
-			local full = Timeline.Build(r, fl)
-			check(e > C.WindUp.ReleaseAt + fl and e <= full.Total + 1e-9, r .. " earliest end after touchdown, <= full")
-			if C.Skip.Never[r] then
-				check(near(e, full.Total), r .. " (never skippable) earliest end = the full timeline")
-			else
-				check(e <= full.ByName[C.Skip.FromBeat].Start + 1e-9, r .. " earliest end <= the Skip point")
-			end
-			if r == "Common" then
-				check(e <= Timeline.Build(r, fl, { Short = true }).Total + 1e-9, "Common earliest end <= short Common")
+			local both = Timeline.EarliestEnd(r, fl)
+			for _, caught in { true, false } do
+				local label = r .. (if caught then " caught" else " missed")
+				local e = Timeline.EarliestEnd(r, fl, caught)
+				check(both <= e + 1e-9, label .. ": the server floor (either outcome) never exceeds this outcome's earliest end")
+				local full = Timeline.Build(r, fl, { Caught = caught })
+				check(e > C.WindUp.ReleaseAt + fl and e <= full.Total + 1e-9, label .. " earliest end after touchdown, <= full")
+				if C.Skip.Never[r] then
+					check(near(e, full.Total), label .. " (never skippable) earliest end = the full timeline")
+				else
+					check(e <= full.ByName[C.Skip.FromBeat].Start + 1e-9, label .. " earliest end <= the Skip point")
+					if caught and r ~= "Common" then -- (a Common may be shortened by Settings.HideCommonReveals)
+						check(e >= full.ByName.Victory.Start + full.ByName.Victory.Length - 1e-9, label .. " the victory beat is always seen")
+					end
+				end
+				if r == "Common" then
+					check(e <= Timeline.Build(r, fl, { Short = true }).Total + 1e-9, "Common earliest end <= short Common")
+				end
 			end
 		end
 	end

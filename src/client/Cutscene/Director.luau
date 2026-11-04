@@ -10,6 +10,7 @@
 -- character removal cleans every instance / connection / sound / tween and restores the camera + HUD.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = Shared:WaitForChild("Config")
@@ -24,6 +25,7 @@ local Timeline = require(CutsceneShared:WaitForChild("Timeline"))
 local OddsCounter = require(CutsceneShared:WaitForChild("OddsCounter"))
 local Path = require(CutsceneShared:WaitForChild("Path"))
 local Shots = require(CutsceneShared:WaitForChild("Shots"))
+local VariantFX = require(Shared:WaitForChild("Dog"):WaitForChild("VariantFX"))
 
 local Here = script.Parent
 local Janitor = require(Here:WaitForChild("Janitor"))
@@ -53,6 +55,25 @@ export type Start = {
 	OnDone: (() -> ())?,
 }
 
+-- Colours of the variant's confetti burst on top of the rarity burst (none without a variant).
+local function variantColors(variant: string?): { Color3 }?
+	if variant == nil then
+		return nil
+	end
+	if variant == "Rainbow" then
+		local out = {}
+		for i = 0, 5 do
+			table.insert(out, Color3.fromHSV(i / 6, 0.85, 1))
+		end
+		return out
+	end
+	local c = (VariantFX.Colors :: any)[variant]
+	if not c then
+		return nil
+	end
+	return { c.Badge, c.Primary or c.Badge, c.Secondary or c.Eye or c.Badge }
+end
+
 local function isSkipOrAbort(err: any): boolean
 	local s = tostring(err)
 	return string.find(s, SKIP, 1, true) ~= nil or string.find(s, ABORT, 1, true) ~= nil
@@ -70,7 +91,17 @@ function Director.new(start: Start)
 	self.OnDone = start.OnDone
 	self.Reduced = self.Ui.State.Settings.ReducedMotion == true
 	self.Session = Janitor.new() -- lives until the camera is back
-	self.Scene = Janitor.new() -- ball, dog, overlay contents, sounds: cleaned before the end card
+	self.Scene = Janitor.new() -- ball, overlay contents, sounds, FX, blur: cleaned before the end card
+	-- the dog (and a ball it carries): cleaned with the Scene, unless it is leaving (hop away / bolt): then it
+	-- keeps moving behind the end card until Timeline.LeaveDone (time + distance), at the latest with the Session
+	self.DogJ = Janitor.new()
+	self.Session:Add(self.DogJ)
+	self.Leaving = nil :: { Start: number, From: Vector3 }?
+	self.DogRemoved = false
+	self.BallCarried = false
+	-- what happened, for tools/tests/cutscene_director.luau: { { Name, At } } and effect maxima
+	self.Log = {} :: { { Name: string, At: number } }
+	self.Stats = { ImpactShake = 0, SpeedShake = 0, FovPunch = 0, Blur = false, BlurMax = 0, Confetti = 0, Quality = 0 }
 	self.Phase = "WindUp"
 	self.Done = false
 	self.GaveUp = false
@@ -83,6 +114,21 @@ function Director.new(start: Start)
 		self:SetResult(start.Result)
 	end
 	return self
+end
+
+function Director._mark(self: any, name: string)
+	table.insert(self.Log, { Name = name, At = os.clock() })
+end
+
+-- Meter quality for the release impact: result.Quality, else the client's release meter position (Util/Meter).
+function Director._quality(self: any): number
+	local q = self.Result and tonumber(self.Result.Quality)
+	if q then
+		return q
+	end
+	local Meter = require(Util:WaitForChild("Meter"))
+	local _, quality = Meter.Evaluate(self.Elapsed or 0.8, self.Tutorial)
+	return quality
 end
 
 function Director.SetResult(self: any, result: any)
@@ -134,6 +180,11 @@ function Director._wait(self: any, seconds: number)
 	if self._abort then
 		error(ABORT, 0)
 	end
+end
+
+-- Waits until an absolute os.clock() deadline (sub-steps of one beat do not accumulate frame overshoot).
+function Director._waitUntil(self: any, deadline: number)
+	self:_wait(deadline - os.clock())
 end
 
 function Director._waitFor(self: any, cond: () -> boolean, timeout: number): boolean
@@ -305,6 +356,10 @@ function Director.Run(self: any)
 	if self.Rig then
 		self.Rig:Stop()
 	end
+	local aborting = self._abort ~= nil
+	if aborting or not self.Leaving then
+		self:_removeDog() -- never left (skip / short Common / error): goes with the scene
+	end
 	self.Scene:Clean()
 	self.CameraFn = nil
 	if self.Overlay then
@@ -332,6 +387,16 @@ function Director.Run(self: any)
 			pcall(self._restoreCamera, self, false)
 		end
 	end
+	-- a leaving dog is never removed sooner than HopAwayMinSeconds after it started leaving
+	local leaving = self.Leaving
+	if leaving and not self.DogRemoved and not aborted then
+		local guard = os.clock() + C.Outcome.HopAwayMinSeconds + 1
+		while not self.DogRemoved and not self._abort and os.clock() - leaving.Start < C.Outcome.HopAwayMinSeconds
+			and os.clock() < guard do
+			RunService.RenderStepped:Wait()
+		end
+	end
+	self:_removeDog()
 	self.Session:Clean()
 	pcall(self._unlock, self)
 	self.Done = true
@@ -392,7 +457,11 @@ function Director._beats(self: any)
 
 	-- 1. WIND-UP ---------------------------------------------------------------------------------
 	local ball = Ball.Make(self.BallId)
-	self.Scene:Add(ball)
+	self.Scene:Add(function()
+		if not self.BallCarried then
+			ball:Destroy() -- a ball the dog carries away goes with the dog (DogJ)
+		end
+	end)
 	local fallbackHand = rootPos + Vector3.new(-1.5, 1.2, 0)
 	self.Rig = Rig.Play(self.Character, ball, fallbackHand, { Assets = true })
 	self.Scene:Add(function()
@@ -416,7 +485,25 @@ function Director._beats(self: any)
 	local hand = self.Rig:HandPosition()
 	self.Rig:Release()
 	Ball.SetTrail(ball, true)
-	Sfx.Play("Whoosh", { Volume = 0.6, Janitor = self.Scene })
+	-- release IMPACT: whoosh + one-frame white flash (always; subtler under reduced motion) + speed lines (below,
+	-- once the launch direction is known) + a quality-scaled decaying shake and an FOV punch (not reduced)
+	self:_mark("Release")
+	Sfx.Play("Whoosh", { Volume = C.Impact.WhooshVolume, Janitor = self.Scene })
+	self.Overlay:Flash(if self.Reduced then C.ReducedMotion.FlashTransparency else C.Impact.FlashTransparency, C.Impact.FlashFrames)
+	local impactScale = Shots.QualityScale(self:_quality())
+	self.Stats.Quality = impactScale
+	local noShake = self.Reduced and C.ReducedMotion.NoShake
+	local noPunch = self.Reduced and C.ReducedMotion.NoFovPunch
+	local blur: BlurEffect? = nil
+	if not (self.Reduced and C.ReducedMotion.NoBlur) then
+		local b = Instance.new("BlurEffect")
+		b.Name = "CutsceneBlur"
+		b.Size = 0
+		b.Parent = Lighting
+		self.Scene:Add(b)
+		blur = b
+		self.Stats.Blur = true
+	end
 	local wind = Sfx.Play("Wind", { Volume = C.Flight.WindMinVolume, Pitch = C.Flight.WindMinPitch, Looped = true, Janitor = self.Scene })
 
 	local function realFlight(): any
@@ -435,11 +522,12 @@ function Director._beats(self: any)
 		local power = state.ThrowPower()
 		local ballDef = Ball.Def(self.BallId)
 		local Meter = require(Util:WaitForChild("Meter"))
-		local quality = Meter.Evaluate(self.Elapsed or 0.8, self.Tutorial)
+		local _, quality = Meter.Evaluate(self.Elapsed or 0.8, self.Tutorial)
 		local launch, land = Path.Estimate(power, ballDef.RangeMult, quality, rootPos.X)
 		local arc = BallFlight.ForThrow(launch, land)
 		flight = Path.Flight(arc, hand, Timeline.FlightSeconds(arc.Duration))
 	end
+	Effects.SpeedLines(hand, flight.Velocity(0), self.Scene)
 	local flightStart = os.clock()
 	local function flightT(): number
 		return os.clock() - flightStart
@@ -469,6 +557,7 @@ function Director._beats(self: any)
 		local dur = flight.Duration
 		local landStart = dur * (1 - L.Share)
 		local cf: CFrame
+		local landK = if t < landStart then 0 else 1
 		local wide = Shots.Wide(flight.Land, facing)
 		if self.Reduced then
 			cf = if t < landStart then pov(t) else wide
@@ -481,13 +570,28 @@ function Director._beats(self: any)
 					cf = frontAtRelease:Lerp(cf, Shots.EaseInOut(w))
 				end
 				self.Fov = C.WindUp.Fov + (C.Flight.PovFov - C.WindUp.Fov) * w
-				cf *= Shots.Shake(t, shakeSeed, C.Flight.ShakeStuds, C.Flight.ShakeDegrees, C.Flight.ShakeTime)
 			else
 				-- LANDING: drift up and behind, gaining height + distance, to the wide shot at touchdown
-				local k = Shots.EaseInOut((t - landStart) / math.max(1e-3, dur - landStart))
-				cf = pov(t):Lerp(wide, k)
-				self.Fov = C.Flight.PovFov + (L.WideFov - C.Flight.PovFov) * k
+				landK = Shots.EaseInOut((t - landStart) / math.max(1e-3, dur - landStart))
+				cf = pov(t):Lerp(wide, landK)
+				self.Fov = C.Flight.PovFov + (L.WideFov - C.Flight.PovFov) * landK
 			end
+		end
+		if not noPunch then
+			local punch = Shots.FovPunch(t)
+			self.Fov += punch
+			self.Stats.FovPunch = math.max(self.Stats.FovPunch, punch)
+		end
+		if not noShake then
+			-- the release impact (hard, decaying) + the ball-speed POV shake (fades out with the landing ease)
+			local speed = v.Magnitude * (1 - landK)
+			cf *= Shots.ImpactShake(t, shakeSeed, impactScale) * Shots.SpeedShake(t, shakeSeed, speed)
+			self.Stats.ImpactShake = math.max(self.Stats.ImpactShake, Shots.ImpactShakeAmount(t, impactScale))
+			self.Stats.SpeedShake = math.max(self.Stats.SpeedShake, Shots.SpeedShakeAmount(speed))
+		end
+		if blur then
+			blur.Size = Shots.BlurSize(v.Magnitude, landK)
+			self.Stats.BlurMax = math.max(self.Stats.BlurMax, blur.Size)
 		end
 		return cf
 	end
@@ -496,6 +600,10 @@ function Director._beats(self: any)
 	end
 	if wind then
 		wind:Stop()
+	end
+	if blur then
+		blur:Destroy() -- cleared by touchdown (the Scene also removes it on skip / abort)
+		blur = nil
 	end
 	local landPos = flight.Land
 	local wideCF = Shots.Wide(landPos, facing)
@@ -534,7 +642,10 @@ function Director._beats(self: any)
 	end
 	local result = self.Result
 	local rarity = result.Rarity
-	local plan = Timeline.Build(rarity, flight.Duration, { Short = Timeline.IsShort(rarity, self.Ui.State.Settings.HideCommonReveals) })
+	local plan = Timeline.Build(rarity, flight.Duration, {
+		Short = Timeline.IsShort(rarity, self.Ui.State.Settings.HideCommonReveals),
+		Caught = result.Caught == true,
+	})
 	self.Plan = plan
 
 	-- touchdown: impact + bounces
@@ -574,7 +685,7 @@ function Director._beats(self: any)
 	-- 4. THE DOG ARRIVES --------------------------------------------------------------------------
 	self.Phase = "DogArrive"
 	local rest = bounces.Rest
-	local dog = DogActor.new(result.DogId, result.Variant, self.Scene)
+	local dog = DogActor.new(result.DogId, result.Variant, self.DogJ)
 	local camRight = Shots.Flat(wideCF.RightVector)
 	local fieldCX = (Layout.Field.MinX + Layout.Field.MaxX) / 2
 	-- come in from the side with more room (toward the middle of the field)
@@ -638,9 +749,83 @@ function Director._beats(self: any)
 	if self.Reduced then
 		self.Fov = C.Dog.PushFov -- reduced motion: hard cut to the closer shot
 	end
+	local dogActor = dog :: any
+	local caught = result.Caught == true
+	local o = C.Outcome
+	local counterFromCF = pushedCF
+
+	-- 4b. CAUGHT: GRAB + VICTORY (before the counter: the player sees the dog be happy first) -------
+	if caught then
+		self.Phase = "Grab"
+		self:_mark("Grab")
+		local grab = plan.ByName.Grab.Length
+		self.CameraFn = function()
+			return pushedCF
+		end
+		local g0 = os.clock()
+		if dog then
+			dogActor.Anim:StartOnce("pickup", grab)
+		end
+		self:_wait(grab * o.PickUpAt)
+		if dog then
+			self.BallCarried = true
+			self.DogJ:Add(ball) -- the carried ball leaves with the dog (Scene no longer removes it)
+			ballFollowsDog = function()
+				return dogActor:MouthCFrame()
+			end
+			Sfx.Play("Happy", { Volume = 0.5, Janitor = self.Scene })
+		end
+		self:_waitUntil(g0 + grab)
+
+		self.Phase = "Victory"
+		self:_mark("Victory")
+		local V = C.Victory
+		local vic = plan.ByName.Victory.Length
+		if dog then
+			dogActor.Anim.Victory = {
+				Jumps = V.Jumps, JumpTime = V.JumpTime, JumpGap = V.JumpGap, Height = V.Height, WagHz = V.WagHz,
+				WagDegrees = V.WagDegrees, EarLag = V.EarLag, EarFlapDegrees = V.EarFlapDegrees,
+			}
+			dogActor.Anim:Play("idle")
+			dogActor.Anim:StartOnce("victory", vic)
+		end
+		local tierColor = (Rarities.Tiers :: any)[rarity].Color
+		local vColors = variantColors(result.Variant)
+		local confettiN = (V.Confetti :: any)[rarity] or V.Confetti.Common
+		local bursts: { number } = {}
+		for j = 0, V.Jumps - 1 do
+			table.insert(bursts, j * (V.JumpTime + V.JumpGap) + 0.2 * V.JumpTime) -- each take-off
+		end
+		local nextBurst = 1
+		local barked = false
+		local v0 = os.clock()
+		local endCF = if self.Reduced then pushedCF else Shots.Toward(pushedCF, pushTarget, V.PushIn)
+		self.CameraFn = function(now)
+			local t = now - v0
+			if not barked and t >= V.BarkAt then
+				barked = true
+				Sfx.Play("Bark", { Volume = V.BarkVolume, Pitch = V.BarkPitch, Janitor = self.Scene })
+			end
+			while bursts[nextBurst] and t >= bursts[nextBurst] do
+				nextBurst += 1
+				local at = if dog then dogActor:Position() + UP * math.min(3, dogActor:Height() * 0.6) else stopPos + UP * 2
+				Effects.Confetti(at, tierColor, confettiN, vColors, self.Scene)
+				self.Stats.Confetti += 1
+			end
+			if self.Reduced then
+				return pushedCF
+			end
+			local e = Shots.EaseInOut(t / math.max(1e-3, vic))
+			self.Fov = C.Dog.PushFov + (V.PushFov - C.Dog.PushFov) * e
+			return Shots.Toward(pushedCF, pushTarget, V.PushIn * e)
+		end
+		self:_wait(vic)
+		counterFromCF = endCF
+	end
 
 	-- 5. THE ODDS COUNTER -------------------------------------------------------------------------
 	self.Phase = "Counter"
+	self:_mark("Counter")
 	local counterLen = plan.ByName.Counter.Length
 	local target = OddsCounter.Target(result.ZoneId, rarity, self.Luck, self.CatchBonus)
 	local thresholds = OddsCounter.Thresholds(result.ZoneId, self.Luck, self.CatchBonus)
@@ -675,10 +860,10 @@ function Director._beats(self: any)
 			end
 		end
 		if self.Reduced then
-			return pushedCF
+			return counterFromCF
 		end
 		local k = Shots.EaseInOut(t / math.max(1e-3, counterLen + plan.ByName.CounterHold.Length))
-		return Shots.Toward(pushedCF, pushTarget, C.Dog.CounterDrift * k)
+		return Shots.Toward(counterFromCF, pushTarget, C.Dog.CounterDrift * k)
 	end
 	self:_wait(counterLen)
 	overlay:SetCount(target, rarity, lastTier ~= rarity)
@@ -693,44 +878,35 @@ function Director._beats(self: any)
 	end
 
 	-- 6. OUTCOME ----------------------------------------------------------------------------------
-	self.Phase = "Outcome"
-	local O = plan.ByName.Outcome.Length
-	local o = C.Outcome
 	local flourish: string? = nil
-	if result.Caught and result.LuckyStreakTriggered then
+	if caught and result.LuckyStreakTriggered then
 		flourish = o.FlourishLucky
-	elseif result.Caught and result.TreatPocketUsed then
+	elseif caught and result.TreatPocketUsed then
 		flourish = o.FlourishTreat
 	end
 	if flourish then
 		task.delay(o.FlourishTime, function()
-			if not self.Done and self.Phase == "Outcome" then
+			if not self.Done and (self.Phase == "HopAway" or self.Phase == "Sniff" or self.Phase == "Bolt") then
 				overlay:SetFlourish(flourish)
 				Effects.Sparkle(stopPos + UP * 2, (Rarities.Tiers :: any)[rarity].Color, self.Scene)
 			end
 		end)
 	end
-	if not dog then
-		self:_wait(O)
-		return
-	end
-	local dogActor = dog :: any
-	if result.Caught then
-		-- pick up the ball, turn to the hub, hop away; the camera follows from behind
-		local pick = O * o.PickUpShare
-		dogActor.Anim:StartOnce("pickup", pick)
-		self:_wait(pick * 0.5)
-		ballFollowsDog = function()
-			return dogActor:MouthCFrame()
+	if caught then
+		-- turn to the hub, hop away; the camera follows from behind; the dog keeps hopping behind the end card
+		self.Phase = "HopAway"
+		self:_mark("HopAway")
+		local O = plan.ByName.HopAway.Length
+		if not dog then
+			self:_wait(O)
+			return
 		end
-		self:_wait(pick * 0.5)
-		Sfx.Play("Happy", { Volume = 0.5, Janitor = self.Scene })
 		local hub = Vector3.new(Layout.Platform.ThrowSpot.X, stopPos.Y, Layout.ThrowLine.Z)
 		local dir = Shots.Flat(hub - stopPos, Vector3.new(0, 0, -1))
 		local yaw0 = dogActor:Yaw()
 		local yaw1 = math.atan2(-dir.X, -dir.Z)
 		local dyaw = (yaw1 - yaw0 + math.pi) % (2 * math.pi) - math.pi
-		local turn = O * o.TurnShare
+		local turn = math.min(o.TurnTime, O)
 		local tt0 = os.clock()
 		self.CameraFn = function(now)
 			dogActor:SetYaw(yaw0 + dyaw * Shots.EaseInOut((now - tt0) / math.max(1e-3, turn)))
@@ -739,35 +915,59 @@ function Director._beats(self: any)
 		self:_wait(turn)
 		dogActor:SetYaw(yaw1)
 		dogActor.Anim:Play("hop")
-		local h0 = os.clock()
+		local start = dogActor:Position()
+		local h0 = self:_startLeaving(dogActor, start, dir, o.HopSpeed, ball)
 		local from = holdCF
-		local start = stopPos
 		self.CameraFn = function(now)
 			local t = now - h0
-			local pos = start + dir * (o.HopSpeed * t)
-			dogActor:Place(Vector3.new(pos.X, start.Y, pos.Z), nil)
 			if self.Reduced then
 				return from
 			end
+			local pos = start + dir * (o.HopSpeed * t)
 			local follower = start + dir * (o.HopSpeed * o.FollowLag * t)
 			local want = Shots.Follow(follower, dir)
 			local cf = Shots.LookAt(want.Position, pos + UP * 1.5)
 			return from:Lerp(cf, Shots.EaseInOut(t / 0.35))
 		end
-		self:_wait(O - pick - turn)
+		self:_waitUntil(tt0 + O)
 	else
-		-- sniff the ball, look at the camera, bolt out of frame; sad sting
-		local sniff = O * o.SniffShare
-		dogActor.Anim:StartOnce("sniff", sniff)
-		self:_wait(sniff)
-		local look = O * o.LookShare
-		local pivot = dogActor.Model:GetPivot()
-		local rel = pivot:PointToObjectSpace(cam.CFrame.Position)
-		dogActor.Anim.LookYaw = math.clamp(math.atan2(-rel.X, -rel.Z), -1.2, 1.2)
-		dogActor.Anim.LookPitch = math.clamp(math.atan2(rel.Y, math.sqrt(rel.X * rel.X + rel.Z * rel.Z)), -0.2, 0.7)
-		dogActor.Anim:StartOnce("look", look)
-		self:_wait(look)
+		-- sniff, sniff, look at the camera, ears drop, tail still, whimper; then bolt (keeps running behind the card)
+		local S = C.Sniff
+		self.Phase = "Sniff"
+		self:_mark("Sniff")
+		local len = plan.ByName.Sniff.Length
+		local s0 = os.clock()
+		local sniffAll = len * S.SniffShare
+		local each = sniffAll / math.max(1, S.Sniffs)
+		local look = len - sniffAll
+		if dog then
+			dogActor.Anim:Play("idle")
+			for i = 1, S.Sniffs do
+				dogActor.Anim:StartOnce("sniff", each)
+				self:_waitUntil(s0 + i * each)
+			end
+			local pivot = dogActor.Model:GetPivot()
+			local rel = pivot:PointToObjectSpace(cam.CFrame.Position)
+			dogActor.Anim.LookYaw = math.clamp(math.atan2(-rel.X, -rel.Z), -1.2, 1.2)
+			dogActor.Anim.LookPitch = math.clamp(math.atan2(rel.Y, math.sqrt(rel.X * rel.X + rel.Z * rel.Z)), -0.2, 0.7)
+			dogActor.Anim.Sad = { EarDownDegrees = S.EarDownDegrees }
+			dogActor.Anim:StartOnce("sadlook", look + 0.1) -- holds into the first bolt frame (no wag pop in between)
+			self:_mark("SadLook")
+		else
+			self:_waitUntil(s0 + sniffAll)
+		end
+		self:_waitUntil(s0 + sniffAll + math.min(S.WhimperAt, look))
+		Sfx.Play("Whimper", { Volume = S.WhimperVolume, Pitch = S.WhimperPitch, Janitor = self.Scene })
+		self:_waitUntil(s0 + len)
+
+		self.Phase = "Bolt"
+		self:_mark("Bolt")
+		local B = plan.ByName.Bolt.Length
 		Sfx.Play("Sting", { Volume = o.StingVolume, Janitor = self.Scene })
+		if not dog then
+			self:_wait(B)
+			return
+		end
 		local away = Shots.Flat(-side * 0.85 + Shots.Flat(holdCF.LookVector) * 0.5)
 		-- bolt toward whichever side keeps the dog in the field longest
 		if (stopPos + away * 30).X < minX or (stopPos + away * 30).X > maxX then
@@ -775,15 +975,44 @@ function Director._beats(self: any)
 		end
 		dogActor:SetYaw(math.atan2(-away.X, -away.Z))
 		dogActor.Anim:Play("bolt")
-		local b0 = os.clock()
-		local start = stopPos
-		self.CameraFn = function(now)
-			local pos = start + away * (o.BoltSpeed * (now - b0))
-			dogActor:Place(Vector3.new(pos.X, start.Y, pos.Z), nil)
+		self:_startLeaving(dogActor, dogActor:Position(), away, o.BoltSpeed, nil)
+		self.CameraFn = function()
 			return holdCF
 		end
-		self:_wait(O - sniff - look)
+		self:_wait(B)
 	end
+end
+
+-- The dog leaves (hop away / bolt) on its own RenderStepped step in DogJ, so it keeps moving behind the end card
+-- and is removed by Timeline.LeaveDone (time + distance, never a frustum check). Returns the start clock.
+function Director._startLeaving(self: any, dog: any, start: Vector3, dir: Vector3, speed: number, carried: BasePart?): number
+	local t0 = os.clock()
+	self.Leaving = { Start = t0, From = start }
+	self:_mark("LeaveStart")
+	self.DogJ:Add(RunService.RenderStepped:Connect(function()
+		if self.DogRemoved then
+			return
+		end
+		local t = os.clock() - t0
+		local pos = start + dir * (speed * t)
+		dog:Place(Vector3.new(pos.X, start.Y, pos.Z), nil)
+		if carried and self.BallCarried and carried.Parent then
+			carried.CFrame = dog:MouthCFrame()
+		end
+		if Timeline.LeaveDone(t, (pos - start).Magnitude) then
+			self:_removeDog()
+		end
+	end))
+	return t0
+end
+
+function Director._removeDog(self: any)
+	if self.DogRemoved then
+		return
+	end
+	self.DogRemoved = true
+	self:_mark("DogRemoved")
+	self.DogJ:Clean()
 end
 
 return Director

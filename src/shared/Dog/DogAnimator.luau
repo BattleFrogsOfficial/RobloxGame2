@@ -5,11 +5,17 @@
 --
 --   local anim = DogAnimator.new(model, { AlwaysAnimate = true })
 --   anim:Play("idle" | "run" | "bolt" | "sit" | "hop")     looping states
---   anim:PlayOnce("leap" | "catch" | "fumble" | "sniff" | "look" | "pickup", seconds?)   one-shot; YIELDS, then
+--   anim:PlayOnce("leap" | "catch" | "fumble" | "sniff" | "look" | "pickup" | "victory" | "sadlook", seconds?)
+--                                                    one-shot; YIELDS, then
 --                                                    returns to the loop state
 --   anim:StartOnce(state, seconds?)                  same one-shot without yielding (cutscene timelines)
 --   anim.LookYaw / anim.LookPitch (radians)          where the "look" one-shot turns the head (e.g. at the camera)
 --   anim.HopRate (hops per second)                   pace of the "hop" loop
+--   anim.Victory = { Jumps, JumpTime, JumpGap, Height, WagHz, WagDegrees, EarLag, EarFlapDegrees }
+--                                                    shape of the "victory" one-shot (the cutscene catch celebration:
+--                                                    bouncy jumps in place, fast tail wag, ears lagging the body)
+--   anim.Sad = { EarDownDegrees }                    "sadlook": look at (LookYaw, LookPitch), ears drop, tail still
+--   DogAnimator.Idle(model, opts?) -> { Stop }        self-contained C0-driven idle (ViewportFrame WorldModels)
 --   anim:Destroy()
 --
 -- Root motion (moving the whole model across the ground) is the caller's job (PivotTo); the animator
@@ -20,7 +26,18 @@ local DogAnimator = {}
 DogAnimator.__index = DogAnimator
 
 export type LoopState = "idle" | "run" | "bolt" | "sit" | "hop"
-export type OnceState = "leap" | "catch" | "fumble" | "sniff" | "look" | "pickup"
+export type OnceState = "leap" | "catch" | "fumble" | "sniff" | "look" | "pickup" | "victory" | "sadlook"
+
+export type VictoryShape = {
+	Jumps: number, -- bouncy jumps in place
+	JumpTime: number, -- s per jump (crouch + air + land)
+	JumpGap: number, -- s standing between jumps
+	Height: number, -- studs at scale 1
+	WagHz: number, -- tail wag frequency (whole beat)
+	WagDegrees: number, -- tail wag amplitude
+	EarLag: number, -- s the ears lag the body
+	EarFlapDegrees: number, -- ear swing at full body speed
+}
 
 type Motors = {
 	Root: Motor6D?,
@@ -48,10 +65,16 @@ export type Animator = typeof(setmetatable({} :: {
 	LookYaw: number,
 	LookPitch: number,
 	HopRate: number,
+	Victory: VictoryShape,
+	Sad: { EarDownDegrees: number },
 }, DogAnimator))
 
 DogAnimator.CullDistance = 220 -- studs; farther dogs freeze (unless AlwaysAnimate)
-DogAnimator.Lengths = { leap = 0.9, catch = 0.8, fumble = 1.1, sniff = 0.6, look = 0.6, pickup = 0.4 }
+DogAnimator.Lengths = { leap = 0.9, catch = 0.8, fumble = 1.1, sniff = 0.6, look = 0.6, pickup = 0.4, victory = 2.0, sadlook = 0.75 }
+-- Defaults for anim.Victory / anim.Sad (the cutscene overrides them from Config/Cutscene.Victory / .Sniff).
+DogAnimator.VictoryDefaults = { Jumps = 2, JumpTime = 0.7, JumpGap = 0.15, Height = 1.6, WagHz = 6, WagDegrees = 40,
+	EarLag = 0.1, EarFlapDegrees = 45 } :: VictoryShape
+DogAnimator.SadDefaults = { EarDownDegrees = 55 }
 
 local active: { [Animator]: boolean } = {}
 local conn: RBXScriptConnection? = nil
@@ -254,6 +277,91 @@ Poses.pickup = function(self, t, p)
 	secondary(self, t, 16, 0.6, 0.3, 0.5)
 end
 
+-- Body height (studs at scale 1, + = up) of the victory jumps at time `t` into the beat: per jump a crouch,
+-- an airborne arc and a squash on landing; flat after the last jump. Pure, shared with the ear lag.
+local function victoryY(v: VictoryShape, t: number): number
+	if t <= 0 then
+		return 0
+	end
+	local period = v.JumpTime + v.JumpGap
+	local j = math.floor(t / period)
+	if j >= v.Jumps then
+		return 0
+	end
+	local u = (t - j * period) / math.max(1e-3, v.JumpTime)
+	if u >= 1 then
+		return 0
+	elseif u < 0.2 then -- crouch
+		return -0.22 * v.Height * smooth(u / 0.2)
+	elseif u < 0.85 then -- air
+		local k = (u - 0.2) / 0.65
+		return -0.22 * v.Height * (1 - smooth(k * 4)) + v.Height * math.sin(math.pi * k)
+	end
+	return -0.15 * v.Height * math.sin(math.pi * (u - 0.85) / 0.15) -- squash on landing
+end
+DogAnimator.VictoryY = victoryY
+
+-- Catch celebration (cutscene): bouncy jumps in place with the ball in the mouth, tail wagging fast the whole
+-- time, ears lagging the body by EarLag (they flap up as the body drops and down as it rises).
+Poses.victory = function(self, t, p)
+	local v = self.Victory
+	local bt = p * self.OnceLength -- seconds into the beat
+	local y = victoryY(v, bt)
+	local air = math.max(0, y) / math.max(1e-3, v.Height)
+	local s = self.Scale
+	setT(self.Motors.Root, CFrame.new(0, y * s, 0) * CFrame.Angles(-0.25 * air, 0, 0))
+	necks(self, function(i)
+		return CFrame.Angles(0.15 * air + math.sin(t * 5 + i) * 0.05, 0, 0)
+	end)
+	local tuck = air * 0.9
+	legs(self, -tuck, -tuck, tuck * 0.8, tuck * 0.8)
+	local wag = math.rad(v.WagDegrees)
+	for i, tail in self.Motors.Tails do
+		setT(tail, CFrame.Angles(0, 0, math.sin(bt * 2 * math.pi * v.WagHz + i * 0.6) * wag))
+	end
+	-- ears: body vertical speed EarLag ago (finite difference), normalised to the jump's take-off speed
+	local lagT = bt - v.EarLag
+	local dt = 1 / 60
+	local vel = (victoryY(v, lagT) - victoryY(v, lagT - dt)) / dt
+	local norm = math.pi * v.Height / math.max(1e-3, 0.65 * v.JumpTime)
+	local flap = math.clamp(vel / norm, -1, 1) * math.rad(v.EarFlapDegrees)
+	for _, ear in self.Motors.Ears do
+		setT(ear, CFrame.Angles(flap, 0, 0))
+	end
+	for _, wing in self.Motors.Wings do
+		local side = if wing.Name == "WingL" then -1 else 1
+		setT(wing, CFrame.Angles(0, 0, side * (0.3 + air * 0.6 + math.sin(t * 10) * 0.15)))
+	end
+	if self.Motors.Orbit then
+		setT(self.Motors.Orbit, CFrame.Angles(0, t * 3, 0))
+	end
+end
+
+-- Missed: turn the head to (LookYaw, LookPitch), ears drop back, tail goes still, body sinks a little.
+Poses.sadlook = function(self, t, p)
+	local k = smooth(math.min(p * 3, 1))
+	local ears = smooth(math.clamp((p - 0.2) * 3, 0, 1)) -- the ears drop just after the look lands
+	setT(self.Motors.Root, CFrame.new(0, -0.08 * k * self.Scale, 0) * CFrame.Angles(-0.05 * k, 0, 0))
+	necks(self, function(_i)
+		return CFrame.Angles(-self.LookPitch * k - 0.1 * ears, self.LookYaw * k, 0)
+	end)
+	legs(self, 0, 0, 0, 0)
+	for _, tail in self.Motors.Tails do
+		setT(tail, CFrame.Angles(0.35 * ears, 0, 0)) -- still, drooping a little
+	end
+	local down = math.rad(self.Sad.EarDownDegrees) * ears
+	for _, ear in self.Motors.Ears do
+		setT(ear, CFrame.Angles(down, 0, 0))
+	end
+	for _, wing in self.Motors.Wings do
+		local side = if wing.Name == "WingL" then -1 else 1
+		setT(wing, CFrame.Angles(0, 0, side * -0.15 * ears))
+	end
+	if self.Motors.Orbit then
+		setT(self.Motors.Orbit, CFrame.Angles(0, t * 0.6, 0))
+	end
+end
+
 local function cameraPos(): Vector3?
 	local cam = workspace.CurrentCamera
 	return if cam then cam.CFrame.Position else nil
@@ -316,6 +424,8 @@ function DogAnimator.new(model: Model, opts: { AlwaysAnimate: boolean?, Speed: n
 		LookYaw = 0,
 		LookPitch = 0,
 		HopRate = 2.4,
+		Victory = table.clone(DogAnimator.VictoryDefaults),
+		Sad = table.clone(DogAnimator.SadDefaults),
 	}, DogAnimator)
 	active[self] = true
 	ensureLoop()
@@ -367,6 +477,167 @@ function DogAnimator.Destroy(self: Animator)
 	if self.Model.Parent then
 		self:Reset()
 	end
+end
+
+-- ============================================================================================
+-- DogAnimator.Idle(model, opts?) -> { Stop }   (SHARED API: the reveal end card codes against it)
+-- A self-contained idle loop for a dog shown on its own (end card ViewportFrame WorldModel, previews).
+-- No physics, no Humanoid, no Transform: it writes Motor6D.C0 (from the C0 captured at start) and
+-- restores every C0 on Stop(). Works in a WorldModel because C0 is solved by the joint, not by physics.
+--   WagHz     tail wag frequency (default 6; ignored when Mood = "Sad": tail still)
+--   HopEvery  seconds between little happy hops (default 0 = no hops; hops move the RootJoint, not the pivot)
+--   HopHeight hop height in studs at scale 1 (default 0.6)
+--   Ears      flap the ears (default true; "Sad" holds them down)
+--   Mood      "Happy" (default) or "Sad": tail still, ears down, head turned to look back over the shoulder
+-- ============================================================================================
+export type IdleOpts = { WagHz: number?, HopEvery: number?, HopHeight: number?, Ears: boolean?, Mood: ("Happy" | "Sad")? }
+export type IdleHandle = { Stop: () -> () }
+
+DogAnimator.IdleDefaults = {
+	WagHz = 6, -- tail wag frequency
+	WagDegrees = 30, -- tail wag amplitude (Happy)
+	HopEvery = 0, -- s between hops; 0 = no hops
+	HopHeight = 0.6, -- studs at scale 1
+	HopTime = 0.45, -- s per hop
+	EarLag = 0.1, -- s the ears lag the body on a hop
+	EarFlapDegrees = 35, -- ear swing on a hop
+	EarIdleDegrees = 5, -- slow ear drift between hops
+	SadEarDegrees = 55, -- Sad: ears pinned back / down
+	SadLookYawDegrees = 70, -- Sad: head turned to look back over the shoulder
+	SadLookPitchDegrees = -8, -- Sad: and a little down
+	SadTailDroopDegrees = 25, -- Sad: tail still, drooping
+}
+
+local function idleHopY(t: number, every: number, height: number, hopTime: number): number
+	if every <= 0 or t < 0 then
+		return 0
+	end
+	local u = (t % every) / math.max(1e-3, hopTime)
+	if u >= 1 then
+		return 0
+	end
+	return height * math.sin(math.pi * u)
+end
+DogAnimator.IdleHopY = idleHopY
+
+-- One frame of the Idle pose at time `t`: returns { [Motor6D] = CFrame offset } applied as base C0 * offset.
+-- Pure (no services) so tools can sample it.
+function DogAnimator.IdlePose(motors: Motors, t: number, scale: number, o: IdleOpts?): { [Motor6D]: CFrame }
+	local d = DogAnimator.IdleDefaults
+	local opts: IdleOpts = o or {}
+	local sad = opts.Mood == "Sad"
+	local out: { [Motor6D]: CFrame } = {}
+	local wagHz = opts.WagHz or d.WagHz
+	local every = if sad then 0 else (opts.HopEvery or d.HopEvery)
+	local height = opts.HopHeight or d.HopHeight
+	local y = idleHopY(t, every, height, d.HopTime)
+	local breathe = math.sin(t * 2) * 0.03
+	if motors.Root then
+		local air = if height > 0 then y / height else 0
+		out[motors.Root] = CFrame.new(0, (y + breathe - (if sad then 0.08 else 0)) * scale, 0)
+			* CFrame.Angles(-0.15 * air - (if sad then 0.05 else 0), 0, 0)
+	end
+	for i, n in motors.Necks do
+		if sad then
+			local yaw = math.rad(d.SadLookYawDegrees) * (if i == 3 then -1 else 1) -- a third head looks the other way
+			out[n] = CFrame.Angles(math.rad(d.SadLookPitchDegrees) + math.sin(t * 0.6 + i) * 0.02, yaw, 0)
+		else
+			out[n] = CFrame.Angles(math.sin(t * 0.7 + i) * 0.08, math.sin(t * 0.45 + i * 1.7) * 0.2, 0)
+		end
+	end
+	for _, hip in motors.Hips do
+		out[hip] = CFrame.new()
+	end
+	for i, tail in motors.Tails do
+		if sad then
+			out[tail] = CFrame.Angles(math.rad(d.SadTailDroopDegrees), 0, 0)
+		else
+			out[tail] = CFrame.Angles(0, 0, math.sin(t * 2 * math.pi * wagHz + i * 0.6) * math.rad(d.WagDegrees))
+		end
+	end
+	local earsOn = opts.Ears ~= false
+	for i, ear in motors.Ears do
+		if sad then
+			out[ear] = CFrame.Angles(math.rad(d.SadEarDegrees), 0, 0)
+		elseif earsOn then
+			local lt = t - d.EarLag
+			local dt = 1 / 60
+			local vel = (idleHopY(lt, every, height, d.HopTime) - idleHopY(lt - dt, every, height, d.HopTime)) / dt
+			local norm = math.pi * math.max(1e-3, height) / d.HopTime
+			local flap = math.clamp(vel / norm, -1, 1) * math.rad(d.EarFlapDegrees)
+			out[ear] = CFrame.Angles(flap + math.sin(t * 3 + i) * math.rad(d.EarIdleDegrees), 0, 0)
+		else
+			out[ear] = CFrame.new()
+		end
+	end
+	for _, wing in motors.Wings do
+		local side = if wing.Name == "WingL" then -1 else 1
+		out[wing] = CFrame.Angles(0, 0, side * (if sad then -0.15 else math.sin(t * 2) * 0.12))
+	end
+	if motors.Orbit then
+		out[motors.Orbit] = CFrame.Angles(0, t * (if sad then 0.5 else 1.6), 0)
+	end
+	return out
+end
+
+function DogAnimator.Idle(model: Model, opts: IdleOpts?): IdleHandle
+	local motors = collect(model)
+	local base: { [Motor6D]: CFrame } = {}
+	for _, d in model:GetDescendants() do
+		if d:IsA("Motor6D") then
+			base[d] = d.C0
+		end
+	end
+	local scale = 1
+	pcall(function()
+		scale = model:GetScale()
+	end)
+	local t = 0
+	local stopped = false
+	local conn: RBXScriptConnection? = nil
+	local destroying: RBXScriptConnection? = nil
+	local function step(dt: number)
+		if stopped or model.Parent == nil then
+			return
+		end
+		t += dt
+		for motor, off in DogAnimator.IdlePose(motors, t, scale, opts) do
+			local c0 = base[motor]
+			if c0 and motor.Parent then
+				motor.C0 = c0 * off
+			end
+		end
+	end
+	local function stop()
+		if stopped then
+			return
+		end
+		stopped = true
+		if conn then
+			conn:Disconnect()
+			conn = nil
+		end
+		if destroying then
+			destroying:Disconnect()
+			destroying = nil
+		end
+		for motor, c0 in base do
+			pcall(function()
+				motor.C0 = c0
+			end)
+		end
+	end
+	local ok, signal = pcall(function()
+		return if RunService:IsClient() then RunService.RenderStepped else RunService.Heartbeat
+	end)
+	if ok and signal then
+		conn = (signal :: any):Connect(step)
+	end
+	pcall(function()
+		destroying = (model :: any).Destroying:Connect(stop)
+	end)
+	step(0)
+	return { Stop = stop }
 end
 
 return DogAnimator

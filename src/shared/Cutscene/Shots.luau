@@ -8,6 +8,11 @@
 --   Shots.Toward(fromCF, target, share)      -> push-in: move `share` of the way toward `target`, keep looking at it
 --   Shots.Follow(pos, travelDir)             -> behind a moving dog
 --   Shots.Shake(t, seed, studs, degrees, length) -> decaying shake offset CFrame
+--   Shots.QualityScale(quality)              -> release-shake multiplier (Impact.ShakeMinScale .. 1 at Perfect)
+--   Shots.ImpactShake(t, seed, scale)        -> release shake: hard at t = 0, decays to zero over Impact.ShakeTime
+--   Shots.SpeedShake(t, seed, speed)         -> low constant ball-POV shake scaled by the ball's speed
+--   Shots.FovPunch(t)                        -> degrees added to the FOV after the release (0 -> peak -> 0)
+--   Shots.BlurSize(speed, landing)           -> ball-POV BlurEffect.Size (clears as the ball slows / lands)
 local Config = script.Parent.Parent:WaitForChild("Config")
 local C = require(Config:WaitForChild("Cutscene"))
 
@@ -149,6 +154,75 @@ function Shots.Shake(t: number, seed: number, studs: number, degrees: number, le
 	local y = math.sin(t * w * 1.31 + seed * 2) * studs * k
 	local rz = math.sin(t * w * 0.83 + seed * 3) * math.rad(degrees) * k
 	return CFrame.new(x, y, 0) * CFrame.Angles(0, 0, rz)
+end
+
+-- Release-shake strength for a meter quality (0.35 flub .. 1 Perfect): a Perfect throw shakes hardest.
+function Shots.QualityScale(quality: number?): number
+	local I = C.Impact
+	local q = tonumber(quality) or I.QualityMin
+	local k = math.clamp((q - I.QualityMin) / math.max(1e-6, 1 - I.QualityMin), 0, 1)
+	return I.ShakeMinScale + (1 - I.ShakeMinScale) * k
+end
+
+-- Release impact shake: full amplitude (x scale) at t = 0, (1 - t / ShakeTime) ^ ShakeDecay after, zero from ShakeTime.
+function Shots.ImpactShakeAmount(t: number, scale: number): number
+	local I = C.Impact
+	if t < 0 or t >= I.ShakeTime then
+		return 0
+	end
+	return scale * (1 - t / I.ShakeTime) ^ I.ShakeDecay
+end
+
+function Shots.ImpactShake(t: number, seed: number, scale: number): CFrame
+	local I = C.Impact
+	local k = Shots.ImpactShakeAmount(t, scale)
+	if k <= 0 then
+		return CFrame.new()
+	end
+	local w = 2 * math.pi * I.ShakeHz
+	local x = math.sin(t * w + seed) * I.ShakeStuds * k
+	local y = math.cos(t * w * 1.27 + seed * 2) * I.ShakeStuds * k
+	local rz = math.sin(t * w * 0.79 + seed * 3) * math.rad(I.ShakeDegrees) * k
+	return CFrame.new(x, y, 0) * CFrame.Angles(0, 0, rz)
+end
+
+-- Ball-POV shake share (0..1) for an on-screen ball speed.
+function Shots.SpeedShakeAmount(speed: number): number
+	return math.clamp(speed / math.max(1e-6, C.Flight.PovShakeSpeedForMax), 0, 1)
+end
+
+function Shots.SpeedShake(t: number, seed: number, speed: number): CFrame
+	local f = C.Flight
+	local k = Shots.SpeedShakeAmount(speed)
+	if k <= 0 then
+		return CFrame.new()
+	end
+	local w = 2 * math.pi * f.PovShakeHz
+	local x = (math.sin(t * w + seed) + 0.5 * math.sin(t * w * 2.3 + seed * 1.7)) / 1.5 * f.PovShakeStuds * k
+	local y = (math.sin(t * w * 1.13 + seed * 2) + 0.5 * math.sin(t * w * 1.9 + seed)) / 1.5 * f.PovShakeStuds * k
+	local rz = math.sin(t * w * 0.71 + seed * 3) * math.rad(f.PovShakeDegrees) * k
+	return CFrame.new(x, y, 0) * CFrame.Angles(0, 0, rz)
+end
+
+-- FOV punch after the release: 0 -> (FovPeak - FovFrom) at FovPeakAt x FovTime -> 0 at FovTime.
+function Shots.FovPunch(t: number): number
+	local I = C.Impact
+	if t < 0 or t >= I.FovTime then
+		return 0
+	end
+	local peak = I.FovPeak - I.FovFrom
+	local u = t / I.FovTime
+	if u < I.FovPeakAt then
+		return peak * math.sin(0.5 * math.pi * u / I.FovPeakAt)
+	end
+	return peak * math.cos(0.5 * math.pi * (u - I.FovPeakAt) / (1 - I.FovPeakAt))
+end
+
+-- Ball-POV blur for an on-screen ball speed; `landing` (0..1) is the landing ease-out share: the blur clears with it.
+function Shots.BlurSize(speed: number, landing: number): number
+	local f = C.Flight
+	local k = math.clamp(speed / math.max(1e-6, f.BlurSpeedForMax), 0, 1)
+	return f.BlurSize * k * (1 - math.clamp(landing, 0, 1))
 end
 
 return Shots

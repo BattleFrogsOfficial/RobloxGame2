@@ -6,6 +6,7 @@
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local task = require("@lune/task")
+local LuneRoblox = require("@lune/roblox") -- real Vector3 / CFrame for the 3D pieces (ViewportFrame dog models)
 
 local R = {}
 
@@ -155,6 +156,23 @@ end
 function Color3:Lerp(other, a)
 	return Color3.new(self.R + (other.R - self.R) * a, self.G + (other.G - self.G) * a, self.B + (other.B - self.B) * a)
 end
+function Color3:ToHSV()
+	local r, g, b = self.R, self.G, self.B
+	local mx, mn = math.max(r, g, b), math.min(r, g, b)
+	local d = mx - mn
+	local h = 0
+	if d > 0 then
+		if mx == r then
+			h = ((g - b) / d) % 6
+		elseif mx == g then
+			h = (b - r) / d + 2
+		else
+			h = (r - g) / d + 4
+		end
+		h /= 6
+	end
+	return h, if mx > 0 then d / mx else 0, mx
+end
 function Color3:ToHex()
 	return string.format("%02X%02X%02X", math.floor(self.R * 255 + 0.5), math.floor(self.G * 255 + 0.5), math.floor(self.B * 255 + 0.5))
 end
@@ -205,6 +223,22 @@ newType("CFrame", CFrame)
 function CFrame.new(x, y, z)
 	return setmetatable({ Position = Vector3.new(x, y, z) }, CFrame)
 end
+
+-- The UI only ever needed Vector3 / CFrame as data; the reveal card's ViewportFrame builds real dog models
+-- (DogFactory: CFrame maths, joints, ScaleTo, bounding boxes), so use Lune's real implementations.
+Vector3 = LuneRoblox.Vector3
+-- Lune 0.8.9's CFrame.lookAt faces AWAY from the target; Roblox faces toward it. Patch it (same signature).
+CFrame = setmetatable({
+	lookAt = function(at, target, up)
+		local look = (target - at).Unit
+		local right = look:Cross(up or Vector3.new(0, 1, 0))
+		if right.Magnitude < 1e-6 then
+			right = look:Cross(Vector3.new(0, 0, 1))
+		end
+		right = right.Unit
+		return LuneRoblox.CFrame.fromMatrix(at, right, right:Cross(look), -look)
+	end,
+}, { __index = LuneRoblox.CFrame })
 
 local Random = {}
 newType("Random", Random)
@@ -304,6 +338,7 @@ local HIERARCHY = {
 	ImageLabel = { "GuiObject" },
 	ImageButton = { "GuiObject" },
 	ViewportFrame = { "GuiObject" },
+	WorldModel = { "Model" },
 	CanvasGroup = { "GuiObject" },
 	LayerCollector = { "GuiBase2d" },
 	ScreenGui = { "LayerCollector" },
@@ -354,6 +389,12 @@ local HIERARCHY = {
 	Trail = { "Instance" },
 	ParticleEmitter = { "Instance" },
 	PointLight = { "Instance" },
+	Light = { "Instance" },
+	SpotLight = { "Instance" },
+	Highlight = { "Instance" },
+	Decal = { "Instance" },
+	Texture = { "Decal" },
+	SpecialMesh = { "Instance" },
 	Tween = { "Instance" },
 }
 local function isA(className, target)
@@ -457,7 +498,45 @@ local CLASS_DEFAULTS = {
 		return Color3.new(1, 1, 1)
 	end, ImageTransparency = 0, ScaleType = Enum.ScaleType.Stretch, ResampleMode = Enum.ResamplerMode.Default },
 	ImageButton = { Image = "", ImageTransparency = 0 },
+	-- ViewportFrame lighting (Roblox defaults) and the 3D classes the reveal card's dog viewport builds
+	ViewportFrame = { Ambient = function()
+		return Color3.fromRGB(200, 200, 200)
+	end, LightColor = function()
+		return Color3.fromRGB(140, 140, 140)
+	end, LightDirection = function()
+		return Vector3.new(-1, -1, -1)
+	end, ImageColor3 = function()
+		return Color3.new(1, 1, 1)
+	end, ImageTransparency = 0 },
+	Camera = { CFrame = function()
+		return CFrame.new()
+	end, FieldOfView = 70 },
+	Model = { WorldPivot = function()
+		return CFrame.new()
+	end },
+	WorldModel = { WorldPivot = function()
+		return CFrame.new()
+	end },
+	Attachment = { CFrame = function()
+		return CFrame.new()
+	end },
 }
+local PART_DEFAULTS = { CFrame = function()
+	return CFrame.new()
+end, Size = function()
+	return Vector3.new(4, 1, 2)
+end, Color = function()
+	return Color3.fromRGB(163, 162, 165)
+end, Transparency = 0, Reflectance = 0, Anchored = false, CanCollide = true, CastShadow = true, Massless = false, Shape = Enum.PartType.Block, Material = Enum.Material.Plastic }
+local JOINT_DEFAULTS = { C0 = function()
+	return CFrame.new()
+end, C1 = function()
+	return CFrame.new()
+end, Transform = function()
+	return CFrame.new()
+end, Enabled = true }
+-- Reference properties that may legitimately read as nil (an unset Part0 is not "not a valid member").
+local NILABLE = { Part0 = true, Part1 = true, PrimaryPart = true, CurrentCamera = true, Attachment0 = true, Attachment1 = true, Adornee = true, CameraSubject = true }
 
 local Instance = {}
 local instanceMeta = {}
@@ -657,6 +736,84 @@ function methods.GetTags(self)
 	end
 	return t
 end
+-- 3D: Model / BasePart pivots, bounding boxes and ScaleTo (what DogFactory and the reveal card's viewport use).
+-- No physics: joints are not solved, parts keep the CFrames their builder gave them.
+local function baseParts(self)
+	local out = {}
+	if self:IsA("BasePart") then
+		table.insert(out, self)
+	end
+	for _, d in self:GetDescendants() do
+		if d:IsA("BasePart") then
+			table.insert(out, d)
+		end
+	end
+	return out
+end
+function methods.GetPivot(self)
+	if self:IsA("BasePart") then
+		return self.CFrame
+	end
+	local pp = raw(self).props.PrimaryPart
+	if pp then
+		return pp.CFrame
+	end
+	return raw(self).props.WorldPivot or CFrame.new()
+end
+function methods.PivotTo(self, cf)
+	local delta = cf * methods.GetPivot(self):Inverse()
+	for _, p in baseParts(self) do
+		p.CFrame = delta * p.CFrame
+	end
+	if not self:IsA("BasePart") then
+		raw(self).props.WorldPivot = delta * (raw(self).props.WorldPivot or CFrame.new())
+	end
+end
+function methods.GetBoundingBox(self)
+	local lo, hi = nil, nil
+	for _, p in baseParts(self) do
+		local h = p.Size * 0.5
+		for _, sx in { -1, 1 } do
+			for _, sy in { -1, 1 } do
+				for _, sz in { -1, 1 } do
+					local w = p.CFrame:PointToWorldSpace(Vector3.new(h.X * sx, h.Y * sy, h.Z * sz))
+					lo = if lo then lo:Min(w) else w
+					hi = if hi then hi:Max(w) else w
+				end
+			end
+		end
+	end
+	if not lo then
+		return methods.GetPivot(self), Vector3.zero
+	end
+	return CFrame.new((lo + hi) * 0.5), hi - lo
+end
+function methods.GetExtentsSize(self)
+	local _, size = methods.GetBoundingBox(self)
+	return size
+end
+function methods.GetScale(self)
+	return raw(self).scale or 1
+end
+function methods.ScaleTo(self, s)
+	local k = s / (raw(self).scale or 1)
+	local pivot = methods.GetPivot(self)
+	for _, p in baseParts(self) do
+		local rel = pivot:ToObjectSpace(p.CFrame)
+		p.Size = p.Size * k
+		p.CFrame = pivot * (CFrame.new(rel.Position * k) * rel.Rotation)
+	end
+	for _, d in self:GetDescendants() do
+		if d:IsA("JointInstance") then
+			d.C0 = CFrame.new(d.C0.Position * k) * d.C0.Rotation
+			d.C1 = CFrame.new(d.C1.Position * k) * d.C1.Rotation
+		elseif d:IsA("Attachment") then
+			d.CFrame = CFrame.new(d.CFrame.Position * k) * d.CFrame.Rotation
+		end
+	end
+	raw(self).scale = s
+end
+
 -- RemoteEvent / RemoteFunction client side
 function methods.FireServer(self, ...)
 	raw(self).log = raw(self).log or {}
@@ -725,6 +882,9 @@ instanceMeta.__index = function(self, key)
 	end
 	if key == "AbsoluteContentSize" then
 		return Vector2.new()
+	end
+	if NILABLE[key] then
+		return nil
 	end
 	error(string.format("%s is not a valid member of %s %q", tostring(key), r.className, self:GetFullName()), 2)
 end
@@ -804,6 +964,15 @@ function Instance.new(className, parent)
 			props.Active = true
 		else
 			props.Text = ""
+		end
+	end
+	if isA(className, "BasePart") then
+		for k, v in PART_DEFAULTS do
+			props[k] = resolveDefault(v)
+		end
+	elseif isA(className, "JointInstance") then
+		for k, v in JOINT_DEFAULTS do
+			props[k] = resolveDefault(v)
 		end
 	end
 	local cd = CLASS_DEFAULTS[className]

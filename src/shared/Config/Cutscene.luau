@@ -6,10 +6,12 @@
 local Cutscene = {}
 
 ----------------------------------------------------------------------------------------------------
--- Per-rarity beat lengths. One row per beat, one column per rarity. The timeline is, in order:
---   WindUp.ReleaseAt -> Flight (by distance) -> Settle -> DogArrive -> Counter -> CounterHold -> Outcome
---   -> end card (ui:ShowReveal; waits for the player) -> Return
--- Total (release -> end card) is checked against Budget by tools/tests/cutscene.luau.
+-- Per-rarity beat lengths. One row per beat, one column per rarity. The timeline depends on the outcome:
+--   CAUGHT: WindUp.ReleaseAt -> Flight (by distance) -> Settle -> DogArrive -> Grab -> Victory -> Counter
+--           -> CounterHold -> HopAway -> end card (ui:ShowReveal; waits for the player) -> Return
+--   MISSED: WindUp.ReleaseAt -> Flight -> Settle -> DogArrive -> Counter -> CounterHold -> Sniff -> Bolt
+--           -> end card -> Return   (the counter shows the rarity BEFORE the loss: docs/DESIGN.md §8)
+-- Total (release -> end card) is checked against Budget (caught) / Budget.Missed by tools/tests/cutscene.luau.
 ----------------------------------------------------------------------------------------------------
 Cutscene.Beats = {
 	-- after touchdown, before the dog starts hopping in (the ball keeps bouncing underneath)
@@ -20,21 +22,33 @@ Cutscene.Beats = {
 	Counter = { Common = 1.5, Uncommon = 2.0, Rare = 2.5, Epic = 3.0, Legendary = 3.5, Mythic = 4.0 },
 	-- the counter stays on its final number with the dog's name / rarity / variant badge under it
 	CounterHold = { Common = 0.25, Uncommon = 0.35, Rare = 0.45, Epic = 0.6, Legendary = 0.75, Mythic = 1.05 },
-	-- caught: pick up + turn + hop toward the hub; missed: sniff + look at camera + bolt (same length)
-	Outcome = { Common = 0.5, Uncommon = 0.65, Rare = 0.8, Epic = 1.4, Legendary = 2.0, Mythic = 2.5 },
+	-- (was Outcome = 0.5 / 0.65 / 0.8 / 1.4 / 2.0 / 2.5: one shared caught / missed beat after the counter)
+	-- caught: the dog dips its head and grabs the ball (it snaps to the mouth at Outcome.PickUpAt)
+	Grab = { Common = 0.5, Uncommon = 0.5, Rare = 0.5, Epic = 0.5, Legendary = 0.5, Mythic = 0.5 },
+	-- caught: the victory beat BEFORE the counter: two bouncy jumps with the ball, fast wag, bark, confetti (Victory)
+	Victory = { Common = 2.0, Uncommon = 2.0, Rare = 2.0, Epic = 2.1, Legendary = 2.2, Mythic = 2.4 },
+	-- caught, after the counter: turn to the hub (Outcome.TurnTime) + hop away; >= TurnTime + HopAwayMinSeconds
+	HopAway = { Common = 1.3, Uncommon = 1.4, Rare = 1.5, Epic = 1.7, Legendary = 1.9, Mythic = 2.1 },
+	-- missed, after the counter: sniff, sniff, look at the camera, ears drop, tail still, whimper (Sniff)
+	Sniff = { Common = 1.5, Uncommon = 1.5, Rare = 1.5, Epic = 1.5, Legendary = 1.5, Mythic = 1.5 },
+	-- missed: the dog bolts off the side (it keeps running behind the end card: Outcome.HopAwayMinSeconds)
+	Bolt = { Common = 0.6, Uncommon = 0.7, Rare = 0.8, Epic = 1.0, Legendary = 1.2, Mythic = 1.4 },
 }
 
 -- Target total per rarity (release -> end card) at Budget.ReferenceFlight. The test asserts every rarity's
 -- beats sum to its budget within Tolerance. A longer throw adds (flight - ReferenceFlight) on top.
+-- Budget[rarity] is the CAUGHT total (the longest timeline; Config/Timers.Cutscene builds the server timeout
+-- from it); Budget.Missed[rarity] is the missed total (always shorter).
 Cutscene.Budget = {
-	-- Every budget grew by 0.25 s when WindUp.ReleaseAt went 0.95 -> 1.2 (a readable wind-up; the beats after the
-	-- release are unchanged). Old values: 5.5 / 6.5 / 7.5 / 9.0 / 10.5 / 12.0.
-	Common = 5.75, -- "about 5-6 s": 1.2 release + 1.5 flight + 1.5 counter alone are already 4.2 s
-	Uncommon = 6.75, -- s
-	Rare = 7.75, -- s
-	Epic = 9.25, -- s
-	Legendary = 10.75, -- s
-	Mythic = 12.25, -- s
+	-- The catch celebration (Grab + Victory before the counter, HopAway after) replaced the 0.5..2.5 s Outcome.
+	-- Old values (one timeline for both outcomes): 5.75 / 6.75 / 7.75 / 9.25 / 10.75 / 12.25.
+	Common = 9.05, -- s: 1.2 release + 1.5 flight + 0.2 settle + 0.6 dog + 0.5 grab + 2.0 victory + 1.5 + 0.25 + 1.3
+	Uncommon = 10.0, -- s
+	Rare = 10.95, -- s
+	Epic = 12.15, -- s
+	Legendary = 13.35, -- s
+	Mythic = 14.75, -- s
+	Missed = { Common = 7.35, Uncommon = 8.3, Rare = 9.25, Epic = 10.35, Legendary = 11.45, Mythic = 12.65 }, -- s
 	Tolerance = 0.05, -- s, allowed difference between the summed beats and the budget
 	ReferenceFlight = 1.5, -- s, flight length the budgets assume (= Flight.Min, a short throw)
 }
@@ -46,6 +60,11 @@ Cutscene.AnimationIds = {
 	WindUp = 0, -- rbxassetid of an uploaded wind-up Animation; 0 (or Throw = 0) = the built-in throw (Cutscene/Rig:
 	-- a KeyframeSequence built from Pose at runtime, else Motor6D C0 / AnimationConstraint.Transform keyframes)
 	Throw = 0, -- rbxassetid of the throw Animation, started at WindUp.ReleaseAt - Throw.Lead
+	-- Dog animations: 0 = procedural (Dog/DogAnimator writes the rig's Motor6Ds: "victory" jumps + 6 Hz wag +
+	-- lagging ears, "sniff", "sadlook"). The dog rig has no Animator, so ids are reserved for a future upload.
+	DogJump = 0, -- victory jumps
+	DogWag = 0, -- tail wag
+	DogSniff = 0, -- missed sniff
 }
 
 Cutscene.WindUp = {
@@ -113,9 +132,7 @@ Cutscene.Flight = {
 	PovPitchMin = -50, -- POV camera: lowest look pitch (looking down)
 	PovPitchMax = 12, -- POV camera: highest look pitch (looking up)
 	PovFov = 78, -- field of view while riding the ball (wider = faster feel)
-	ShakeTime = 0.3, -- launch camera shake length
-	ShakeStuds = 0.3, -- launch camera shake position amplitude
-	ShakeDegrees = 0.8, -- launch camera shake rotation amplitude
+	-- (the launch shake moved to Cutscene.Impact: was 0.3 s / 0.3 studs / 0.8 degrees)
 	TrailLifetime = 0.45, -- ball trail length in seconds
 	BallSize = 1.2, -- ball diameter
 	WindMinVolume = 0.05, -- wind sound volume at rest
@@ -123,6 +140,38 @@ Cutscene.Flight = {
 	WindMinPitch = 0.7, -- wind sound PlaybackSpeed at rest
 	WindMaxPitch = 1.6, -- wind sound PlaybackSpeed at WindSpeedForMax
 	WindSpeedForMax = 900, -- ball speed (studs/s, on-screen) that maps to full wind volume / pitch
+	-- constant ball-POV shake that scales with the ball's speed (on top of the launch Impact shake)
+	PovShakeStuds = 0.06, -- position amplitude at PovShakeSpeedForMax
+	PovShakeDegrees = 0.25, -- roll amplitude at PovShakeSpeedForMax
+	PovShakeHz = 9, -- base wobble frequency
+	PovShakeSpeedForMax = 900, -- on-screen ball speed (studs/s) that gives the full POV shake
+	-- faint motion blur while riding the ball (BlurEffect in Lighting, client only, always removed)
+	BlurSize = 4, -- BlurEffect.Size at BlurSpeedForMax
+	BlurSpeedForMax = 600, -- on-screen ball speed (studs/s) that gives the full blur; it clears as the ball slows
+}
+
+-- The release frame: impact (Beat 2 starts with it). Quality = result.Quality (0.35 flub .. 1 Perfect), or the
+-- client's release meter position via Util/Meter when no ThrowResult has arrived yet.
+Cutscene.Impact = {
+	ShakeTime = 0.4, -- s, the release shake starts hard and decays to zero over this
+	ShakeStuds = 0.55, -- position amplitude at the start (Perfect)
+	ShakeDegrees = 1.6, -- roll amplitude at the start (Perfect)
+	ShakeDecay = 3, -- amplitude x (1 - t / ShakeTime) ^ ShakeDecay (higher = dies off faster)
+	ShakeHz = 11, -- wobble frequency
+	QualityMin = 0.35, -- quality that gets ShakeMinScale (Game.Meter.FlubQuality)
+	ShakeMinScale = 0.45, -- shake multiplier at QualityMin; 1 at quality 1 (Perfect feels heavier)
+	FlashTransparency = 0.2, -- one-frame white flash
+	FlashFrames = 1, -- frames the flash stays up
+	FovFrom = 70, -- FOV punch: 70 -> 82 -> 70 over FovTime, applied as + (FovPeak - FovFrom) on top of the whip
+	FovPeak = 82, -- FOV at the top of the punch
+	FovTime = 0.3, -- s
+	FovPeakAt = 0.3, -- share of FovTime at the peak (fast out, slower back)
+	WhooshVolume = 0.7, -- release whoosh
+	SpeedLines = 26, -- speed-line particles burst from the hand along the throw
+	SpeedLineSpeed = { 45, 80 }, -- studs/s
+	SpeedLineLifetime = 0.22, -- s
+	SpeedLineSize = 0.18, -- studs (stretched along the velocity)
+	SpeedLineSpread = 18, -- degrees around the throw direction
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -205,22 +254,61 @@ Cutscene.Counter = {
 }
 
 ----------------------------------------------------------------------------------------------------
--- Beat 6: OUTCOME (length per rarity in Beats.Outcome; shares below split it)
+-- Beat 4b (CAUGHT, before the counter): GRAB + VICTORY (lengths in Beats.Grab / Beats.Victory)
+----------------------------------------------------------------------------------------------------
+Cutscene.Victory = {
+	Jumps = 2, -- bouncy jumps in place with the ball in the mouth
+	JumpTime = 0.7, -- s per jump (crouch 20% + air 65% + landing squash 15%)
+	JumpGap = 0.15, -- s standing between the jumps
+	Height = 1.6, -- jump height, studs at dog scale 1
+	WagHz = 6, -- tail wag frequency the whole beat (a sine on the TailJoint Motor6Ds)
+	WagDegrees = 40, -- tail wag amplitude
+	EarLag = 0.1, -- s the ears lag the body (they flap on the jumps)
+	EarFlapDegrees = 45, -- ear swing at full body speed
+	BarkAt = 0.1, -- s into the beat: happy bark
+	BarkVolume = 0.6, -- bark volume
+	BarkPitch = 1.5, -- bark PlaybackSpeed (placeholder sound, pitched up)
+	-- confetti / sparkles in the rarity colour, one burst per jump take-off (more for higher rarity)
+	Confetti = { Common = 14, Uncommon = 20, Rare = 28, Epic = 38, Legendary = 50, Mythic = 66 },
+	VariantConfetti = 0.6, -- the variant's colours burst on top, x this many of the rarity count
+	ConfettiSpeed = { 8, 16 }, -- studs/s
+	ConfettiLifetime = 1.4, -- s
+	ConfettiSize = 0.35, -- studs
+	PushIn = 0.3, -- the camera pushes this share of the remaining way toward the dog over the beat
+	PushFov = 44, -- field of view at the end of the beat (from Dog.PushFov)
+}
+
+----------------------------------------------------------------------------------------------------
+-- Beat 6: OUTCOME (caught: Beats.HopAway after the counter; missed: Beats.Sniff + Beats.Bolt after the counter)
 ----------------------------------------------------------------------------------------------------
 Cutscene.Outcome = {
-	PickUpShare = 0.25, -- caught: dog lowers its head and picks up the ball
-	TurnShare = 0.15, -- caught: dog turns toward the hub; the rest of Outcome = hop away, camera follows
+	PickUpAt = 0.5, -- caught: share of Beats.Grab at which the ball snaps into the dog's mouth
+	TurnTime = 0.25, -- caught: s of Beats.HopAway turning toward the hub; the rest = hop away, camera follows
 	HopSpeed = 26, -- caught: studs/s hopping toward the hub
 	FollowBack = 12, -- caught: follow camera studs behind the dog
 	FollowUp = 6, -- caught: follow camera studs above the dog
 	FollowLag = 0.55, -- caught: camera moves at this share of the dog's speed, so the dog pulls away
-	SniffShare = 0.3, -- missed: dog sniffs the ball
-	LookShare = 0.3, -- missed: dog looks at the camera; the rest of Outcome = bolt out of frame
+	-- The leaving dog (hop away / bolt) keeps moving behind the end card and is removed by a TIME + DISTANCE
+	-- check, never a frustum check: not before HopAwayMinSeconds after it starts leaving, then once it is
+	-- RemoveDistance from where it started, or at HopAwayMaxSeconds at the latest.
+	HopAwayMinSeconds = 1.0, -- s
+	RemoveDistance = 40, -- studs
+	HopAwayMaxSeconds = 4.0, -- s
 	BoltSpeed = 45, -- missed: studs/s bolting off to the side
 	StingVolume = 0.5, -- missed: sad sting volume
 	FlourishLucky = "Saved by your Lucky Streak!", -- text under the counter on a Lucky Streak catch
 	FlourishTreat = "Saved by a Treat Pocket!", -- text under the counter on a Treat Pocket catch
 	FlourishTime = 0.3, -- the flourish line pops in this long into the outcome
+}
+
+-- Missed: the sniff beat (Beats.Sniff), after the counter so the rarity is seen before the loss.
+Cutscene.Sniff = {
+	Sniffs = 2, -- nose-down sniffs
+	SniffShare = 0.5, -- share of Beats.Sniff for the sniffs; the rest = look at the camera, ears drop, tail still
+	EarDownDegrees = 55, -- ears drop back this far
+	WhimperAt = 0.15, -- s into the look: whimper (not a bark)
+	WhimperVolume = 0.5, -- whimper volume
+	WhimperPitch = 1.6, -- whimper PlaybackSpeed (placeholder sound, pitched up)
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -231,6 +319,33 @@ Cutscene.EndCard = {
 	-- s, the thrower's Reveal card closes itself after this (the player can close it sooner)
 	AutoClose = { Common = 5, Uncommon = 6, Rare = 7, Epic = 8, Legendary = 9, Mythic = 10 },
 	SpectatorAutoClose = 3, -- s, the compact card other players see for a Rare+ throw
+	-- Prize-screen entry (Reveal.luau). Reduced motion: no pop, no ray spin, no count-up (short fades only).
+	PopFrom = 0.6, -- card scale at the start of the entry pop ...
+	PopTime = 0.38, -- ... s to reach 1 (Back out, overshoots a little)
+	FlashFrom = 0.3, -- transparency the rarity-coloured full-screen flash starts at (0 = solid) ...
+	FlashTime = 0.5, -- ... s to fade out
+	ScrimTransparency = 0.3, -- the darkened background behind the card (1 = none) ...
+	ScrimTime = 0.25, -- ... s to fade in
+	RaysFrom = "Epic", -- light rays spin behind the card for this rarity and up
+	RaysPeriod = 16, -- s per full turn of the light rays
+	RaysCount = 8, -- beams (each one crosses the card centre, so 2x this many rays)
+	CountUpDelay = 0.3, -- s after the card appears before the $/s number starts counting ...
+	CountUpTime = 1.0, -- ... s to count from 0 to the dog's $/s
+	-- Live dog viewport (Components/DogViewport.luau)
+	StageShare = 0.6, -- the viewport is this share of the card width
+	TurnPeriod = 6, -- s per full turn of the dog on its pedestal (caught)
+	StartYaw = -35, -- degrees, the caught dog's first-frame yaw (3/4 front view; the reduced-motion pose)
+	MissedYaw = 120, -- degrees, a missed dog stands turned away (side-rear) and looks back over its shoulder (no turning)
+	HopEvery = 3, -- s between little hops (DogAnimator.Idle; caught only)
+	HopHeight = 0.5, -- studs at dog scale 1
+	WagHz = 6, -- tail wags per second (DogAnimator.Idle)
+	CameraFov = 30, -- degrees, vertical FOV of the viewport camera (narrow = little perspective distortion)
+	CameraPitch = 7, -- degrees the camera sits below the subject's centre, looking up (slight low angle)
+	FrameFill = 0.94, -- share of the viewport the turning dog fills (camera fitted to its turning bounding cylinder)
+	PedestalMargin = 1.05, -- pedestal radius = the dog's turning radius x this
+	MoteCount = 10, -- Mythic: floating particles (small Neon parts; ViewportFrames don't render ParticleEmitters)
+	MoteRiseTime = 2.6, -- s for one mote to rise through the aura and loop
+	GlowPulse = 1.6, -- s per pulse of the Legendary / Mythic pedestal glow
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -267,7 +382,10 @@ Cutscene.Fallback = {
 -- Reduced motion (State.Settings.ReducedMotion): no sweeps / whips / push-ins / shakes, hard cuts instead.
 Cutscene.ReducedMotion = {
 	PovFov = 70, -- calmer FOV on the ball shot
-	NoShake = true, -- no camera shakes (launch / impact)
+	NoShake = true, -- no camera shakes (release impact / ball POV / touchdown)
+	NoFovPunch = true, -- no release FOV punch
+	NoBlur = true, -- no ball-POV motion blur
+	FlashTransparency = 0.6, -- the release flash stays, but subtler (Impact.FlashTransparency otherwise)
 	NoPop = true, -- the counter colour climbs without the scale punch (the colour still snaps)
 }
 
@@ -302,6 +420,8 @@ Cutscene.SoundIds = {
 	Bounce = "rbxasset://sounds/action_jump_land.mp3", -- each later bounce (quieter)
 	Sting = "rbxasset://sounds/uuhhh.mp3", -- missed: sad sting
 	Happy = "rbxasset://sounds/electronicpingshort.wav", -- caught: little ding
+	Bark = "rbxasset://sounds/action_jump.mp3", -- caught: happy bark on the victory beat (placeholder, pitched up)
+	Whimper = "rbxasset://sounds/uuhhh.mp3", -- missed: whimper as the ears drop (placeholder, pitched up)
 }
 
 return Cutscene

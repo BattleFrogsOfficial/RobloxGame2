@@ -134,9 +134,25 @@ Defined once in `Motion.luau`.
 | Currency change | number counts up over 0.4 s; the pill scales 1.0 → 1.08 → 1.0 |
 | Toast | slide down 24 px + fade, 0.2 s; hold; fade 0.3 s |
 | Lucky Streak increment | pill shakes ±4 px, 0.3 s; at 2 it pulses gold until used |
-| Rarity reveal card | handled by the cutscene; the end card uses Panel open with a rarity-coloured flash |
+| Rarity reveal card | prize screen (below): scale pop 0.6 → 1 (Back), rarity-coloured full-screen flash, scrim darkens, light rays turn behind the card for Epic+, the $/s number counts up. Timings: `Config/Cutscene.luau` `EndCard` |
 
-Reduced motion: `Settings.ReducedMotion` swaps every tween for a 0.05 s linear fade.
+Reduced motion: `Settings.ReducedMotion` swaps every tween for a 0.05 s linear fade. The reveal card then has no
+pop, no ray spin, no dog turning or hopping and no count-up: a static, fully drawn card.
+
+### Reveal end card (prize screen)
+
+`Screens/Reveal.luau`, 600 × 400 canvas px (450 × 300 on a phone = 80 % of its height; the check fails above 84 %).
+Rarity band (Arcade rarity tag left, variant badge right) on top; left **60 %** is the live dog
+(`Components/DogViewport.luau`): one `ViewportFrame` + `WorldModel` with the real DogFactory + VariantFX model on
+a round pedestal, created on Show and destroyed on close. Pedestal by rarity: Common plain stone disc;
+Uncommon–Epic stone with a rarity rim (Epic Neon); Legendary gold (Foil) with a Neon glow ring; Mythic crystal with
+a translucent aura column and floating motes (small Neon parts animated in code; ViewportFrames do not render
+ParticleEmitters or lights). Lighting = `Ambient` / `LightColor` / `LightDirection` tinted by the rarity colour
+(`Theme.Stage`). A missed dog is still shown, turned away and looking back, on a dark pedestal under cold light.
+The camera orbits (one turn per `EndCard.TurnPeriod`), fitted to the dog's turning cylinder so every dog fills
+the frame. Right column: name (FredokaOne, two lines max), rarity pips (stars), zone and distance captions, the
+income cascade, the income plate (big $/s) and the buttons. CAUGHT / RAN OFF is a rotated stamp over the stage.
+If the model cannot be built the stage shows the pixel `dog` icon instead.
 
 ## 8. Screens (what exists)
 
@@ -153,8 +169,11 @@ emulator with the layout rules) at five viewports (667 × 375, 844 × 390, 1024 
 1920 × 1080) and ten scenarios (HUD, HUD with events, each panel, both reveal outcomes), then fails on:
 anything off-screen, HUD regions overlapping each other or the touch zones, text wider than its box
 without truncation, text under 10 px, touch targets under 32 px, list children overflowing a fixed list,
-modals within 8 px of an edge, and any emoji codepoint under `src/`. Truncated or clipped text is a
-warning. `node tools/uicheck/screenshot.js` turns the SVG previews in `build/ui-preview/` into PNGs.
+modals within 8 px of an edge, a reveal card taller than 84 % of the screen or without its dog viewport, and any
+emoji codepoint under `src/`. Elements with the attribute `Bleed = true` (the reveal light rays) may run off-screen. Truncated or clipped text is a
+warning. `node tools/uicheck/screenshot.js [svgDir] [outDir] [filter]` turns the SVG previews in `build/ui-preview/` into
+PNGs (ViewportFrames are drawn by a small flat-shaded renderer from their camera and lighting). `--only=<name>`
+runs a subset, `--out=<dir>` writes elsewhere.
 Both run in CI.
 
 Sources: Roblox staff "Designing UI – Tips and Best Practices" (DevForum), "New UI Capabilities: Shadows &

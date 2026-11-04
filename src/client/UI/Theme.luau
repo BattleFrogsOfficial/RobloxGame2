@@ -53,6 +53,23 @@ Theme.Variant = {
 	Rainbow = rgb("#FF6AD5"), -- base; animated by the Icon/Card components
 }
 
+-- Reveal card stage (Components/DogViewport): the 3D pedestal materials and the ViewportFrame lighting.
+-- Rarity tints are mixed in at runtime from Theme.RarityColor; these are the neutral bases.
+Theme.Stage = {
+	Stone = rgb("#9E9A92"), -- Common..Epic pedestal disc (Slate)
+	StoneDark = rgb("#706C66"), -- Common pedestal base step
+	Gold = rgb("#FFC43C"), -- Legendary pedestal disc (Foil)
+	GoldDeep = rgb("#CD8C1E"), -- Legendary base step (Metal)
+	GoldGlow = rgb("#FFE282"), -- Legendary Neon glow ring
+	Night = rgb("#2E2C3C"), -- missed: dark pedestal + stage backdrop top
+	PipOff = rgb("#5A5864"), -- unlit rarity pip (star) tint
+	Ambient = rgb("#96969C"), -- caught: ViewportFrame.Ambient (x rarity 30 %)
+	AmbientCommon = rgb("#A5A5AA"), -- Common: plain studio light
+	LightCommon = rgb("#F0ECE4"),
+	AmbientMissed = rgb("#808298"), -- missed: cold, dim, from behind the camera's left
+	LightMissed = rgb("#BEC0DC"),
+}
+
 Theme.Font = {
 	Display = Enum.Font.FredokaOne,
 	Body = Enum.Font.GothamMedium,

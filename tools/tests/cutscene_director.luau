@@ -213,7 +213,7 @@ check(ui.Config.PlaceholderCutscene == false, "cutscene takes over the reveal (P
 -- ------------------------------------------------------------------ frame pump + observers
 local RS = R.Services.RunService
 local DT = 1 / 30
-local seen = { counter = {}, counterVisible = false, message = nil, maxFov = 0, scriptable = false }
+local seen = { counter = {}, counterVisible = false, message = nil, maxFov = 0, scriptable = false, phases = {} }
 local function overlayRoot()
 	return ui.Root:FindFirstChild("CutsceneOverlay")
 end
@@ -239,8 +239,28 @@ local function observe()
 		seen.scriptable = true
 	end
 	local balls = R.Services.Workspace:FindFirstChild("CutsceneBalls")
-	if balls and balls:FindFirstChild("CutsceneDog") then
+	local dogNow = balls ~= nil and balls:FindFirstChild("CutsceneDog") ~= nil
+	if dogNow then
 		seen.dog = true
+		seen.dogLastAt = vclock
+	elseif seen.dog and not seen.dogGoneAt then
+		seen.dogGoneAt = vclock -- first frame without the dog
+	end
+	local blur = R.Services.Lighting:FindFirstChild("CutsceneBlur")
+	if blur then
+		seen.blur = true
+		seen.blurMax = math.max(seen.blurMax or 0, blur.Size)
+	end
+	local cur = Cutscene.Current()
+	if cur then
+		seen.director = cur
+		if cur.Phase ~= seen.lastPhase then
+			seen.lastPhase = cur.Phase
+			table.insert(seen.phases, cur.Phase)
+			if cur.Phase == "Counter" then
+				seen.dogAtCounter = dogNow
+			end
+		end
 	end
 	seen.maxFov = math.max(seen.maxFov, cam.FieldOfView)
 end
@@ -371,6 +391,7 @@ local function cleanState(label, expectFinished, id)
 		check(pair[1].C0 == pair[2], label .. ": C0 restored " .. pair[1].Name)
 	end
 	check(humanoid.AutoRotate == true, label .. ": AutoRotate restored")
+	check(R.Services.Lighting:FindFirstChild("CutsceneBlur") == nil, label .. ": motion blur removed")
 	if id then
 		check(finishedCount(id) == expectFinished, label .. ": CutsceneFinished x" .. expectFinished, tostring(finishedCount(id)))
 	end
@@ -384,7 +405,7 @@ local function cleanState(label, expectFinished, id)
 end
 
 local function reset()
-	seen = { counter = {}, counterVisible = false, message = nil, maxFov = 0, scriptable = false }
+	seen = { counter = {}, counterVisible = false, message = nil, maxFov = 0, scriptable = false, phases = {} }
 	resetCamera()
 	ui.State.Settings.HideCommonReveals = false
 end
@@ -549,11 +570,14 @@ do
 	local r = resultFor("Mythic", true, nil, "MythicMeadow", 2900)
 	release()
 	serverSends(r)
+	local blurAtDeath = false
 	local hooks = { [1.6] = function()
+		blurAtDeath = R.Services.Lighting:FindFirstChild("CutsceneBlur") ~= nil
 		humanoid.Died:Fire()
 	end }
 	local took = runUntilIdle(60, hooks)
 	check(took ~= nil, "G: finished after death")
+	check(blurAtDeath, "G: the motion blur was up mid-flight (and is cleaned after the abort)")
 	check(seen.revealOutcome == "CAUGHT", "G: outcome still shown")
 	cleanState("G", 1, r.ThrowId)
 end
@@ -628,7 +652,11 @@ do
 	local spot = Layout.Platform.ThrowSpot
 	local front = Shots.Front(V3.new(spot.X, spot.Y + 3, spot.Z), V3.new(0, 0, 1))
 	check(firstCF ~= nil and (firstCF.Position - front.Position).Magnitude < 1e-3, "M: hard cut straight to the front shot (no sweep)")
-	check(seen.maxFov <= math.max(70, C.ReducedMotion.PovFov) + 1e-6, "M: no wide POV FOV", tostring(seen.maxFov))
+	check(seen.maxFov <= math.max(70, C.ReducedMotion.PovFov) + 1e-6, "M: no wide POV FOV (no FOV punch)", tostring(seen.maxFov))
+	local st = seen.director and seen.director.Stats
+	check(st ~= nil and st.ImpactShake == 0 and st.SpeedShake == 0, "M: reduced motion: no release / POV shake")
+	check(st ~= nil and st.FovPunch == 0, "M: reduced motion: no FOV punch")
+	check(st ~= nil and st.Blur == false and not seen.blur, "M: reduced motion: no motion blur")
 	cleanState("M", 1, r.ThrowId)
 end
 
@@ -881,6 +909,258 @@ do
 		check(pair[1].C0 == pair[2], "L: thrower C0 restored " .. pair[1].Name)
 	end
 	M.GetPlayerByUserId = oldGet
+end
+
+-- ------------------------------------------------------------------ N / O: catch + miss beat order, release impact,
+-- the leaving dog's removal rule (time + distance, never before Outcome.HopAwayMinSeconds)
+local function logAt(dir, name)
+	for _, e in dir.Log do
+		if e.Name == name then
+			return e.At
+		end
+	end
+	return nil
+end
+local function phaseIndex(name)
+	return table.find(seen.phases, name)
+end
+for _, spec in {
+	{ Label = "N", Rarity = "Rare", Caught = true, Zone = "Park", Distance = 220, Quality = 1, Variant = "Rainbow" },
+	{ Label = "N2", Rarity = "Common", Caught = true, Zone = "Backyard", Distance = 40, Quality = 0.6 },
+	{ Label = "O", Rarity = "Epic", Caught = false, Zone = "Beach", Distance = 330, Quality = 0.35 },
+	{ Label = "O2", Rarity = "Common", Caught = false, Zone = "Backyard", Distance = 40, Quality = 0.8 },
+} do
+	reset()
+	local L = spec.Label
+	local r = resultFor(spec.Rarity, spec.Caught, spec.Variant, spec.Zone, spec.Distance)
+	r.Quality = spec.Quality
+	release()
+	serverSends(r)
+	local took = runUntilIdle(60)
+	check(took ~= nil, L .. ": finished")
+	local dir = seen.director
+	check(dir ~= nil, L .. ": director observed")
+	if dir then
+		local st = dir.Stats
+		-- release impact
+		local Shots = R.Require(Shared.Cutscene.Shots)
+		check(math.abs(st.Quality - Shots.QualityScale(spec.Quality)) < 1e-9, L .. ": shake scaled by result.Quality", tostring(st.Quality))
+		check(st.ImpactShake > 0.5 * st.Quality, L .. ": release shake starts hard", tostring(st.ImpactShake))
+		check(st.SpeedShake > 0, L .. ": ball-speed POV shake")
+		check(st.FovPunch > (C.Impact.FovPeak - C.Impact.FovFrom) * 0.8, L .. ": FOV punch", tostring(st.FovPunch))
+		check(st.Blur and seen.blur and seen.blurMax <= C.Flight.BlurSize + 1e-6 and seen.blurMax > 0, L .. ": motion blur up to BlurSize",
+			tostring(seen.blurMax))
+		-- beat order
+		local order = if spec.Caught then { "DogArrive", "Grab", "Victory", "Counter", "CounterHold", "HopAway" }
+			else { "DogArrive", "Counter", "CounterHold", "Sniff", "Bolt" }
+		local last = 0
+		for _, ph in order do
+			local i = phaseIndex(ph)
+			check(i ~= nil and i > last, L .. ": phase " .. ph .. " in order", table.concat(seen.phases, ","))
+			last = i or last
+		end
+		if spec.Caught then
+			check(phaseIndex("Sniff") == nil and phaseIndex("Bolt") == nil, L .. ": no sniff / bolt on a catch")
+			check(st.Confetti == C.Victory.Jumps, L .. ": one confetti burst per victory jump", tostring(st.Confetti))
+			check(seen.dogAtCounter == true, L .. ": the dog is still there when the counter starts (celebrated first)")
+			local g, v, c, h = logAt(dir, "Grab"), logAt(dir, "Victory"), logAt(dir, "Counter"), logAt(dir, "HopAway")
+			check(g and v and c and h and g < v and v < c and c < h, L .. ": grab -> victory -> counter -> hop away")
+			if v and c then
+				check(math.abs((c - v) - C.Beats.Victory[spec.Rarity]) < 2 * DT, L .. ": the victory beat lasts Beats.Victory", tostring(c - v))
+			end
+		else
+			check(phaseIndex("Grab") == nil and phaseIndex("Victory") == nil, L .. ": no grab / victory on a miss")
+			local c, sn, sad, b = logAt(dir, "Counter"), logAt(dir, "Sniff"), logAt(dir, "SadLook"), logAt(dir, "Bolt")
+			check(c and sn and sad and b and c < sn and sn < sad and sad < b, L .. ": counter -> sniff -> look -> bolt (rarity before the loss)")
+			if sn and b then
+				check(math.abs((b - sn) - C.Beats.Sniff[spec.Rarity]) < 2 * DT, L .. ": the sniff beat lasts Beats.Sniff", tostring(b - sn))
+			end
+			check(st.Confetti == 0, L .. ": no confetti on a miss")
+		end
+		-- the leaving dog: removed by time + distance, never before HopAwayMinSeconds after it starts leaving
+		local leave, removed = logAt(dir, "LeaveStart"), logAt(dir, "DogRemoved")
+		check(leave ~= nil and removed ~= nil, L .. ": dog left and was removed")
+		if leave and removed then
+			check(removed - leave >= C.Outcome.HopAwayMinSeconds - 1e-6, L .. ": dog kept >= HopAwayMinSeconds", ("%.3f"):format(removed - leave))
+			check(removed - leave <= C.Outcome.HopAwayMaxSeconds + DT, L .. ": dog removed by HopAwayMaxSeconds")
+			check(seen.dogGoneAt ~= nil and seen.dogGoneAt - leave >= C.Outcome.HopAwayMinSeconds - 1e-6,
+				L .. ": the dog model stayed in the world >= HopAwayMinSeconds", tostring(seen.dogGoneAt and seen.dogGoneAt - leave))
+		end
+	end
+	cleanState(L, 1, r.ThrowId)
+end
+
+-- ------------------------------------------------------------------ P: the dog rig on every body type
+-- Every body type has the joints the procedural victory / sniff / Idle need (RootJoint, Neck, TailJoint, EarL, EarR),
+-- every Mythic UniquePart follows the body (a Weld / Motor6D chain back to the Torso), the "victory" pose moves
+-- body, tail and ears with the ears lagging, and DogAnimator.Idle drives C0s (WorldModel-safe) and restores them.
+do
+	local BodyTypes = R.Require(Shared.Dog.BodyTypes)
+	local DogFactory = R.Require(Shared.Dog.DogFactory)
+	local DogAnimator = R.Require(Shared.Dog.DogAnimator)
+	local function joints(model)
+		local byName, list = {}, {}
+		for _, d in model:GetDescendants() do
+			if d:IsA("Motor6D") then
+				byName[d.Name] = d
+				table.insert(list, d)
+			end
+		end
+		return byName, list
+	end
+	local function followsBody(model)
+		local torso = model:FindFirstChild("Torso", true)
+		local edges = {}
+		for _, d in model:GetDescendants() do
+			if (d:IsA("Weld") or d:IsA("Motor6D")) and d.Part0 and d.Part1 then
+				edges[d.Part0] = edges[d.Part0] or {}
+				table.insert(edges[d.Part0], d.Part1)
+			end
+		end
+		local reached = { [torso] = true }
+		local stack = { torso }
+		while #stack > 0 do
+			local p = table.remove(stack)
+			for _, q in edges[p] or {} do
+				if not reached[q] then
+					reached[q] = true
+					table.insert(stack, q)
+				end
+			end
+		end
+		local loose = {}
+		for _, d in model:GetDescendants() do
+			if d:IsA("BasePart") and d.Name ~= "Root" and not reached[d] then
+				table.insert(loose, d.Name)
+			end
+		end
+		return loose
+	end
+	check(#BodyTypes.Order == 14, "P: 14 body types")
+	for _, bodyId in BodyTypes.Order do
+		local model = DogFactory.Build({ Id = "p_" .. bodyId, Name = bodyId, Body = bodyId, Rarity = "Rare" })
+		local j = joints(model)
+		for _, need in { "RootJoint", "Neck", "TailJoint", "EarL", "EarR" } do
+			check(j[need] ~= nil and j[need].Part0 ~= nil and j[need].Part1 ~= nil, "P: " .. bodyId .. " has " .. need)
+		end
+		local loose = followsBody(model)
+		check(#loose == 0, "P: " .. bodyId .. ": every part follows the body", table.concat(loose, ","))
+	end
+	-- Mythic unique parts: every one follows the body
+	local uniques = {}
+	for name in DogFactory.UniqueParts do
+		table.insert(uniques, name)
+	end
+	table.sort(uniques)
+	for _, u in uniques do
+		local model = DogFactory.Build({ Id = "m_" .. u, Name = u, Body = "medium_lean", Rarity = "Mythic", UniqueParts = { u } })
+		local loose = followsBody(model)
+		check(#loose == 0, "P: Mythic " .. u .. " follows the body", table.concat(loose, ","))
+		local j = joints(model)
+		if u == "two_heads" or u == "three_heads" then
+			check(j.Neck2 ~= nil and j.EarL2 ~= nil, "P: " .. u .. ": extra head has its own neck + ears (animated with the body)")
+		elseif u == "wings" then
+			check(j.WingL ~= nil and j.WingR ~= nil, "P: wings are jointed to the torso")
+		end
+	end
+	-- the victory pose (pure): body bounces Jumps times, ears lag the body by EarLag
+	local V = C.Victory
+	local shape = { Jumps = V.Jumps, JumpTime = V.JumpTime, JumpGap = V.JumpGap, Height = V.Height, WagHz = V.WagHz,
+		WagDegrees = V.WagDegrees, EarLag = V.EarLag, EarFlapDegrees = V.EarFlapDegrees }
+	local peaks, prevY, rising = 0, 0, false
+	for i = 0, math.floor(C.Beats.Victory.Common * 120) do
+		local y = DogAnimator.VictoryY(shape, i / 120)
+		if y < prevY and rising and prevY > V.Height * 0.8 then
+			peaks += 1
+		end
+		rising = y > prevY
+		prevY = y
+	end
+	check(peaks == V.Jumps, "P: victory = " .. V.Jumps .. " jumps", tostring(peaks))
+	check(V.Jumps * (V.JumpTime + V.JumpGap) <= C.Beats.Victory.Common + 1e-9, "P: the jumps fit the shortest victory beat")
+	-- run the real pose on a giant_fluffy and a three-headed winged Mythic for a beat: tail wags, ears move, motors stay finite
+	for _, def in { { Id = "v1", Body = "giant_fluffy", Rarity = "Epic" },
+		{ Id = "v2", Body = "toy", Rarity = "Mythic", UniqueParts = { "three_heads", "wings", "nine_tails" } } } do
+		local model = DogFactory.Build(def)
+		model.Parent = R.Services.Workspace
+		local anim = DogAnimator.new(model, { AlwaysAnimate = true })
+		anim.Victory = shape
+		anim:StartOnce("victory", C.Beats.Victory.Common)
+		local byName = joints(model)
+		local tailSeen, earSeen, rootUp = {}, {}, 0
+		for _ = 1, math.ceil(C.Beats.Victory.Common / DT) do
+			vclock += DT
+			RS.PreSimulation:Fire(DT)
+			local tz = select(3, byName.TailJoint.Transform:ToEulerAnglesXYZ())
+			tailSeen[tz > 0.1 and "pos" or tz < -0.1 and "neg" or "mid"] = true
+			local ex = byName.EarL.Transform:ToEulerAnglesXYZ()
+			earSeen[ex > 0.1 and "up" or ex < -0.1 and "down" or "mid"] = true
+			rootUp = math.max(rootUp, byName.RootJoint.Transform.Position.Y)
+		end
+		check(tailSeen.pos and tailSeen.neg, "P: " .. def.Body .. ": tail wags during the victory beat")
+		check(earSeen.up and earSeen.down, "P: " .. def.Body .. ": ears flap on the jumps")
+		check(rootUp > V.Height * 0.8 * model:GetScale(), "P: " .. def.Body .. ": body jumps", tostring(rootUp))
+		if def.UniqueParts then
+			check(byName.Neck2.Transform ~= CF.new() and byName.TailJoint5 ~= nil and byName.TailJoint5.Transform ~= CF.new()
+				and byName.WingL.Transform ~= CF.new(), "P: extra heads / tails / wings animate with the body")
+		end
+		anim:Destroy()
+		model:Destroy()
+	end
+	-- DogAnimator.Idle (the end card's API): C0-driven, Happy wags + hops, Sad holds still, Stop restores every C0
+	for _, mood in { "Happy", "Sad" } do
+		local model = DogFactory.Build({ Id = "idle_" .. mood, Body = "corgi_type", Rarity = "Legendary", UniqueParts = { "two_heads" } })
+		model.Parent = R.Services.Workspace
+		local byName, list = joints(model)
+		local base = {}
+		for _, m in list do
+			base[m] = m.C0
+		end
+		local h = DogAnimator.Idle(model, { WagHz = 6, HopEvery = 1, HopHeight = 0.6, Ears = true, Mood = mood })
+		check(type(h) == "table" and type(h.Stop) == "function", "P: Idle(" .. mood .. ") returns { Stop }")
+		local tails, rootMax, transformsUntouched = {}, -1e9, true
+		for i = 1, 60 do
+			RS.RenderStepped:Fire(DT)
+			RS.Heartbeat:Fire(DT)
+			local off = base[byName.TailJoint]:Inverse() * byName.TailJoint.C0
+			tails[i] = select(3, off:ToEulerAnglesXYZ())
+			rootMax = math.max(rootMax, (base[byName.RootJoint]:Inverse() * byName.RootJoint.C0).Position.Y)
+			for _, m in list do
+				if m.Transform ~= CF.new() then
+					transformsUntouched = false
+				end
+			end
+		end
+		check(transformsUntouched, "P: Idle(" .. mood .. ") drives C0, not Transform")
+		local minT, maxT = math.huge, -math.huge
+		for _, v in tails do
+			minT, maxT = math.min(minT, v), math.max(maxT, v)
+		end
+		if mood == "Happy" then
+			check(maxT - minT > 0.5, "P: Idle Happy: tail wags", ("%.2f"):format(maxT - minT))
+			check(rootMax > 0.3 * model:GetScale(), "P: Idle Happy: hops", tostring(rootMax))
+		else
+			check(maxT - minT < 1e-6, "P: Idle Sad: tail still")
+			local neckOff = base[byName.Neck]:Inverse() * byName.Neck.C0
+			local _, yaw = neckOff:ToEulerAnglesYXZ()
+			check(math.abs(yaw) > math.rad(45), "P: Idle Sad: head turned to look back over the shoulder", tostring(math.deg(yaw)))
+			local earOff = base[byName.EarL]:Inverse() * byName.EarL.C0
+			check(earOff:ToEulerAnglesXYZ() > math.rad(30), "P: Idle Sad: ears down")
+			check(rootMax < 0.05, "P: Idle Sad: no hops")
+		end
+		h.Stop()
+		local restored = true
+		for m, c0 in base do
+			if m.C0 ~= c0 then
+				restored = false
+			end
+		end
+		check(restored, "P: Idle(" .. mood .. ") Stop restores every C0")
+		RS.RenderStepped:Fire(DT)
+		check(byName.TailJoint.C0 == base[byName.TailJoint], "P: Idle(" .. mood .. ") stopped: no more writes")
+		h.Stop() -- idempotent
+		model:Destroy()
+	end
 end
 
 process.exit(Loader.Done("cutscene_director") > 0 and 1 or 0)

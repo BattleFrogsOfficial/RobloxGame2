@@ -102,6 +102,26 @@ function Overlay.new(parent: Instance, isTouch: boolean): OverlayHandle
 		end)
 	end
 
+	-- White (or `color`) full-screen flash for `frames` rendered frames (the release impact).
+	local flashSerial = 0
+	function handle.Flash(_, transparency: number, frames: number?, color: Color3?)
+		if transparency >= 1 then
+			return
+		end
+		flashSerial += 1
+		local mine = flashSerial
+		flash.BackgroundColor3 = color or Color3.new(1, 1, 1)
+		flash.BackgroundTransparency = transparency
+		task.defer(function()
+			for _ = 1, math.max(1, frames or 1) do
+				task.wait()
+			end
+			if flashSerial == mine then
+				flash.BackgroundTransparency = 1
+			end
+		end)
+	end
+
 	function handle.ShowCounter()
 		message.Visible = false
 		block.Visible = true

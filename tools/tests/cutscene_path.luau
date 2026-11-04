@@ -297,4 +297,36 @@ do
 	check(far.Z <= Layout.Field.MaxZ + EPS, "estimate clamped to the field")
 end
 
+-- Release impact + ball-POV feel (Config/Cutscene.Impact, Flight.PovShake*, Flight.Blur*).
+do
+	local I = C.Impact
+	check(math.abs(Shots.QualityScale(1) - 1) < 1e-9, "Perfect quality = full release shake")
+	check(math.abs(Shots.QualityScale(I.QualityMin) - I.ShakeMinScale) < 1e-9, "flub quality = ShakeMinScale")
+	check(Shots.QualityScale(0.9) > Shots.QualityScale(0.6), "higher quality shakes harder")
+	check(math.abs(Shots.QualityScale(nil) - I.ShakeMinScale) < 1e-9, "missing quality = the weakest shake")
+	check(math.abs(Shots.ImpactShakeAmount(0, 1) - 1) < 1e-9, "release shake starts at full strength")
+	local prev = 2
+	for i = 0, 40 do
+		local a = Shots.ImpactShakeAmount(i * I.ShakeTime / 40, 1)
+		check(a <= prev + 1e-12, "release shake only decays")
+		prev = a
+	end
+	check(Shots.ImpactShakeAmount(I.ShakeTime, 1) == 0 and Shots.ImpactShake(I.ShakeTime, 3, 1) == CFrame.new(), "release shake over at ShakeTime")
+	check(math.abs(I.ShakeTime - 0.4) < 1e-9, "release shake decays over 0.4 s")
+	check(Shots.ImpactShakeAmount(I.ShakeTime * 0.5, 1) < 0.2, "release shake starts hard and decays fast")
+	-- FOV punch 70 -> 82 -> 70 over 0.3 s
+	check(I.FovFrom == 70 and I.FovPeak == 82 and math.abs(I.FovTime - 0.3) < 1e-9, "FOV punch is 70 -> 82 -> 70 over 0.3 s")
+	check(Shots.FovPunch(0) == 0 and Shots.FovPunch(I.FovTime) == 0, "FOV punch starts and ends at 0")
+	check(math.abs(Shots.FovPunch(I.FovTime * I.FovPeakAt) - (I.FovPeak - I.FovFrom)) < 1e-6, "FOV punch peaks at +12")
+	-- speed shake + blur
+	check(Shots.SpeedShakeAmount(0) == 0 and Shots.SpeedShakeAmount(1e6) == 1, "POV shake scales with the ball's speed (clamped)")
+	check(Shots.SpeedShakeAmount(C.Flight.PovShakeSpeedForMax * 0.5) > 0.4, "POV shake halfway")
+	check(Shots.SpeedShake(1.3, 5, 0) == CFrame.new(), "no POV shake at rest")
+	local sh = Shots.SpeedShake(1.3, 5, 1e6)
+	check(sh.Position.Magnitude <= C.Flight.PovShakeStuds * 1.5 + 1e-6, "POV shake is low amplitude")
+	check(C.Flight.BlurSize == 4, "motion blur size 4")
+	check(math.abs(Shots.BlurSize(1e6, 0) - 4) < 1e-9 and Shots.BlurSize(0, 0) == 0, "blur scales with speed")
+	check(Shots.BlurSize(1e6, 1) == 0 and Shots.BlurSize(1e6, 0.5) < 4, "blur clears through the landing")
+end
+
 process.exit(Loader.Done("cutscene_path") > 0 and 1 or 0)

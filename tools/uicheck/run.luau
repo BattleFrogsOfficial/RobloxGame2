@@ -11,8 +11,19 @@ local R = require("./roblox")
 
 local ROOT = string.gsub(process.cwd, "/$", "")
 local OUT = ROOT .. "/build/ui-preview"
+-- --out=<dir>: write the previews + report somewhere else (parallel runs must not share a directory)
+for _, a in process.args do
+	local o = string.match(a, "^%-%-out=(.+)$")
+	if o then
+		OUT = if string.sub(o, 1, 1) == "/" then o else ROOT .. "/" .. o
+	end
+end
 if not fs.isDir(ROOT .. "/build") then
 	fs.writeDir(ROOT .. "/build")
+end
+local parentDir = string.match(OUT, "^(.*)/[^/]+$")
+if parentDir and not fs.isDir(parentDir) then
+	fs.writeDir(parentDir)
 end
 if fs.isDir(OUT) then
 	fs.removeDir(OUT)
@@ -21,6 +32,8 @@ fs.writeDir(OUT)
 
 local Enum = R.Enum
 local Vector2 = R.Types.Vector2
+local Vector3 = R.Types.Vector3
+local Color3 = R.Types.Color3
 
 -- Mount the source tree.
 local Shared = R.MountTree(ROOT .. "/src/shared", R.ReplicatedStorage, "Shared")
@@ -125,6 +138,16 @@ local function longestName(zoneId, rarity)
 	end
 	return best or DogCatalog.All()[1]
 end
+-- the smallest / biggest dog (roster Scale) of a tier
+local function byScale(rarity, biggest)
+	local best = nil
+	for _, d in DogCatalog.All() do
+		if d.Rarity == rarity and (not best or (if biggest then (d.Scale or 1) > (best.Scale or 1) else (d.Scale or 1) < (best.Scale or 1))) then
+			best = d
+		end
+	end
+	return best or DogCatalog.All()[1]
+end
 -- counter mid-count at value v (colour from the real thresholds of a Backyard Mythic count)
 local function midCount(v, skip)
 	return function(ui)
@@ -212,7 +235,7 @@ local SCENARIOS = {
 	{ name = "settings", setup = function(ui)
 		ui.Router.Open("Settings")
 	end },
-	{ name = "reveal-caught", setup = function(ui)
+	{ name = "reveal-caught", settle = 1.3, setup = function(ui)
 		local def = DogCatalog.ZoneTierList(Zones[3].Id, "Legendary")[1] or DogCatalog.All()[1]
 		ui:ShowReveal({ ThrowId = "t1", ThrowerUserId = 1, Distance = 412, ZoneId = Zones[3].Id, DogId = def.Id, Rarity = def.Rarity, Variant = "Rainbow", Caught = true, CatchChance = 0.45, WhistleOwned = true, WhistleCount = 2 }, { IsDupe = true })
 	end },
@@ -255,14 +278,57 @@ local SCENARIOS = {
 	{ name = "dev-pill", setup = devTools(false, false) },
 	{ name = "dev-pill-testmode", setup = devTools(false, true) },
 	{ name = "dev-panel", setup = devTools(true, false) },
-	{ name = "reveal-missed", setup = function(ui)
+	{ name = "reveal-missed", settle = 1.3, setup = function(ui)
 		local def = DogCatalog.ZoneTierList(Zones[1].Id, "Mythic")[1] or DogCatalog.All()[1]
 		ui:ShowReveal({ ThrowId = "t2", ThrowerUserId = 1, Distance = 80, ZoneId = Zones[1].Id, DogId = def.Id, Rarity = def.Rarity, Caught = false, CatchChance = 0.3, WhistleOwned = true, WhistleCount = 1 })
+	end },
+	-- Prize-screen end card (live dog viewport). The Common is the smallest dog in the roster and the Legendary
+	-- the biggest of its tier, so the camera fit is proven on both ends.
+	{ name = "reveal-common", settle = 1.3, setup = function(ui)
+		local def = byScale("Common", false)
+		ui:ShowReveal({ ThrowId = "t3", ThrowerUserId = 1, Distance = 42, ZoneId = def.Zone, DogId = def.Id, Rarity = "Common", Caught = true, CatchChance = 0.95 })
+	end },
+	{ name = "reveal-legendary-gold", settle = 1.3, setup = function(ui)
+		local def = byScale("Legendary", true)
+		ui:ShowReveal({ ThrowId = "t4", ThrowerUserId = 1, Distance = 1180, ZoneId = def.Zone, DogId = def.Id, Rarity = "Legendary", Variant = "Gold", Caught = true, CatchChance = 0.45 })
+	end },
+	{ name = "reveal-mythic-rainbow", settle = 1.3, setup = function(ui)
+		local def = longestName("MythicMeadow", "Mythic")
+		ui:ShowReveal({ ThrowId = "t5", ThrowerUserId = 1, Distance = 3012, ZoneId = def.Zone, DogId = def.Id, Rarity = "Mythic", Variant = "Rainbow", Caught = true, CatchChance = 0.3, LuckyStreakTriggered = true })
+	end },
+	{ name = "reveal-missed-epic", settle = 1.3, setup = function(ui)
+		local def = longestName("SnowyPeaks", "Epic")
+		ui:ShowReveal({ ThrowId = "t6", ThrowerUserId = 1, Distance = 1260, ZoneId = def.Zone, DogId = def.Id, Rarity = "Epic", Variant = "Shadow", Caught = false, CatchChance = 0.65, WhistleOwned = false })
+	end },
+	{ name = "reveal-whistle", settle = 1.3, setup = function(ui)
+		local def = longestName("Forest", "Rare")
+		ui:ShowReveal({ ThrowId = "t7", ThrowerUserId = 1, Distance = 864, ZoneId = def.Zone, DogId = def.Id, Rarity = "Rare", Caught = false, CatchChance = 0.8, WhistleOwned = true, WhistleCount = 3 })
+	end },
+	{ name = "reveal-reduced-motion", settle = 0.2, setup = function(ui)
+		local Motion = R.Require(clientFolder.UI.Motion)
+		Motion.ReducedMotion = true
+		local def = longestName("SpaceStation", "Legendary")
+		ui:ShowReveal({ ThrowId = "t8", ThrowerUserId = 1, Distance = 2240, ZoneId = def.Zone, DogId = def.Id, Rarity = "Legendary", Caught = true, CatchChance = 0.45 }, { IsDupe = true })
+		Motion.ReducedMotion = false
 	end },
 }
 
 local quiet = table.find(process.args, "--quiet") ~= nil
-local report = { errors = {}, warnings = {}, scenarios = {} }
+-- --only=<substring>: run only the scenarios whose name contains it (e.g. --only=reveal)
+local only = nil
+for _, a in process.args do
+	only = string.match(a, "^%-%-only=(.+)$") or only
+end
+if only then
+	local kept = {}
+	for _, sc in SCENARIOS do
+		if string.find(sc.name, only, 1, true) then
+			table.insert(kept, sc)
+		end
+	end
+	SCENARIOS = kept
+end
+local report = { errors = {}, warnings = {}, scenarios = {}, revealCardHeight = {} }
 
 local function addError(scenario, msg)
 	table.insert(report.errors, scenario .. ": " .. msg)
@@ -291,9 +357,20 @@ local HUD_REGIONS = { Currencies = true, SideMenu = true, EventBanner = true, To
 local function runChecks(name, records, screen, vp, ui)
 	local scale = ui.Root:FindFirstChildOfClass("UIScale").Scale
 	local touch = vp.touch
-	-- 1. Visible elements inside the screen (unless clipped by an ancestor).
+	-- 1. Visible elements inside the screen (unless clipped by an ancestor). Full-bleed decoration (attribute
+	-- Bleed = true on it or an ancestor, e.g. the reveal card's light rays) is meant to run off-screen.
+	local function bleeds(inst)
+		local p = inst
+		while p and p ~= ui.Gui do
+			if p:GetAttribute("Bleed") then
+				return true
+			end
+			p = p.Parent
+		end
+		return false
+	end
 	for _, rec in records do
-		if rec.visible and rec.rect.w > 0 and rec.rect.h > 0 then
+		if rec.visible and rec.rect.w > 0 and rec.rect.h > 0 and not bleeds(rec.inst) then
 			local inside = R.Intersect(rec.rect, screen)
 			local clipped = rec.clip and (rec.clip.w < screen.w or rec.clip.h < screen.h)
 			if not clipped then
@@ -422,10 +499,27 @@ local function runChecks(name, records, screen, vp, ui)
 			end
 		end
 	end
+	-- 6. The reveal end card fits on the screen without covering all of it: at most 84 % of the viewport height.
+	for _, rec in records do
+		if rec.visible and rec.inst.Name == "Card" and rec.inst.Parent and rec.inst.Parent.Name == "Reveal" then
+			local pct = rec.rect.h / vp.size.Y
+			report.revealCardHeight[name] = math.floor(pct * 1000 + 0.5) / 10
+			if pct > 0.84 then
+				addError(name, string.format("reveal card is %.1f%% of the screen height (max 84%%) %s", pct * 100, rectStr(rec.rect)))
+			end
+			local stage = rec.inst:FindFirstChild("DogStage")
+			if not stage then
+				addError(name, "reveal card has no DogStage")
+			elseif not stage:FindFirstChild("DogViewport") then
+				addError(name, "reveal card fell back to the icon (no ViewportFrame)")
+			end
+		end
+	end
 	return scale
 end
 
 -- ------------------------------------------------------------------------------------------ SVG render
+local render3D
 local FONT_FAMILY = { FredokaOne = "'Fredoka One', 'Arial Rounded MT Bold', Arial, sans-serif", GothamMedium = "Montserrat, Arial, sans-serif", GothamBold = "Montserrat, Arial, sans-serif", Arcade = "'Press Start 2P', monospace" }
 
 local function hex(c)
@@ -434,6 +528,128 @@ end
 
 local function esc(s)
 	return (string.gsub(s, "[<>&\"]", { ["<"] = "&lt;", [">"] = "&gt;", ["&"] = "&amp;", ['"'] = "&quot;" }))
+end
+
+
+-- ViewportFrame preview: a tiny flat-shaded software renderer for its WorldModel (blocks, balls, cylinders),
+-- using the frame's CurrentCamera (FieldOfView = vertical), Ambient, LightColor and LightDirection, painter's
+-- order, clipped to the frame. Joints are not solved (parts sit where their builder put them) and nothing
+-- animates, so it shows the first frame of the card. Good enough to judge framing, size and colour.
+local vpfCount = 0
+render3D = function(vpf, r, parts, defs)
+	local cam = vpf.CurrentCamera
+	local world = vpf:FindFirstChildWhichIsA("WorldModel")
+	if not cam or not world then
+		table.insert(parts, string.format('<rect x="%g" y="%g" width="%g" height="%g" fill="#000" opacity="0.2"/><text x="%g" y="%g" font-size="12" fill="#fff" text-anchor="middle">ViewportFrame (no camera)</text>', r.x, r.y, r.w, r.h, r.x + r.w / 2, r.y + r.h / 2))
+		return
+	end
+	vpfCount += 1
+	local clipId = "vpf" .. vpfCount
+	table.insert(defs, string.format('<clipPath id="%s"><rect x="%g" y="%g" width="%g" height="%g"/></clipPath>', clipId, r.x, r.y, r.w, r.h))
+	local V3 = Vector3
+	local cf = cam.CFrame
+	local camPos = cf.Position
+	local f = (r.h / 2) / math.tan(math.rad(cam.FieldOfView) / 2)
+	local function project(p)
+		local l = cf:PointToObjectSpace(p)
+		local depth = -l.Z
+		if depth <= 0.05 then
+			return nil
+		end
+		return r.x + r.w / 2 + l.X / depth * f, r.y + r.h / 2 - l.Y / depth * f, depth
+	end
+	local amb, lc = vpf.Ambient, vpf.LightColor
+	local ld = vpf.LightDirection
+	ld = if ld.Magnitude > 0 then ld.Unit else V3.new(0, -1, 0)
+	local function shade(color, normal, neon)
+		if neon then
+			return color:Lerp(Color3.new(1, 1, 1), 0.25)
+		end
+		local k = math.max(0, normal:Dot(-ld))
+		local function ch(c, a, l)
+			return math.clamp(c * (a * 0.9 + l * k * 0.85), 0, 1)
+		end
+		return Color3.new(ch(color.R, amb.R, lc.R), ch(color.G, amb.G, lc.G), ch(color.B, amb.B, lc.B))
+	end
+	local polys = {}
+	local function face(pcf, corners, normalLocal, color, alpha, neon)
+		local n = pcf:VectorToWorldSpace(normalLocal)
+		local wc = {}
+		local center = V3.zero
+		for _, c in corners do
+			local w = pcf:PointToWorldSpace(c)
+			table.insert(wc, w)
+			center += w
+		end
+		center /= #wc
+		if (center - camPos):Dot(n) >= 0 then
+			return -- back face
+		end
+		local pts, depthSum = {}, 0
+		for _, w in wc do
+			local x, y, d = project(w)
+			if not x then
+				return
+			end
+			table.insert(pts, string.format("%.1f,%.1f", x, y))
+			depthSum += d
+		end
+		table.insert(polys, { depth = (center - camPos).Magnitude, svg = string.format('<polygon points="%s" fill="#%s" fill-opacity="%g"/>', table.concat(pts, " "), shade(color, n, neon):ToHex(), alpha) })
+	end
+	for _, part in world:GetDescendants() do
+		if part:IsA("BasePart") and (part.Transparency or 0) < 1 then
+			local pcf, h = part.CFrame, part.Size * 0.5
+			local color, alpha = part.Color, 1 - (part.Transparency or 0)
+			local neon = part.Material == Enum.Material.Neon
+			local shape = part.Shape and part.Shape.Name or "Block"
+			if shape == "Ball" then
+				local x, y, d = project(pcf.Position)
+				if x then
+					local rad = math.min(h.X, h.Y, h.Z) / d * f
+					local toCam = (camPos - pcf.Position).Unit
+					table.insert(polys, { depth = d, svg = string.format('<circle cx="%.1f" cy="%.1f" r="%.1f" fill="#%s" fill-opacity="%g"/>', x, y, rad, shade(color, toCam:Lerp(V3.new(0, 1, 0), 0.3).Unit, neon):ToHex(), alpha) })
+				end
+			elseif shape == "Cylinder" then
+				local seg = 20
+				local ry, rz = h.Y, h.Z
+				local ring = {}
+				for i = 0, seg - 1 do
+					local a = i / seg * math.pi * 2
+					table.insert(ring, { math.cos(a), math.sin(a) })
+				end
+				for i = 1, seg do
+					local a, b = ring[i], ring[i % seg + 1]
+					local mid = { (a[1] + b[1]) / 2, (a[2] + b[2]) / 2 }
+					face(pcf, { V3.new(-h.X, a[1] * ry, a[2] * rz), V3.new(h.X, a[1] * ry, a[2] * rz), V3.new(h.X, b[1] * ry, b[2] * rz), V3.new(-h.X, b[1] * ry, b[2] * rz) }, V3.new(0, mid[1], mid[2]).Unit, color, alpha, neon)
+				end
+				for _, sx in { -1, 1 } do
+					local cap = {}
+					for i = 1, seg do
+						table.insert(cap, V3.new(sx * h.X, ring[i][1] * ry, ring[i][2] * rz))
+					end
+					face(pcf, cap, V3.new(sx, 0, 0), color, alpha, neon)
+				end
+			else
+				for axis = 1, 3 do
+					for _, sgn in { -1, 1 } do
+						local n = if axis == 1 then V3.new(sgn, 0, 0) elseif axis == 2 then V3.new(0, sgn, 0) else V3.new(0, 0, sgn)
+						local u = if axis == 1 then V3.new(0, h.Y, 0) else V3.new(h.X, 0, 0)
+						local v = if axis == 3 then V3.new(0, h.Y, 0) else V3.new(0, 0, h.Z)
+						local c = V3.new(n.X * h.X, n.Y * h.Y, n.Z * h.Z)
+						face(pcf, { c - u - v, c + u - v, c + u + v, c - u + v }, n, color, alpha, neon)
+					end
+				end
+			end
+		end
+	end
+	table.sort(polys, function(a, b)
+		return a.depth > b.depth
+	end)
+	table.insert(parts, string.format('<g clip-path="url(#%s)">', clipId))
+	for _, p in polys do
+		table.insert(parts, p.svg)
+	end
+	table.insert(parts, "</g>")
 end
 
 local function renderSVG(records, screen, vp, ui)
@@ -469,10 +685,32 @@ local function renderSVG(records, screen, vp, ui)
 	end)
 	local clipIds = {}
 	local clipCount = 0
+	local recOf = {}
+	for _, rec in records do
+		recOf[rec.inst] = rec
+	end
+	-- GuiObject.Rotation turns the element and its descendants about each one's centre (outermost first).
+	local function rotationOf(inst)
+		local list = {}
+		local p = inst
+		while p and recOf[p] do
+			local rot = p.Rotation or 0
+			if rot ~= 0 then
+				local pr = recOf[p].rect
+				table.insert(list, 1, string.format("rotate(%g %g %g)", rot, pr.x + pr.w / 2, pr.y + pr.h / 2))
+			end
+			p = p.Parent
+		end
+		return table.concat(list, " ")
+	end
 	for _, rec in ordered do
 		local inst = rec.inst
 		if rec.visible and rec.rect.w > 0 and rec.rect.h > 0 then
 			local r = rec.rect
+			local rotAttr = rotationOf(inst)
+			if rotAttr ~= "" then
+				table.insert(parts, string.format('<g transform="%s">', rotAttr))
+			end
 			local clipAttr = ""
 			if rec.clip and (rec.clip.w < screen.w or rec.clip.h < screen.h) then
 				local key = string.format("%d_%d_%d_%d", rec.clip.x, rec.clip.y, rec.clip.w, rec.clip.h)
@@ -495,9 +733,41 @@ local function renderSVG(records, screen, vp, ui)
 			if grad and alpha > 0 then
 				gradId += 1
 				local kps = grad.Color.Keypoints
+				local tseq = rawget(grad, "__raw").props.Transparency -- optional NumberSequence
 				local stops = {}
-				for _, kp in kps do
-					table.insert(stops, string.format('<stop offset="%g" stop-color="%s"/>', kp.Time, hex(kp.Value)))
+				if tseq then
+					-- union of colour and transparency keypoint times; both interpolated linearly
+					local function sample(seq, t, lerp)
+						local k = seq.Keypoints
+						for i = 1, #k - 1 do
+							if t <= k[i + 1].Time then
+								local a = (t - k[i].Time) / math.max(1e-6, k[i + 1].Time - k[i].Time)
+								return lerp(k[i].Value, k[i + 1].Value, a)
+							end
+						end
+						return k[#k].Value
+					end
+					local times = {}
+					for _, kp in kps do
+						table.insert(times, kp.Time)
+					end
+					for _, kp in tseq.Keypoints do
+						table.insert(times, kp.Time)
+					end
+					table.sort(times)
+					for _, t in times do
+						local c = sample(grad.Color, t, function(a, b, x)
+							return a:Lerp(b, x)
+						end)
+						local tr = sample(tseq, t, function(a, b, x)
+							return a + (b - a) * x
+						end)
+						table.insert(stops, string.format('<stop offset="%g" stop-color="%s" stop-opacity="%g"/>', t, hex(c), 1 - tr))
+					end
+				else
+					for _, kp in kps do
+						table.insert(stops, string.format('<stop offset="%g" stop-color="%s"/>', kp.Time, hex(kp.Value)))
+					end
 				end
 				local rot = grad.Rotation or 0
 				local x2, y2 = math.cos(math.rad(rot)), math.sin(math.rad(rot))
@@ -515,6 +785,9 @@ local function renderSVG(records, screen, vp, ui)
 			end
 			if alpha > 0 then
 				table.insert(parts, string.format('<rect x="%g" y="%g" width="%g" height="%g" rx="%g" fill="%s" fill-opacity="%g"%s/>', r.x, r.y, r.w, r.h, rx, fill, alpha, strokeAttr))
+			end
+			if inst:IsA("ViewportFrame") then
+				render3D(inst, r, parts, defs)
 			end
 			if inst:IsA("ImageLabel") and inst.Image ~= "" then
 				table.insert(parts, string.format('<rect x="%g" y="%g" width="%g" height="%g" fill="#3a9" opacity="0.7"/>', r.x, r.y, r.w, r.h))
@@ -574,6 +847,9 @@ local function renderSVG(records, screen, vp, ui)
 			if clipAttr ~= "" then
 				table.insert(parts, "</g>")
 			end
+			if rotAttr ~= "" then
+				table.insert(parts, "</g>")
+			end
 		end
 	end
 	table.insert(parts, "</svg>")
@@ -602,6 +878,9 @@ for _, vp in VIEWPORTS do
 			ui.State.Set(fakeState())
 			ui.Router.Close()
 			sc.setup(ui)
+			if sc.settle then
+				task.wait(sc.settle) -- let entry tweens / count-ups finish so the preview shows the resting card
+			end
 			task.wait(0.05)
 			task.wait(0.05)
 			local records, screen = R.Layout(ui.Gui, vp.size)

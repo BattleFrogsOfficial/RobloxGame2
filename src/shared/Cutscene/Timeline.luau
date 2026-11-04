@@ -1,13 +1,16 @@
 --!strict
 -- Pure cutscene timing + rules (no services; Lune-tested by tools/tests/cutscene.luau). docs/DESIGN.md §20.
 --   Timeline.FlightSeconds(result.FlightTime) -> on-screen flight length (remapped into Flight.Min..Max)
---   Timeline.Build(rarity, flightSeconds, { Short = bool? }) -> { Beats, Total, Release, Touchdown, ByName }
+--   Timeline.Build(rarity, flightSeconds, { Short = bool?, Caught = bool? }) -> { Beats, Total, Release, Touchdown, ByName }
+--     Caught (default true): ... DogArrive, Grab, Victory, Counter, CounterHold, HopAway, EndCard
+--     Caught = false:        ... DogArrive, Counter, CounterHold, Sniff, Bolt, EndCard
 --   Timeline.CanSkip(rarity, beatName) -> boolean         (Skip button rule)
 --   Timeline.IsShort(rarity, hideCommonReveals) -> boolean  (Settings.HideCommonReveals)
 --   Timeline.FallbackAfter(flightSeconds) -> seconds after the meter release at which a missing ThrowResult
 --     gives up (release frame + estimated flight + Fallback.HoldMax)
---   Timeline.EarliestEnd(rarity, flightSeconds) -> soonest a real client can finish (skip / short Common); the
---     server's CutsceneFinished floor
+--   Timeline.EarliestEnd(rarity, flightSeconds, caught?) -> soonest a real client can finish (skip / short Common);
+--     the server's CutsceneFinished floor (caught = nil: the sooner of both outcomes)
+--   Timeline.LeaveDone(elapsed, distance) -> remove the leaving dog now? (time + distance rule)
 --   Timeline.SafetySeconds() -> the longest the HUD may stay locked waiting for a ThrowResult
 --   Timeline.Validate(raw) -> (true, normalised) | (false, reason)
 -- Every number comes from Config/Cutscene.luau.
@@ -18,13 +21,18 @@ local Zones = require(Config:WaitForChild("Zones"))
 
 local Timeline = {}
 
--- Beat names in play order. "EndCard" starts at Total (the Reveal card; it waits for the player).
-Timeline.Order = { "WindUp", "Flight", "Settle", "DogArrive", "Counter", "CounterHold", "Outcome", "EndCard" }
+-- Beat names in play order, per outcome. "EndCard" starts at Total (the Reveal card; it waits for the player).
+-- CAUGHT: the dog grabs the ball and celebrates BEFORE the counter (nothing leaves before the player has seen the
+-- dog be happy). MISSED: the counter (the rarity) comes BEFORE the sniff + bolt (docs/DESIGN.md §8).
+Timeline.OrderCaught = { "WindUp", "Flight", "Settle", "DogArrive", "Grab", "Victory", "Counter", "CounterHold", "HopAway", "EndCard" }
+Timeline.OrderMissed = { "WindUp", "Flight", "Settle", "DogArrive", "Counter", "CounterHold", "Sniff", "Bolt", "EndCard" }
+Timeline.Order = Timeline.OrderCaught
 
 export type Beat = { Name: string, Start: number, Length: number }
 export type Plan = {
 	Rarity: string,
 	Short: boolean,
+	Caught: boolean,
 	Beats: { Beat },
 	ByName: { [string]: Beat },
 	Release: number, -- seconds after the meter release when the ball leaves the hand
@@ -50,23 +58,33 @@ function Timeline.FlightSeconds(serverFlight: number?): number
 	return f.Min + (f.Max - f.Min) * k
 end
 
-function Timeline.Build(rarity: string, flightSeconds: number, opts: { Short: boolean? }?): Plan
+function Timeline.Build(rarity: string, flightSeconds: number, opts: { Short: boolean?, Caught: boolean? }?): Plan
 	local short = opts ~= nil and opts.Short == true
+	local caught = not (opts ~= nil and opts.Caught == false)
+	local order = if caught then Timeline.OrderCaught else Timeline.OrderMissed
+	local B = C.Beats :: any
+	local function beat(name: string): number
+		return if short then 0 else perRarity(B[name], rarity)
+	end
 	local flight = math.clamp(flightSeconds, C.Flight.Min, C.Flight.Max)
 	local lengths: { [string]: number } = {
 		WindUp = C.WindUp.ReleaseAt,
 		Flight = flight,
 		Settle = if short then C.ShortCommon.AfterTouchdown else perRarity(C.Beats.Settle, rarity),
-		DogArrive = if short then 0 else perRarity(C.Beats.DogArrive, rarity),
-		Counter = if short then 0 else perRarity(C.Beats.Counter, rarity),
-		CounterHold = if short then 0 else perRarity(C.Beats.CounterHold, rarity),
-		Outcome = if short then 0 else perRarity(C.Beats.Outcome, rarity),
+		DogArrive = beat("DogArrive"),
+		Grab = beat("Grab"),
+		Victory = beat("Victory"),
+		Counter = beat("Counter"),
+		CounterHold = beat("CounterHold"),
+		HopAway = beat("HopAway"),
+		Sniff = beat("Sniff"),
+		Bolt = beat("Bolt"),
 		EndCard = 0,
 	}
 	local beats: { Beat } = {}
 	local byName: { [string]: Beat } = {}
 	local t = 0
-	for _, name in Timeline.Order do
+	for _, name in order do
 		local b = { Name = name, Start = t, Length = lengths[name] }
 		table.insert(beats, b)
 		byName[name] = b
@@ -75,6 +93,7 @@ function Timeline.Build(rarity: string, flightSeconds: number, opts: { Short: bo
 	return {
 		Rarity = rarity,
 		Short = short,
+		Caught = caught,
 		Beats = beats,
 		ByName = byName,
 		Release = lengths.WindUp,
@@ -84,20 +103,25 @@ function Timeline.Build(rarity: string, flightSeconds: number, opts: { Short: bo
 	}
 end
 
-function Timeline.BudgetTotal(rarity: string): number
-	return Timeline.Build(rarity, C.Budget.ReferenceFlight).Total
+function Timeline.BudgetTotal(rarity: string, caught: boolean?): number
+	return Timeline.Build(rarity, C.Budget.ReferenceFlight, { Caught = caught ~= false }).Total
 end
 
-local function beatIndex(name: string): number
-	return table.find(Timeline.Order, name) or 0 -- unknown phases (e.g. "Hold") are never skippable
-end
-
--- Skip is offered from Skip.FromBeat on, never for Skip.Never rarities. Skipping jumps to the end card.
+-- Skip is offered from Skip.FromBeat on (in the beat's own outcome order), never for Skip.Never rarities and
+-- never before the catch celebration is over (Grab / Victory come before the counter). Skipping jumps to the end
+-- card. Unknown phases (e.g. "Hold") are never skippable.
 function Timeline.CanSkip(rarity: string, beatName: string): boolean
-	if (C.Skip.Never :: any)[rarity] then
+	if (C.Skip.Never :: any)[rarity] or beatName == "EndCard" then
 		return false
 	end
-	return beatIndex(beatName) >= beatIndex(C.Skip.FromBeat) and beatName ~= "EndCard"
+	for _, order in { Timeline.OrderCaught, Timeline.OrderMissed } do
+		local i = table.find(order, beatName)
+		local from = table.find(order, C.Skip.FromBeat)
+		if i and from then
+			return i >= from
+		end
+	end
+	return false
 end
 
 function Timeline.IsShort(rarity: string, hideCommonReveals: boolean?): boolean
@@ -111,8 +135,11 @@ end
 -- The soonest a real client can end this throw's cutscene (seconds after the meter release): skipping at
 -- Skip.FromBeat (never for Skip.Never rarities) or a short Common (Settings.HideCommonReveals), then closing the
 -- end card at once. ThrowService ignores an earlier CutsceneFinished (it finishes the throw at this point).
-function Timeline.EarliestEnd(rarity: string, flightSeconds: number): number
-	local full = Timeline.Build(rarity, flightSeconds)
+function Timeline.EarliestEnd(rarity: string, flightSeconds: number, caught: boolean?): number
+	if caught == nil then
+		return math.min(Timeline.EarliestEnd(rarity, flightSeconds, true), Timeline.EarliestEnd(rarity, flightSeconds, false))
+	end
+	local full = Timeline.Build(rarity, flightSeconds, { Caught = caught })
 	local t = full.Total
 	if rarity == "Common" then
 		t = math.min(t, Timeline.Build(rarity, flightSeconds, { Short = true }).Total)
@@ -124,6 +151,16 @@ function Timeline.EarliestEnd(rarity: string, flightSeconds: number): number
 		end
 	end
 	return t
+end
+
+-- The leaving dog (hop away / bolt) is removed by time + distance, never by a frustum check: never before
+-- Outcome.HopAwayMinSeconds after it started leaving, then once it is RemoveDistance away, or at HopAwayMaxSeconds.
+function Timeline.LeaveDone(elapsed: number, distance: number): boolean
+	local o = C.Outcome
+	if elapsed < o.HopAwayMinSeconds then
+		return false
+	end
+	return distance >= o.RemoveDistance or elapsed >= o.HopAwayMaxSeconds
 end
 
 function Timeline.SafetySeconds(): number

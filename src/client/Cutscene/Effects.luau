@@ -25,8 +25,11 @@ local function anchorPart(pos: Vector3): Part
 end
 
 local function burst(pos: Vector3, colors: { Color3 }, texture: string, count: number, speed: { number }, size: number,
-	lifetime: number, gravity: number, janitor: any?)
+	lifetime: number, gravity: number, janitor: any?, tweak: ((ParticleEmitter) -> ())?, facing: Vector3?): Part
 	local holder = anchorPart(pos)
+	if facing and facing.Magnitude > 1e-3 then
+		holder.CFrame = CFrame.lookAt(pos, pos + facing.Unit) -- Enum.NormalId.Front emits along the facing
+	end
 	local e = Instance.new("ParticleEmitter")
 	local keys = {}
 	for i, c in colors do
@@ -48,12 +51,16 @@ local function burst(pos: Vector3, colors: { Color3 }, texture: string, count: n
 	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(1, 1) })
 	e.Rotation = NumberRange.new(0, 360)
 	e.RotSpeed = NumberRange.new(-180, 180)
+	if tweak then
+		tweak(e)
+	end
 	e.Parent = holder
 	e:Emit(count)
 	if janitor then
 		janitor:Add(holder)
 	end
 	Debris:AddItem(holder, lifetime + 1)
+	return holder
 end
 
 function Effects.Impact(zoneId: string, pos: Vector3, janitor: any?, silent: boolean?)
@@ -70,6 +77,37 @@ end
 
 function Effects.Sparkle(pos: Vector3, color: Color3, janitor: any?)
 	burst(pos, { color, Color3.new(1, 1, 1) }, "rbxasset://textures/particles/sparkles_main.dds", 30, { 4, 10 }, 0.6, 1.0, 6, janitor)
+end
+
+-- Release speed lines: thin bright streaks shooting out of the hand along the throw direction.
+function Effects.SpeedLines(pos: Vector3, dir: Vector3, janitor: any?)
+	local I = C.Impact
+	local d = if dir.Magnitude > 1e-3 then dir.Unit else Vector3.new(0, 0, 1)
+	burst(pos, { Color3.new(1, 1, 1), Color3.fromRGB(220, 240, 255) }, "rbxasset://textures/particles/sparkles_main.dds",
+		I.SpeedLines, I.SpeedLineSpeed, I.SpeedLineSize, I.SpeedLineLifetime, 0, janitor, function(e)
+			e.EmissionDirection = Enum.NormalId.Front
+			e.SpreadAngle = Vector2.new(I.SpeedLineSpread, I.SpeedLineSpread)
+			e.Orientation = Enum.ParticleOrientation.VelocityParallel
+			e.Squash = NumberSequence.new(-2.5) -- long thin streaks along the velocity
+			e.LightEmission = 1
+			e.Drag = 0
+		end, d)
+end
+
+-- Victory confetti: one burst in the rarity colour (`count` particles) with the variant's colours on top.
+function Effects.Confetti(pos: Vector3, color: Color3, count: number, variantColors: { Color3 }?, janitor: any?)
+	local V = C.Victory
+	local function confetti(e: ParticleEmitter)
+		e.SpreadAngle = Vector2.new(55, 55)
+		e.LightEmission = 0.4
+		e.Drag = 1.2
+	end
+	burst(pos, { color, color:Lerp(Color3.new(1, 1, 1), 0.5), Color3.new(1, 1, 1) }, "rbxasset://textures/particles/sparkles_main.dds",
+		count, V.ConfettiSpeed, V.ConfettiSize, V.ConfettiLifetime, -14, janitor, confetti)
+	if variantColors and #variantColors > 0 then
+		burst(pos + Vector3.new(0, 0.4, 0), variantColors, "rbxasset://textures/particles/sparkles_main.dds",
+			math.max(1, math.floor(count * V.VariantConfetti)), V.ConfettiSpeed, V.ConfettiSize * 0.8, V.ConfettiLifetime, -10, janitor, confetti)
+	end
 end
 
 -- Top of the ground under (x, z) near `y`, ignoring characters and cutscene props. Falls back to y.
