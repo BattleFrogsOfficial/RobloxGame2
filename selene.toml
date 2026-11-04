@@ -1,5 +1,0 @@
-std = "roblox"
-
-[lints]
-# Services use os.clock()/os.time() deliberately; shadowing is common in Luau handlers.
-shadowing = "allow"
