@@ -62,13 +62,39 @@ export type CardHandle = {
 	SetSelected: (self: CardHandle, on: boolean) -> (),
 }
 
-Card.Width = 200
+Card.Width = 210
 Card.DefaultSize = UDim2.new(0, Card.Width, 1, -8)
-Card.MaxHeight = 330
+Card.MaxHeight = 350
 local BUTTON_H = 44
 local STRIP_H = 34
 local PAD = 6
 local TOP = 58 -- name + tag block
+
+Card.ArtSize = 128
+
+-- Draw the card art as big as the box allows (multiples of 16 px, at most Card.ArtSize), redrawing when the box
+-- size changes (short phone cards get a smaller icon; pixels stay whole).
+function Card.FitArt(box: GuiObject, make: (px: number) -> GuiObject)
+	local current: GuiObject? = nil
+	local currentPx = 0
+	local function fit()
+		local es = Decor.EffectiveScale(box)
+		local w, h = box.AbsoluteSize.X / es, box.AbsoluteSize.Y / es
+		local px = Card.ArtSize
+		if w > 0 and h > 0 then
+			px = math.clamp(math.floor(math.min(w, h) / 16) * 16, 32, Card.ArtSize)
+		end
+		if px ~= currentPx then
+			if current then
+				current:Destroy()
+			end
+			currentPx = px
+			current = make(px)
+		end
+	end
+	box:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
+	fit()
+end
 
 -- Paint a frame as a rarity card: gradient of the colour (lighter top), Ink outline, rounded corners.
 function Card.Paint(frame: GuiObject, color: Color3): UIGradient
@@ -154,16 +180,19 @@ function Card.new(props: CardProps): CardHandle
 	if props.Preview then
 		props.Preview.Parent = preview
 	elseif props.Icon then
-		Icon.new({
-			Name = props.Icon,
-			Size = 96,
-			Position = UDim2.fromScale(0.5, 0.5),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			ZIndex = z + 1,
-			Recolor = props.IconRecolor,
-			Tint = if props.Silhouette then Theme.Color.Ink else props.IconTint,
-			Parent = preview,
-		})
+		-- the art is drawn as big as the space allows (128 px on desktop, smaller on short phone cards)
+		Card.FitArt(preview, function(px)
+			return Icon.new({
+				Name = props.Icon :: string,
+				Size = px,
+				Position = UDim2.fromScale(0.5, 0.5),
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				ZIndex = z + 1,
+				Recolor = props.IconRecolor,
+				Tint = if props.Silhouette then Theme.Color.Ink else props.IconTint,
+				Parent = preview,
+			})
+		end)
 	end
 	if props.Badge then
 		local badge: Frame = Make("Frame", {
@@ -243,7 +272,7 @@ function Card.new(props: CardProps): CardHandle
 				IconSize = 32,
 				Palette = props.PricePalette or "Slate",
 				TextSize = if #props.Price > 6 then 18 else 20,
-				Size = if both then UDim2.new(0.56, -PAD - 2, 0, BUTTON_H) else UDim2.new(1, -PAD * 2, 0, BUTTON_H),
+				Size = if both then UDim2.new(0.5, -PAD - 2, 0, BUTTON_H) else UDim2.new(1, -PAD * 2, 0, BUTTON_H),
 				Position = rowY,
 				AnchorPoint = Vector2.new(0, 1),
 				Shadow = false,
@@ -263,7 +292,7 @@ function Card.new(props: CardProps): CardHandle
 				IconSize = 32,
 				Palette = "Robux",
 				TextSize = 20,
-				Size = if both then UDim2.new(0.44, -PAD + 2 - 4, 0, BUTTON_H) else UDim2.new(1, -PAD * 2, 0, BUTTON_H),
+				Size = if both then UDim2.new(0.5, -PAD - 2, 0, BUTTON_H) else UDim2.new(1, -PAD * 2, 0, BUTTON_H),
 				Position = UDim2.new(1, -PAD, 1, -PAD),
 				AnchorPoint = Vector2.new(1, 1),
 				Shadow = false,

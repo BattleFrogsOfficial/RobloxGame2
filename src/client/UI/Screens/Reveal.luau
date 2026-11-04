@@ -13,6 +13,8 @@
 --   | |          [ CAUGHT ] stamp            |  [cash] $1.2K/s   |
 --   | +--------------------------------------+  [Keep] / [OK]    |
 --   +------------------------------------------------------------+
+-- Frame (overhaul): the panel look: dark body, heavy Ink outline, a rarity-coloured header band with diagonal
+-- highlight stripes and the outlined rarity word, white outlined name, a rarity-coloured income plate.
 -- Behind it: a darkening scrim, light rays for Epic+ (beams with UIGradient falloff in a frame that turns),
 -- and a rarity-coloured flash on entry; the card pops in (scale) and the $/s number counts up.
 -- Reduced motion: no pop, no ray spin, no dog turning, no count-up. The card and its viewport are built on
@@ -241,8 +243,8 @@ function Reveal.new(parent: Instance)
 			Parent = root,
 		})
 		Decor.Corner(card, Theme.Radius.Panel)
-		Decor.Stroke(card, 4, color)
-		Decor.PaletteGradient(card, Theme.Palette.Paper)
+		Decor.Stroke(card, Theme.Stroke.Panel)
+		card.BackgroundColor3 = Theme.Color.Body
 		Decor.Shadow(card, "Soft")
 		local cur: Current = { Card = card, Rays = nil, Stage = nil, Conns = {}, Closing = false }
 		current = cur
@@ -250,8 +252,10 @@ function Reveal.new(parent: Instance)
 		-- Rarity band: tag left, variant badge right.
 		local band: Frame = Make("Frame", { Name = "Band", BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, BAND), ZIndex = 62, Parent = card })
 		Decor.TopCorners(band, Theme.Radius.Panel)
-		Decor.Gradient(band, color:Lerp(Theme.Color.White, 0.15), color:Lerp(Theme.Color.Ink, 0.25))
-		Label.Pixel({ Name = "RarityTag", Text = string.upper(rarity), TextSize = 18, Size = UDim2.new(0.6, 0, 1, 0), Position = UDim2.fromOffset(Theme.Space.L, 0), ZIndex = 63, Parent = band })
+		Decor.Gradient(band, color:Lerp(Theme.Color.White, 0.25), color:Lerp(Theme.Color.Ink, 0.2))
+		Decor.Stripes(band, { Bands = 4, Strength = 0.75, Rotation = -25, ZIndex = 62 })
+		Make("Frame", { Name = "Rule", BackgroundColor3 = Theme.Color.Ink, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, Theme.Stroke.Panel), Position = UDim2.new(0, 0, 1, 0), AnchorPoint = Vector2.new(0, 1), ZIndex = 63, Parent = band })
+		Label.Display({ Name = "RarityTag", Text = string.upper(rarity), TextSize = 28, Size = UDim2.new(0.6, 0, 1, -2), Position = UDim2.fromOffset(Theme.Space.L, 0), ZIndex = 63, Parent = band })
 		local vIcon = Icon.ForVariant(result.Variant)
 		if vIcon then
 			Icon.new({ Name = vIcon, Size = 32, Position = UDim2.new(1, -Theme.Space.M, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), ZIndex = 63, Parent = band }).Name = "VariantIcon"
@@ -295,7 +299,7 @@ function Reveal.new(parent: Instance)
 
 		local nSize = nameSize(name, colW, if o.Spectator then { 24, 20, 18 } else { 30, 26, 22, 18 })
 		local oneLine = displayWidth(name, nSize) <= colW
-		Label.Display({ Name = "DogName", Text = name, TextSize = nSize, Color = Theme.Color.TextOnPaper, Stroke = false, Wrap = not oneLine, YAlign = Enum.TextYAlignment.Top, Size = UDim2.new(1, 0, 0, math.ceil(nSize * 1.2 * (if oneLine then 1 else 2))), LayoutOrder = 1, ZIndex = 62, Parent = info })
+		Label.Display({ Name = "DogName", Text = name, TextSize = nSize, Wrap = not oneLine, YAlign = Enum.TextYAlignment.Top, Size = UDim2.new(1, 0, 0, math.ceil(nSize * 1.2 * (if oneLine then 1 else 2))), LayoutOrder = 1, ZIndex = 62, Parent = info })
 
 		-- rarity pips: one star per tier, lit up to this dog's tier (a collectible's "grade")
 		local pips: Frame = Make("Frame", { Name = "Pips", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 16), LayoutOrder = 1, ZIndex = 62, Parent = info })
@@ -307,7 +311,7 @@ function Reveal.new(parent: Instance)
 		local function iconRow(order: number, iconName: string, text: string, rowName: string): TextLabel
 			local row: Frame = Make("Frame", { Name = rowName, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 18), LayoutOrder = order, ZIndex = 62, Parent = info })
 			Icon.new({ Name = iconName, Size = 16, Position = UDim2.fromScale(0, 0.5), AnchorPoint = Vector2.new(0, 0.5), ZIndex = 62, Parent = row })
-			return Label.Caption({ Name = "Text", Text = text, Font = Theme.Font.BodyBold, Size = UDim2.new(1, -22, 1, 0), Position = UDim2.fromOffset(22, 0), ZIndex = 62, Parent = row })
+			return Label.Display({ Name = "Text", Text = text, TextSize = 15, Color = Theme.Color.TextMuted, Size = UDim2.new(1, -22, 1, 0), Position = UDim2.fromOffset(22, 0), ZIndex = 62, Parent = row })
 		end
 		iconRow(2, Icon.ForZone(result.ZoneId or ""), string.upper(zoneName(result.ZoneId or "")), "Zone")
 		iconRow(3, "ball_tennis", FormatNumber.Compact(result.Distance or 0) .. " studs", "Distance")
@@ -333,15 +337,15 @@ function Reveal.new(parent: Instance)
 		local plateH = totalSize + 30
 		local plate: Frame = Make("Frame", { Name = "Income", BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, Size = UDim2.fromOffset(colW, plateH), ZIndex = 62, Parent = card })
 		Decor.Corner(plate, Theme.Radius.Card)
-		Decor.Stroke(plate, Theme.Stroke.Panel, if caught then color:Lerp(Theme.Color.Ink, 0.15) else Theme.Color.Track)
+		Decor.Stroke(plate, Theme.Stroke.Card)
 		if caught then
-			Decor.Gradient(plate, color:Lerp(Theme.Color.White, 0.86), color:Lerp(Theme.Color.White, 0.68))
+			Decor.Gradient(plate, color:Lerp(Theme.Color.White, 0.25), color:Lerp(Theme.Color.Ink, 0.15))
 		else
-			Decor.PaletteGradient(plate, Theme.Palette.Bone)
+			Decor.PaletteGradient(plate, Theme.Palette.Dark)
 		end
-		Label.Caption({ Name = "Caption", Text = if caught then "EARNS" else "WOULD HAVE EARNED", Font = Theme.Font.BodyBold, Color = Theme.Color.TextMuted, Size = UDim2.new(1, -Theme.Space.M * 2, 0, 16), Position = UDim2.fromOffset(Theme.Space.M, 5), ZIndex = 63, Parent = plate })
+		Label.Display({ Name = "Caption", Text = if caught then "EARNS" else "WOULD HAVE EARNED", TextSize = 14, Color = if caught then Theme.Color.White else Theme.Color.TextMuted, Size = UDim2.new(1, -Theme.Space.M * 2, 0, 16), Position = UDim2.fromOffset(Theme.Space.M, 5), ZIndex = 63, Parent = plate })
 		Icon.new({ Name = "cash", Size = 32, Position = UDim2.new(0, Theme.Space.S, 1, -5), AnchorPoint = Vector2.new(0, 1), ZIndex = 63, Parent = plate })
-		local total = Label.Display({ Name = "Total", Text = FormatNumber.PerSecond(adult), TextSize = totalSize, Color = if caught then color else Theme.Color.TextMuted, Size = UDim2.new(1, -(Theme.Space.S + 32 + Theme.Space.S + Theme.Space.S), 0, totalSize + 6), Position = UDim2.new(0, Theme.Space.S + 32 + Theme.Space.S, 1, -3), AnchorPoint = Vector2.new(0, 1), ZIndex = 63, Parent = plate })
+		local total = Label.Display({ Name = "Total", Text = FormatNumber.PerSecond(adult), TextSize = totalSize, Color = if caught then Theme.Color.White else Theme.Color.TextMuted, Size = UDim2.new(1, -(Theme.Space.S + 32 + Theme.Space.S + Theme.Space.S), 0, totalSize + 6), Position = UDim2.new(0, Theme.Space.S + 32 + Theme.Space.S, 1, -3), AnchorPoint = Vector2.new(0, 1), ZIndex = 63, Parent = plate })
 
 		-- Buttons (bottom of the column; same buttons and callbacks as always) ------------------------
 		local buttons: Frame = Make("Frame", { Name = "Buttons", BackgroundTransparency = 1, Size = UDim2.new(0, colW, 0, BUTTON_H), Position = UDim2.fromOffset(colX, top + stageH), AnchorPoint = Vector2.new(0, 1), ZIndex = 62, Parent = card })
@@ -350,7 +354,7 @@ function Reveal.new(parent: Instance)
 		if caught then
 			if o.IsDupe and o.OnKeep then
 				count += 1
-				Button.new({ Text = "Keep", Icon = "check", IconSize = 16, Palette = "Grass", Size = UDim2.new(1, 0, 0, BUTTON_H), LayoutOrder = 1, ZIndex = 63, Parent = buttons, OnClick = function()
+				Button.new({ Text = "Keep", Icon = "check", IconSize = 32, Palette = "Grass", Size = UDim2.new(1, 0, 0, BUTTON_H), LayoutOrder = 1, ZIndex = 63, Parent = buttons, OnClick = function()
 					(o.OnKeep :: () -> ())()
 					close()
 				end })
@@ -358,7 +362,7 @@ function Reveal.new(parent: Instance)
 		else
 			if result.WhistleOwned and o.OnWhistle and not o.Spectator then
 				count += 1
-				Button.new({ Text = "Whistle (" .. tostring(result.WhistleCount or 0) .. ")", Icon = "whistle", IconSize = 16, Palette = "Cash", Size = UDim2.new(1, 0, 0, BUTTON_H), LayoutOrder = 1, ZIndex = 63, Parent = buttons, OnClick = function()
+				Button.new({ Text = "Whistle (" .. tostring(result.WhistleCount or 0) .. ")", Icon = "whistle", IconSize = 32, Palette = "Cash", Size = UDim2.new(1, 0, 0, BUTTON_H), LayoutOrder = 1, ZIndex = 63, Parent = buttons, OnClick = function()
 					(o.OnWhistle :: () -> ())()
 					close()
 				end })

@@ -1,9 +1,10 @@
 --!strict
--- Vertical throw power meter: a ProgressBar (Vertical) with 0/25/50/75/100 ticks on the left and the live
--- value riding the fill on the right. The look sells power: empty is thin, dim and desaturated; full is
--- thick, bright and glowing (outer glow frame + stroke + gradient) and pulses when it enters the Perfect band.
---   local m = PowerMeter.new({ Length = 190, Parent = cluster, Position = ..., AnchorPoint = ... })
---   m:SetFraction(0.73)   -- every frame while charging
+-- The throw bar (style guide section 2, "Throw bar"): a tall rounded capsule with a heavy Ink outline, filled
+-- with a gradient from green at the TOP through yellow and orange to red at the BOTTOM, split into 5 segments by
+-- Ink dividers, and a white pill marker (Ink outline) that rides up and down. Top = full power = Perfect (matches
+-- Util/Meter: position 1 = top). The live value 0-100 rides next to the marker in the outlined Shout font.
+--   local m = PowerMeter.new({ Length = 230, Parent = cluster, Position = ..., AnchorPoint = ... })
+--   m:SetFraction(0.73)   -- every frame while the sweep runs
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Game = require(Shared:WaitForChild("Config"):WaitForChild("Game"))
 
@@ -13,15 +14,13 @@ local Theme = require(UI:WaitForChild("Theme"))
 local Motion = require(UI:WaitForChild("Motion"))
 local Decor = require(script.Parent:WaitForChild("Decor"))
 local Label = require(script.Parent:WaitForChild("Label"))
-local ProgressBar = require(script.Parent:WaitForChild("ProgressBar"))
 
 local PowerMeter = {}
 
 export type MeterProps = {
-	Length: number?, -- bar length in canvas px (default 190)
-	MinThickness: number?, -- width when empty (default 10)
-	MaxThickness: number?, -- width when full (default 30)
-	Ticks: { number }?, -- tick values 0..100 (default 0/25/50/75/100)
+	Length: number?, -- capsule height in canvas px (default 230)
+	Thickness: number?, -- capsule width (default 56)
+	Segments: number?, -- default 5
 	Position: UDim2?,
 	AnchorPoint: Vector2?,
 	ZIndex: number?,
@@ -31,39 +30,35 @@ export type MeterProps = {
 
 export type MeterHandle = {
 	Root: Frame,
-	Bar: ProgressBar.BarHandle,
-	Glow: Frame,
+	Capsule: Frame,
+	Marker: Frame,
 	Value: TextLabel,
 	Fraction: number,
+	Width: number,
+	Height: number,
 	SetFraction: (self: MeterHandle, f: number) -> (),
 }
 
-local GLOW_MAX = 8
-local TICK_W = 36
-local VALUE_W = 56
-local PAD_Y = 16
+-- Gradient stops, top -> bottom (UIGradient Rotation 90 runs top to bottom).
+PowerMeter.Colors = {
+	{ 0.0, Color3.fromRGB(92, 232, 84) }, -- green (Perfect)
+	{ 0.32, Color3.fromRGB(196, 240, 70) },
+	{ 0.55, Color3.fromRGB(255, 214, 58) }, -- yellow
+	{ 0.78, Color3.fromRGB(255, 140, 40) }, -- orange
+	{ 1.0, Color3.fromRGB(240, 64, 52) }, -- red
+}
 
-local function lerp(a: number, b: number, t: number): number
-	return a + (b - a) * t
-end
-
--- Colour ramp: lime, desaturated and dark when empty -> saturated, bright gold when full.
-local function rampColors(f: number): (Color3, Color3)
-	local hue = lerp(0.21, 0.13, f)
-	local sat = lerp(0.18, 0.95, f)
-	local val = lerp(0.52, 1, f)
-	return Color3.fromHSV(hue, sat * 0.75, math.min(1, val * 1.04)), Color3.fromHSV(hue - 0.02, sat, val * 0.8)
-end
+local MARKER_OVER = 14 -- the marker sticks out this far on each side
+local MARKER_H = 18
+local VALUE_W = 72
 
 function PowerMeter.new(props: MeterProps): MeterHandle
-	local length = props.Length or 190
-	local minT = props.MinThickness or 10
-	local maxT = props.MaxThickness or 30
+	local length = props.Length or 230
+	local thick = props.Thickness or 56
+	local segments = props.Segments or 5
 	local z = props.ZIndex or 3
-	local half = maxT / 2 + GLOW_MAX
-	local width = 2 * (half + 8 + math.max(TICK_W, VALUE_W))
-	local height = length + 2 * PAD_Y
-	local barTop = PAD_Y
+	local width = thick + 2 * (MARKER_OVER + VALUE_W)
+	local height = length + MARKER_H
 
 	local root: Frame = Make("Frame", {
 		Name = props.Name or "PowerMeter",
@@ -74,109 +69,98 @@ function PowerMeter.new(props: MeterProps): MeterHandle
 		ZIndex = z,
 	})
 
-	-- Glow sits behind the bar and grows with the fill.
-	local glow: Frame = Make("Frame", {
-		Name = "Glow",
-		BackgroundColor3 = Theme.Palette.Cash.Top,
-		BackgroundTransparency = 1,
+	local capsule: Frame = Make("Frame", {
+		Name = "Capsule",
+		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(minT, length),
-		Position = UDim2.fromOffset(width / 2, barTop + length / 2),
-		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(thick, length),
+		Position = UDim2.new(0.5, 0, 0, MARKER_H / 2),
+		AnchorPoint = Vector2.new(0.5, 0),
 		ZIndex = z,
 		Parent = root,
 	})
-	Decor.Corner(glow, Theme.Radius.Pill)
-	local glowGradient = Decor.Gradient(glow, Theme.Palette.Cash.Top, Theme.Palette.Cash.Bottom)
-	local glowStroke = Decor.Stroke(glow, 0, Theme.Palette.Cash.Top)
-	glowStroke.Transparency = 1
-
-	local bar = ProgressBar.new({
-		Name = "Bar",
-		Vertical = true,
-		Palette = "Tennis",
-		Size = UDim2.fromOffset(minT, length),
-		Position = UDim2.fromOffset(width / 2, barTop + length / 2),
-		AnchorPoint = Vector2.new(0.5, 0.5),
+	Decor.Corner(capsule, math.floor(thick / 2))
+	Decor.Stroke(capsule, 5)
+	local kps = {}
+	for _, c in PowerMeter.Colors do
+		table.insert(kps, ColorSequenceKeypoint.new(c[1], c[2]))
+	end
+	Make("UIGradient", { Color = ColorSequence.new(kps), Rotation = 90, Parent = capsule })
+	-- vertical gloss stripe down the left of the capsule (the toy plastic shine)
+	local gloss: Frame = Make("Frame", {
+		Name = "Gloss",
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 0.6,
+		BorderSizePixel = 0,
+		Size = UDim2.new(0, math.max(6, math.floor(thick * 0.16)), 1, -thick),
+		Position = UDim2.new(0, math.floor(thick * 0.2), 0, thick / 2),
 		ZIndex = z + 1,
-		Parent = root,
+		Parent = capsule,
 	})
-	bar.Root.BackgroundColor3 = Theme.Color.InkSoft
-	bar.Root.BackgroundTransparency = 0.25
-	bar.Band.BackgroundTransparency = 0.55
-	bar:SetBand(Game.Meter.GoodMin, 1, Theme.Palette.Cash.Bottom)
-	bar:SetMarker(Game.Meter.PerfectMin)
-	bar.Stroke.Thickness = 2
-
-	-- Ticks: label + a short mark, left of the bar.
-	for _, v in props.Ticks or { 0, 25, 50, 75, 100 } do
-		local y = barTop + length * (1 - v / 100)
+	Decor.Corner(gloss, 999)
+	-- segment dividers (Ink lines across the capsule)
+	for i = 1, segments - 1 do
 		Make("Frame", {
-			Name = "Mark_" .. v,
-			BackgroundColor3 = Theme.Color.White,
+			Name = "Divider" .. i,
+			BackgroundColor3 = Theme.Color.Ink,
 			BorderSizePixel = 0,
-			Size = UDim2.fromOffset(6, 2),
-			Position = UDim2.fromOffset(width / 2 - maxT / 2 - 4, y),
-			AnchorPoint = Vector2.new(1, 0.5),
+			Size = UDim2.new(1, 0, 0, 5),
+			Position = UDim2.new(0, 0, i / segments, 0),
+			AnchorPoint = Vector2.new(0, 0.5),
 			ZIndex = z + 2,
-			Parent = root,
-		})
-		Label.Display({
-			Name = "Tick_" .. v,
-			Text = tostring(v),
-			TextSize = Theme.Text.Caption,
-			Size = UDim2.fromOffset(TICK_W, 16),
-			Position = UDim2.fromOffset(width / 2 - maxT / 2 - 14, y),
-			AnchorPoint = Vector2.new(1, 0.5),
-			XAlign = Enum.TextXAlignment.Right,
-			ZIndex = z + 2,
-			Parent = root,
+			Parent = capsule,
 		})
 	end
 
-	-- Live value rides the top of the fill.
-	local value = Label.Display({
+	-- the marker: a white pill wider than the capsule
+	local marker: Frame = Make("Frame", {
+		Name = "Marker",
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(thick + 2 * MARKER_OVER, MARKER_H),
+		Position = UDim2.new(0.5, 0, 0, height - MARKER_H / 2),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		ZIndex = z + 4,
+		Parent = root,
+	})
+	Decor.Corner(marker, 999)
+	Decor.Stroke(marker, 4)
+	Decor.Shadow(marker, "Hard")
+	Make("Frame", {
+		Name = "Shine",
+		BackgroundColor3 = Theme.Color.Track,
+		BackgroundTransparency = 0.55,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -12, 0, 4),
+		Position = UDim2.new(0.5, 0, 1, -4),
+		AnchorPoint = Vector2.new(0.5, 1),
+		ZIndex = z + 5,
+		Parent = marker,
+	})
+	local value = Label.Shout({
 		Name = "Value",
 		Text = "0",
-		TextSize = Theme.Text.H2,
-		Size = UDim2.fromOffset(VALUE_W, 28),
-		Position = UDim2.fromOffset(width / 2 + maxT / 2 + 10, barTop + length),
+		TextSize = 30,
+		Size = UDim2.fromOffset(VALUE_W, 36),
+		Position = UDim2.new(0.5, thick / 2 + MARKER_OVER + 8, 0, height - MARKER_H / 2),
 		AnchorPoint = Vector2.new(0, 0.5),
 		XAlign = Enum.TextXAlignment.Left,
-		ZIndex = z + 3,
+		ZIndex = z + 4,
 		Parent = root,
 	})
 
-	local handle = { Root = root, Bar = bar, Glow = glow, Value = value, Fraction = 0 } :: any
+	local handle = { Root = root, Capsule = capsule, Marker = marker, Value = value, Fraction = 0, Width = width, Height = height } :: any
 	local wasPerfect = false
-	function handle.SetFraction(self: MeterHandle, f: number)
+	function handle.SetFraction(_, f: number)
 		local c = math.clamp(f, 0, 1)
-		self.Fraction = c
-		local eased = c * c -- power builds late: most of the width and glow arrive near the top
-		local thick = lerp(minT, maxT, c)
-		bar.Root.Size = UDim2.fromOffset(thick, length)
-		bar:SetFraction(c)
-		local top, bottom = rampColors(c)
-		bar:SetColors(top, bottom)
-		bar.Stroke.Thickness = lerp(2, 3, c)
-		bar.Root.BackgroundTransparency = lerp(0.35, 0.15, c)
-
-		local pad = GLOW_MAX * eased
-		glow.Size = UDim2.fromOffset(thick + 2 * pad, length + 2 * pad)
-		glow.BackgroundTransparency = lerp(1, 0.45, eased)
-		glowGradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, top), ColorSequenceKeypoint.new(1, bottom) })
-		glowStroke.Color = top
-		glowStroke.Thickness = lerp(0, 5, eased)
-		glowStroke.Transparency = lerp(1, 0.35, eased)
-
-		local pct = math.floor(c * 100 + 0.5)
-		value.Text = tostring(pct)
-		value.Position = UDim2.fromOffset(width / 2 + maxT / 2 + 10, barTop + length * (1 - c))
-		value.TextColor3 = if c >= Game.Meter.PerfectMin then Theme.Palette.Cash.Top else Theme.Color.White
-
+		handle.Fraction = c
+		local y = MARKER_H / 2 + (1 - c) * length
+		marker.Position = UDim2.new(0.5, 0, 0, y)
+		value.Position = UDim2.new(0.5, thick / 2 + MARKER_OVER + 8, 0, y)
+		value.Text = tostring(math.floor(c * 100 + 0.5))
 		local perfect = c >= Game.Meter.PerfectMin
+		value.TextColor3 = if perfect then PowerMeter.Colors[1][2] else Theme.Color.White
 		if perfect and not wasPerfect then
-			Motion.Pulse(bar.Root, 1.08)
 			Motion.Pulse(value, 1.15)
 		end
 		wasPerfect = perfect

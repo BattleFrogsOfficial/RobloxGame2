@@ -1,6 +1,7 @@
 --!strict
 -- Kennel Book: zone tabs, milestone bar with claim buttons, virtualised grid of the zone's base dogs with
--- variant badges. Unknown dogs are silhouettes with a hidden name.
+-- variant badges. Known dogs are rarity-coloured cards with the dog in its own coat colours; unknown dogs are dark
+-- cards with an ink silhouette and a hidden name.
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = Shared:WaitForChild("Config")
 local Util = Shared:WaitForChild("Util")
@@ -21,6 +22,7 @@ local Tabs = require(Components:WaitForChild("Tabs"))
 local Icon = require(Components:WaitForChild("Icon"))
 local Label = require(Components:WaitForChild("Label"))
 local Button = require(Components:WaitForChild("Button"))
+local Card = require(Components:WaitForChild("Card"))
 local ProgressBar = require(Components:WaitForChild("ProgressBar"))
 local VirtualGrid = require(Components:WaitForChild("VirtualGrid"))
 
@@ -33,12 +35,12 @@ export type BookDeps = {
 	OnClose: () -> (),
 }
 
-local CELL = Vector2.new(118, 142)
+local CELL = Vector2.new(124, 156)
 
 local REWARD_TEXT = { [25] = "Cash", [50] = "+2% Luck", [75] = "Trophy", [100] = "Title" }
 
 function Book.new(deps: BookDeps)
-	local panel = Panel.new({ Title = "Kennel Book", Icon = "book", Palette = "Purple", Parent = deps.Parent, OnClose = deps.OnClose, Name = "Book" })
+	local panel = Panel.new({ Title = "Kennel Book", Icon = "book", Parent = deps.Parent, OnClose = deps.OnClose, Name = "Book" })
 	local body = panel.Body
 	Decor.List(body, Enum.FillDirection.Vertical, Theme.Space.M)
 
@@ -50,7 +52,7 @@ function Book.new(deps: BookDeps)
 
 	-- Milestone strip
 	local strip: Frame = Make("Frame", { Name = "Milestones", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 76), LayoutOrder = 2, ZIndex = 53, Parent = body })
-	local progress = ProgressBar.new({ Name = "Progress", Palette = "Purple", Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 0), ZIndex = 54, Label = "0 / 80", Parent = strip })
+	local progress = ProgressBar.new({ Name = "Progress", Palette = "Cash", Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 0), ZIndex = 54, Label = "0 / 80", Parent = strip })
 	local claims: Frame = Make("Frame", { Name = "Claims", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 44), Position = UDim2.fromOffset(0, 32), ZIndex = 54, Parent = strip })
 	Decor.List(claims, Enum.FillDirection.Horizontal, Theme.Space.S)
 	local claimButtons: { [number]: Button.ButtonHandle } = {}
@@ -106,20 +108,18 @@ function Book.new(deps: BookDeps)
 	local function createCell(): GuiObject
 		local cell: Frame = Make("Frame", { Name = "BookCell", BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 54 })
 		Decor.Corner(cell, Theme.Radius.Card)
-		Decor.Stroke(cell, 2)
-		Decor.PaletteGradient(cell, Theme.Palette.Paper)
-		local preview: Frame = Make("Frame", { Name = "Preview", BackgroundColor3 = Theme.Color.PaperShade, BorderSizePixel = 0, Size = UDim2.new(1, -12, 0, 72), Position = UDim2.fromOffset(6, 6), ZIndex = 55, Parent = cell })
-		Decor.Corner(preview, Theme.Radius.Card - 2)
-		Decor.Stroke(preview, 3, Theme.Color.Track)
-		Icon.new({ Name = "dog", Size = 48, Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), ZIndex = 56, Parent = preview }).Name = "DogIcon"
-		local badges: Frame = Make("Frame", { Name = "Badges", BackgroundTransparency = 1, Size = UDim2.new(1, -8, 0, 16), Position = UDim2.new(0, 4, 1, -4), AnchorPoint = Vector2.new(0, 1), ZIndex = 57, Parent = preview })
+		Decor.Stroke(cell, Theme.Stroke.Card)
+		Card.Paint(cell, Theme.Color.BodyRaised)
+		local preview: Frame = Make("Frame", { Name = "Preview", BackgroundTransparency = 1, Size = UDim2.new(1, -8, 0, 72), Position = UDim2.fromOffset(4, 4), ZIndex = 55, Parent = cell })
+		Icon.new({ Name = "dog", Size = 64, Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), ZIndex = 56, Parent = preview }).Name = "DogIcon"
+		local badges: Frame = Make("Frame", { Name = "Badges", BackgroundTransparency = 1, Size = UDim2.new(1, -8, 0, 16), Position = UDim2.new(0, 4, 0, 2), ZIndex = 57, Parent = preview })
 		Decor.List(badges, Enum.FillDirection.Horizontal, 2, Enum.HorizontalAlignment.Right)
 		for i, v in Rarities.VariantOrder do
 			local ic = Icon.new({ Name = Icon.ForVariant(v) :: string, Size = 16, LayoutOrder = i, ZIndex = 58, Parent = badges })
 			ic.Name = "Badge_" .. v
 		end
-		Label.Display({ Name = "Title", Text = "", TextSize = Theme.Text.Caption, Color = Theme.Color.TextOnPaper, Stroke = false, Font = Theme.Font.BodyBold, Size = UDim2.new(1, -8, 0, 36), Position = UDim2.fromOffset(4, 82), XAlign = Enum.TextXAlignment.Center, YAlign = Enum.TextYAlignment.Top, Wrap = true, ZIndex = 55, Parent = cell })
-		Label.Caption({ Name = "Rarity", Text = "", Size = UDim2.new(1, -8, 0, 14), Position = UDim2.new(0, 4, 1, -6), AnchorPoint = Vector2.new(0, 1), XAlign = Enum.TextXAlignment.Center, Font = Theme.Font.BodyBold, ZIndex = 55, Parent = cell })
+		Label.Display({ Name = "Title", Text = "", TextSize = 15, Size = UDim2.new(1, -8, 0, 40), Position = UDim2.fromOffset(4, 80), XAlign = Enum.TextXAlignment.Center, YAlign = Enum.TextYAlignment.Top, Wrap = true, ZIndex = 55, Parent = cell })
+		Label.Display({ Name = "Rarity", Text = "", TextSize = 14, Size = UDim2.new(1, -8, 0, 18), Position = UDim2.new(0, 4, 1, -6), AnchorPoint = Vector2.new(0, 1), XAlign = Enum.TextXAlignment.Center, ZIndex = 55, Parent = cell })
 		return cell
 	end
 
@@ -131,13 +131,13 @@ function Book.new(deps: BookDeps)
 		end
 		local owned = State.BookOwned(def.Id)
 		local color = Theme.RarityColor(def.Rarity)
+		Card.Paint(cell, if owned then color else Theme.Color.BodyRaised)
 		local preview = cell:FindFirstChild("Preview") :: Frame
-		;(preview:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = if owned then color else Theme.Color.Track
 		local dogIcon = preview:FindFirstChild("DogIcon") :: Frame
-		for _, px in dogIcon:GetChildren() do
-			if px:IsA("Frame") then
-				px.BackgroundTransparency = if owned then 0 else 0.55
-			end
+		if owned then
+			Icon.Set(dogIcon, "dog", Icon.DogColors(def) or {})
+		else
+			Icon.Set(dogIcon, "dog", nil, Theme.Color.Ink) -- silhouette
 		end
 		local variants = State.BookVariants(def.Id)
 		local badges = preview:FindFirstChild("Badges") :: Frame
@@ -152,8 +152,8 @@ function Book.new(deps: BookDeps)
 		end
 		;(cell:FindFirstChild("Title") :: TextLabel).Text = if owned then def.Name else "? ? ?"
 		local rl = cell:FindFirstChild("Rarity") :: TextLabel
-		rl.Text = string.upper(def.Rarity)
-		rl.TextColor3 = color
+		rl.Text = def.Rarity
+		rl.TextColor3 = if owned then Card.TagColor(color) else color
 	end
 
 	local grid = VirtualGrid.new({ Parent = body, Size = UDim2.new(1, 0, 1, -(52 + 76 + Theme.Space.M * 2)), LayoutOrder = 3, CellSize = CELL, Gap = Theme.Space.S, Count = 0, Create = createCell, Render = renderCell })
@@ -169,7 +169,7 @@ function Book.new(deps: BookDeps)
 		refresh()
 	end })
 
-	local totals = Label.Display({ Name = "Totals", Text = "", TextSize = Theme.Text.Body, Size = UDim2.fromOffset(260, Panel.HeaderHeight), Position = UDim2.new(1, -64, 0, 0), AnchorPoint = Vector2.new(1, 0), XAlign = Enum.TextXAlignment.Right, ZIndex = 54, Parent = panel.Header })
+	local totals = Label.Display({ Name = "Totals", Text = "", TextSize = 20, Size = UDim2.fromOffset(260, Panel.HeaderHeight), Position = UDim2.new(1, -(Button.CloseSize + 24), 0, 0), AnchorPoint = Vector2.new(1, 0), XAlign = Enum.TextXAlignment.Right, ZIndex = 54, Parent = panel.Header })
 	local function refreshTotals()
 		local owned, total = 0, 0
 		for _, z in Zones do

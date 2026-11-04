@@ -1223,20 +1223,22 @@ big("bone", _bone())
 
 
 def _arm():
+    # the flexed-arm "strength" sign: upper arm lying along the bottom, the bicep peak on top of it, the forearm
+    # standing up on the right and the fist on top, each part separated by an ink crease so it reads at 32 px.
     c = Canvas()
-    upper = capsule(6.0, 25.5, 19.5, 25.5, 4.6)
-    bicep = circle(11.0, 20.0, 6.8)
-    fore = capsule(20.0, 25.0, 22.5, 12.0, 4.0)
-    fist = union(circle(22.0, 8.5, 5.0), capsule(16.5, 9.0, 18.0, 12.5, 2.2))
+    upper = capsule(5.5, 26.0, 20.0, 26.0, 3.9)
+    bicep = ellipse(12.5, 20.5, 7.2, 5.6)
+    fore = capsule(21.0, 25.5, 23.5, 13.0, 3.6)
+    fist = union(ellipse(23.0, 8.8, 5.2, 4.6), circle(18.2, 10.6, 2.4))
     shape = union(upper, bicep, fore, fist)
     c.paint(shape, bevel(shape, ("a", "G", "A"), 1.8))
-    c.paint(lambda x, y: shape(x, y) and not shape(x + 3.0, y + 3.0), "H")
-    # ink creases: under the bicep peak, elbow, and wrist; knuckles
-    c.paint(lambda x, y: abs(_m.hypot(x - 11.0, y - 20.0) - 6.8) < 0.75 and x > 14.0 and y < 26 and fore(x, y), "k")
-    c.paint(lambda x, y: abs(_m.hypot(x - 22.0, y - 8.5) - 5.0) < 0.75 and y > 11.0 and fore(x, y), "k")
-    c.paint(capsule(18.5, 6.0, 24.5, 5.0, 0.5), "A")
-    c.paint(capsule(19.0, 9.0, 24.0, 8.5, 0.5), "A")
-    c.paint(ellipse(8.0, 17.0, 2.6, 1.5), "w")
+    c.paint(lambda x, y: shape(x, y) and not shape(x + 2.6, y + 2.6), "H")
+    # ink creases: bicep against the forearm, the wrist, the fist's fingers
+    c.paint(lambda x, y: abs(((x - 12.5) / 7.2) ** 2 + ((y - 20.5) / 5.6) ** 2 - 1) < 0.22 and x > 17.0 and y < 25.0, "k")
+    c.paint(lambda x, y: abs(((x - 23.0) / 5.2) ** 2 + ((y - 8.8) / 4.6) ** 2 - 1) < 0.25 and y > 11.0, "k")
+    c.paint(capsule(20.5, 7.2, 26.0, 6.4, 0.45), "A")
+    c.paint(capsule(20.5, 9.8, 26.5, 9.2, 0.45), "A")
+    c.paint(ellipse(10.0, 17.8, 2.8, 1.5), "w")
     return c
 
 

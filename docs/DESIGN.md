@@ -50,7 +50,7 @@
 | 2 | **Skill in, luck out** | The throw itself is skill: you time a meter, and a better release goes further and reaches richer zones. What comes back is luck, and every odd is posted in-game. |
 | 3 | **Losses sting but are fair** | A missed catch shows you exactly what you lost, then the dog runs into the plaza where everyone can see it. The visible Lucky Streak and the pre-bought protection items stop a loss from feeling like a scam. |
 | 4 | **Your yard is your trophy case** | Dogs roam your yard, earn money and grow from puppy to adult. The Kennel Book is a permanent record of everything you have ever caught. |
-| 5 | **Social, not competitive-toxic** | 6 players share a plaza and one throwing platform (they queue for it), and see each other's throws, runaways, squirrel chases and broadcasts. There is no PvP stealing. |
+| 5 | **Social, not competitive-toxic** | 6 players share a plaza and one big brown throw zone at the cliff edge (everyone in it can throw at once, no turns), and see each other's throws, runaways, squirrel chases and broadcasts. There is no PvP stealing. |
 
 **Explicit non-goals (v1):** no rebirth system, no hunger or care meters, no trading, no PvP stealing, no auto-throw.
 
@@ -513,11 +513,11 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 
 | Time | Beat | Notes |
 |------|------|-------|
-| 0:00 | Spawn at a `PlazaSpawn` on the plaza. An arrow points to the throwing platform at the cliff edge (walk straight onto the flush deck). | The yard is auto-assigned and the YardSign shows your name. |
-| 0:10 | On the deck (queue if others are there). **Tutorial throw:** "Click to throw", then click again near the top of the meter. The meter runs at half speed for this throw only, client and server alike (`IsTutorial`). | Server forces Backyard, a Common and **a guaranteed catch**. |
+| 0:00 | Spawn at a `PlazaSpawn` on the plaza. An arrow points to the brown throw zone at the cliff edge (walk into it; the bar pops up by itself). | The yard is auto-assigned and the YardSign shows your name. |
+| 0:10 | In the zone. **Tutorial throw:** the bar is already sweeping; "Tap to throw!" ("Click to throw!" on desktop): one tap near the top of the bar. The meter runs at half speed for this throw only, client and server alike (`IsTutorial`). | Server forces Backyard, a Common and **a guaranteed catch**. |
 | 0:20 | **Cutscene** (Common length, ~5.75 s) → end card "+$1/s". | It cannot be skipped this first time. |
 | 0:30 | Guide arrow to your yard. The puppy appears at a DogSpot, a "+$" floater appears, and a tooltip explains puppy → adult (Common: 5 min). | |
-| 0:50 | "Throw again!" Second turn (back of the line if others are queued) with normal odds and normal meter. The catch chance line on the HUD is highlighted. | |
+| 0:50 | "Throw again!" The bar comes back by itself while you stay in the zone; second throw with normal odds and normal meter. The catch chance line on the HUD is highlighted. | |
 | 1:20 | Cash ≥ the first training upgrade price (starter cash $50). Arrow to the training station → a few reps, then the shop panel's Yard tab → **first training purchase** → the power cap rises and the reach line updates. | Starter cash could instead buy one Rubber Ball throw; the guide points at training first. |
 | 1:50 | Tooltips for the odds panel, Lucky Streak and Kennel Book, then `TutorialDone = true`. | Each tooltip is shown once. |
 
@@ -562,7 +562,7 @@ Caught: arrive → grab → victory → counter → hop away. Missed: arrive →
 
 A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums every beat per rarity and outcome against `Budget[rarity]` (caught, the longer timeline) and `Budget.Missed[rarity]`. The Reveal end card then closes itself after `EndCard.AutoClose` (5 s Common ... 10 s Mythic) unless the player closes it first.
 
-**Server timeout.** `Config/Timers.luau` computes `Timers.Cutscene[rarity]` from this file: `Budget + (Flight.Max - ReferenceFlight) + Fallback.HoldMax + EndCard.AutoClose + Return.Time` = **20.05 / 22.0 / 23.95 / 26.15 / 28.35 / 30.75 s** (Common ... Mythic; `Budget` is the caught total, the longer outcome; was 16.75 ... 28.25 s). `ThrowService` finishes a throw on its own at release + `FlightTime` + that + `Timers.CutscenePadding` (5 s) if no `CutsceneFinished` arrives, so it never cuts a real cutscene short. A `CutsceneFinished` sooner than `0.9 × Timeline.EarliestEnd` (the Skip point, or the short-Common end, at this throw's on-screen flight; the sooner of the caught / missed timelines when the outcome is not passed) is held to that time. The platform turn ends `MinSecondsBetweenThrows` after the throw finishes, so the next player in line waits for the real cutscene, never for the timeout unless the thrower disconnects or stalls. The HUD's own safety unlock (`ui.Config.ReleaseSafetySeconds` = `Timeline.SafetySeconds()`, ~11.8 s) only covers a release the server refused.
+**Server timeout.** `Config/Timers.luau` computes `Timers.Cutscene[rarity]` from this file: `Budget + (Flight.Max - ReferenceFlight) + Fallback.HoldMax + EndCard.AutoClose + Return.Time` = **20.05 / 22.0 / 23.95 / 26.15 / 28.35 / 30.75 s** (Common ... Mythic; `Budget` is the caught total, the longer outcome; was 16.75 ... 28.25 s). `ThrowService` finishes a throw on its own at release + `FlightTime` + that + `Timers.CutscenePadding` (5 s) if no `CutsceneFinished` arrives, so it never cuts a real cutscene short. A `CutsceneFinished` sooner than `0.9 × Timeline.EarliestEnd` (the Skip point, or the short-Common end, at this throw's on-screen flight; the sooner of the caught / missed timelines when the outcome is not passed) is held to that time. The thrower's next ChargeBegin is accepted `MinSecondsBetweenThrows` after the throw finishes, so the bar returns after the real cutscene, never after the timeout unless the client disconnects or stalls. Other players in the zone are never blocked (no turns). The HUD's own safety unlock (`ui.Config.ReleaseSafetySeconds` = `Timeline.SafetySeconds()`, ~11.8 s) only covers a release the server refused.
 
 ### 20.4 Rules
 
@@ -732,17 +732,17 @@ The panel also shows the live ThrowPower and the zone a Good throw reaches. Trai
 
 | File | Owns | Owner workstream |
 |------|------|------------------|
-| `src/shared/Config/Layout.luau` | world coordinates: `HubY` (plateau 40) / `GroundY` (field 0), yards, street, plaza, throw line (Y 40), flush platform (deck, throw spot, queue spots), cliff edge guard, shop + training positions, field, render cap | shared contract |
+| `src/shared/Config/Layout.luau` | world coordinates: `HubY` (plateau 40) / `GroundY` (field 0), yards, street, plaza, throw line (Y 40), the brown `ThrowZone` rect (x -50..50, Z 40..60; `Platform.ThrowSpot` kept as its centre for older code), cliff edge guard, shop + training positions, field, render cap | shared contract |
 | `src/shared/Config/Zones.luau` | 9 zones, distance bands, BaseIncome, theme colours | shared contract |
 | `src/shared/Config/Rarities.luau` | tier odds, catch, IncomeMult, PerZone, variants, LuckyStreakMisses | shared contract |
 | `src/shared/Remotes.luau` | remote names + payload shapes | shared contract |
-| `src/shared/Config/Game.luau` | Name, WalkSpeed / JumpPower, meter/quality bands, throw (LaunchHeight, scatter), platform queue (StandRadius tolerance, TurnStartSeconds), luck caps, rate limits, CutsceneTestMode | C1 server |
+| `src/shared/Config/Game.luau` | Name, WalkSpeed / JumpPower, meter/quality bands, throw (LaunchHeight, scatter, MaxChargeSeconds idle cancel, MinRestartSeconds), `ThrowZone` (SampleInterval, YTolerance, EdgeMargin), luck caps, rate limits, CutsceneTestMode | C1 server |
 | `src/shared/Config/Balls.luau` | ball RangeMult, luck shift, price per purchase, Consumable / Uses, MaxOwned | C1 server |
 | `src/shared/Config/Training.luau` | the one station ("Main"): gain, cooldown, range; upgrades (cost, mult, power caps) | C1 server |
 | `src/shared/Config/Shop.luau` | in-game shop items, prices, boost effects, slot prices | C1 server |
 | `src/shared/Config/Timers.luau` | growth times, daily walk, squirrel cadence, runaway seconds, offline cap; the server cutscene timeout `Cutscene[rarity]` (computed from `Config/Cutscene.luau`) + `CutscenePadding` | C1 server |
 | `src/shared/Config/Cutscene.luau` | every throw-cutscene timing and tunable, one comment each: per-rarity beats + budgets, wind-up / pose, flight remap + POV camera, landing + impact FX, dog, odds counter, outcome, end card auto-close, return, skip / short Common / fallback / reduced motion / spectator / test rules, sound ids | cutscene |
 | `src/shared/Config/Products.luau` | gamepass & dev product IDs → effects | C1 server |
-| `src/shared/Config/WorldTheme.luau` | materials and colours for the world builder: plaza, platform, walls (per zone), field, lighting + Atmosphere haze | D world |
+| `src/shared/Config/WorldTheme.luau` | materials and colours for the world builder: plaza, throw zone, walls (per zone), field, lighting + Atmosphere haze | D world |
 | `src/shared/Config/Icons.luau` | uploaded pixel-icon asset ids (icons are generated by `tools/icons.py`) | UI |
 | `src/shared/Data/Dogs.luau` | the 720-dog roster (generated) | A roster |

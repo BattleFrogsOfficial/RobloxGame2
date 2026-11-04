@@ -58,6 +58,12 @@ function Theme.RarityColor(rarity: string?): Color3
 	return if tier then tier.Color else Theme.Color.Track
 end
 
+-- Each rarity is also a palette (toasts, banners): Theme.Palette.Epic etc.
+for tier, def in Rarities.Tiers :: any do
+	local c: Color3 = def.Color
+	Theme.Palette[tier] = { Top = c:Lerp(Color3.new(1, 1, 1), 0.25), Bottom = c:Lerp(Color3.new(0, 0, 0), 0.2), Text = Color3.new(1, 1, 1) }
+end
+
 Theme.Variant = {
 	Gold = rgb("#FFD24A"),
 	Shadow = rgb("#2A1B3D"),

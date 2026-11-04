@@ -87,7 +87,7 @@ function Button.new(props: ButtonProps): ButtonHandle
 			ZIndex = z,
 			Parent = root,
 		})
-		Decor.Padding(row, 0, Theme.Space.M)
+		Decor.Padding(row, 0, Theme.Space.S)
 		Decor.List(row, Enum.FillDirection.Horizontal, Theme.Space.S, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
 		iconFrame = Icon.new({ Name = props.Icon, Size = props.IconSize or 32, LayoutOrder = 1, ZIndex = z, Parent = row })
 		label = Label.Display({
@@ -242,21 +242,6 @@ function Button.Close(parent: Instance, onClick: () -> ()): ButtonHandle
 		AnchorPoint = Vector2.new(1, 0),
 		Radius = 8,
 		ZIndex = 60,
-		Parent = parent,
-		OnClick = onClick,
-	})
-end
-
-return Button.new({
-		Name = "Close",
-		Icon = "close",
-		IconSize = 16,
-		Palette = "Danger",
-		Size = UDim2.fromOffset(44, 44),
-		Position = UDim2.new(1, 10, 0, -10),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Radius = 999,
-		ZIndex = 10,
 		Parent = parent,
 		OnClick = onClick,
 	})

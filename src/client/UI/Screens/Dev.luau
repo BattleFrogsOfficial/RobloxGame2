@@ -54,7 +54,7 @@ function Dev.new(deps: Deps)
 
 	local function placement(beside: boolean): (UDim2, Vector2)
 		if touch then
-			local y = E + 52 + 6 + 48 + Theme.Space.M -- under the side-menu row (same row as the test pill)
+			local y = E + 58 + Theme.Space.S + 52 + Theme.Space.S -- under the side-menu row (same row as the test pill)
 			local x = if beside then E + TEST_W + Theme.Space.S else E
 			return UDim2.fromOffset(x, y), Vector2.new(0, 0)
 		end
@@ -77,7 +77,7 @@ function Dev.new(deps: Deps)
 	})
 	handle.Pill = pill
 
-	local panel = Panel.new({ Title = "Dev tools", Icon = "bolt", Palette = "Purple", Parent = deps.Parent, Name = "DevPanel", Width = 720, Height = 560, OnClose = function()
+	local panel = Panel.new({ Title = "Dev tools", Icon = "bolt", Parent = deps.Parent, Name = "DevPanel", Width = 720, Height = 560, OnClose = function()
 		deps.Router.Close()
 	end })
 	handle.Panel = panel
@@ -139,10 +139,10 @@ function Dev.new(deps: Deps)
 	-- extras
 	local extraBox = Panel.Section(scroll, "Test consumable balls", 4)
 	local extraRow = row(extraBox, "ExtraButtons", 1)
-	Button.new({ Name = "AddCash", Text = "+" .. FormatNumber.Money(DevTools.CashAmount), Icon = "cash", IconSize = 16, Palette = "Cash", TextSize = Theme.Text.Body, Size = UDim2.new(0.5, -4, 0, 44), Shadow = false, LayoutOrder = 1, ZIndex = 56, Parent = extraRow, OnClick = function()
+	Button.new({ Name = "AddCash", Text = "+" .. FormatNumber.Money(DevTools.CashAmount), Icon = "cash", IconSize = 32, Palette = "Cash", TextSize = Theme.Text.Body, Size = UDim2.new(0.5, -4, 0, 44), Shadow = false, LayoutOrder = 1, ZIndex = 56, Parent = extraRow, OnClick = function()
 		run("AddCash", nil)
 	end })
-	Button.new({ Name = "GiveBalls", Text = ("+%d balls"):format(DevTools.BallAmount), Icon = "ball_rubber", IconSize = 16, Palette = "Danger", TextSize = Theme.Text.Body, Size = UDim2.new(0.5, -4, 0, 44), Shadow = false, LayoutOrder = 2, ZIndex = 56, Parent = extraRow, OnClick = function()
+	Button.new({ Name = "GiveBalls", Text = ("+%d balls"):format(DevTools.BallAmount), Icon = "ball_rubber", IconSize = 32, Palette = "Danger", TextSize = Theme.Text.Body, Size = UDim2.new(0.5, -4, 0, 44), Shadow = false, LayoutOrder = 2, ZIndex = 56, Parent = extraRow, OnClick = function()
 		run("GiveBalls", nil)
 	end })
 

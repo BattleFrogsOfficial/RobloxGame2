@@ -105,16 +105,16 @@ local VIEWPORTS = {
 	{ name = "desktop", size = Vector2.new(1920, 1080), touch = false },
 }
 
--- Platform / queue attributes the server sets on the LocalPlayer (ThrowService). Every scenario starts
--- off the platform; throw scenarios set them.
-local function setPlatform(onPlatform, queuePos)
-	R.LocalPlayer:SetAttribute("OnPlatform", onPlatform)
-	R.LocalPlayer:SetAttribute("ThrowQueuePos", queuePos)
+-- The throw-zone attribute the server sets on the LocalPlayer (ThrowService, every Game.ThrowZone.SampleInterval).
+-- Every scenario starts out of the zone; throw scenarios step in (the bar then appears and sweeps by itself).
+local function setZone(inZone)
+	R.LocalPlayer:SetAttribute("InThrowZone", inZone)
+	R.LocalPlayer:SetAttribute("OnPlatform", inZone)
 end
 local Meter = R.Require(Shared.Util.Meter)
 -- Charging with the meter at `frac` (0..1) on the way up: start time chosen so Meter.Position == frac.
 local function chargeAt(ui, frac)
-	setPlatform(true, 1)
+	setZone(true)
 	local period = Meter.Period(false)
 	ui.HUD:SetCharging(true, os.clock() - frac * period / 2, false)
 end
@@ -185,14 +185,19 @@ end
 
 local SCENARIOS = {
 	{ name = "hud", setup = function(ui) end },
-	{ name = "throw-off-platform", setup = function(ui)
-		setPlatform(false, 0)
+	{ name = "throw-out-of-zone", setup = function(ui)
+		setZone(false)
 	end },
-	{ name = "throw-idle", setup = function(ui)
-		setPlatform(true, 1)
+	-- stepping into the zone: the bar appears and the sweep starts by itself (ChargeBegin on appearing)
+	{ name = "throw-zone", setup = function(ui)
+		setZone(true)
 	end },
-	{ name = "throw-waiting", setup = function(ui)
-		setPlatform(true, 3)
+	-- the hotbar with every consumable owned (counts), the Glow Ball selected
+	{ name = "hotbar-counts", setup = function(ui)
+		local s = fakeState()
+		s.Balls = { Rubber = 3, FlyingDisc = 12, Glow = 1, Golden = 250 }
+		s.EquippedBall = "Glow"
+		ui.State.Set(s)
 	end },
 	{ name = "throw-charge-0", setup = function(ui)
 		chargeAt(ui, 0)
@@ -219,6 +224,18 @@ local SCENARIOS = {
 	end },
 	{ name = "shop", setup = function(ui)
 		ui.Router.Open("Shop", "Balls")
+	end },
+	{ name = "shop-boosts", setup = function(ui)
+		ui.Router.Open("Shop", "Boosts")
+	end },
+	{ name = "shop-yard", setup = function(ui)
+		ui.Router.Open("Shop", "Yard")
+	end },
+	{ name = "shop-items", setup = function(ui)
+		ui.Router.Open("Shop", "Items")
+	end },
+	{ name = "shop-style", setup = function(ui)
+		ui.Router.Open("Shop", "Cosmetics")
 	end },
 	{ name = "shop-robux", setup = function(ui)
 		ui.Router.Open("Shop", "Robux")
@@ -352,7 +369,7 @@ local function pathOf(inst, stopAt)
 end
 
 -- ------------------------------------------------------------------------------------------ checks
-local HUD_REGIONS = { Currencies = true, SideMenu = true, EventBanner = true, Toasts = true, TopRight = true, ThrowCluster = true, Ticker = true }
+local HUD_REGIONS = { Currencies = true, SideMenu = true, EventBanner = true, Toasts = true, TopRight = true, ThrowCluster = true, Hotbar = true, Strength = true }
 
 local function runChecks(name, records, screen, vp, ui)
 	local scale = ui.Root:FindFirstChildOfClass("UIScale").Scale
@@ -520,7 +537,7 @@ end
 
 -- ------------------------------------------------------------------------------------------ SVG render
 local render3D
-local FONT_FAMILY = { FredokaOne = "'Fredoka One', 'Arial Rounded MT Bold', Arial, sans-serif", GothamMedium = "Montserrat, Arial, sans-serif", GothamBold = "Montserrat, Arial, sans-serif", Arcade = "'Press Start 2P', monospace" }
+local FONT_FAMILY = { FredokaOne = "'Fredoka One', 'Arial Rounded MT Bold', Arial, sans-serif", LuckiestGuy = "'Luckiest Guy', 'Fredoka One', Impact, sans-serif", GothamMedium = "Montserrat, Arial, sans-serif", GothamBold = "Montserrat, Arial, sans-serif", GothamBlack = "Montserrat, Arial, sans-serif", Arcade = "'Press Start 2P', monospace" }
 
 local function hex(c)
 	return "#" .. c:ToHex()
@@ -657,7 +674,7 @@ local function renderSVG(records, screen, vp, ui)
 	local defs = {}
 	local gradId = 0
 	table.insert(parts, string.format('<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" font-family="Arial">', vp.size.X, vp.size.Y, vp.size.X, vp.size.Y))
-	table.insert(parts, '<style>@import url("https://fonts.googleapis.com/css2?family=Fredoka+One&amp;family=Montserrat:wght@500;700&amp;family=Press+Start+2P&amp;display=swap");</style>')
+	table.insert(parts, '<style>@import url("https://fonts.googleapis.com/css2?family=Fredoka+One&amp;family=Luckiest+Guy&amp;family=Montserrat:wght@500;700;900&amp;family=Press+Start+2P&amp;display=swap");</style>')
 	-- Background: a field-ish gradient so white UI reads like in game, plus the top bar.
 	table.insert(parts, string.format('<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd3ff"/><stop offset="0.55" stop-color="#bfe8ff"/><stop offset="0.56" stop-color="#6fb860"/><stop offset="1" stop-color="#3f8f3f"/></linearGradient></defs><rect width="%d" height="%d" fill="url(#bg)"/>', vp.size.X, vp.size.Y))
 	table.insert(parts, string.format('<rect width="%d" height="%d" fill="#0b0a12" opacity="0.55"/><text x="12" y="%d" fill="#fff" font-size="14">Roblox top bar (%dpx)</text>', vp.size.X, screen.y, math.floor(screen.y * 0.7), screen.y))
@@ -871,7 +888,7 @@ for _, vp in VIEWPORTS do
 		R.Services.UserInputService.MouseEnabled = not vp.touch
 		local ok, err = pcall(function()
 			-- The UI module caches State across starts; reset the parts a scenario touches.
-			setPlatform(false, 0)
+			setZone(false)
 			R.LocalPlayer:SetAttribute("DevTools", nil)
 			local ui = UIModule.Start({ Parent = R.PlayerGui, IsTouch = vp.touch, Viewport = vp.size, Remotes = remoteByName })
 			ui.State.Server.Events = {}

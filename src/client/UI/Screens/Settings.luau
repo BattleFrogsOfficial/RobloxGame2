@@ -26,12 +26,12 @@ export type SettingsDeps = {
 
 local function toggleRow(parent: Instance, order: number, text: string, icon: string, get: () -> boolean, set: (boolean) -> ()): Button.ButtonHandle
 	local row: Frame = Make("Frame", { Name = "Row_" .. text, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 48), LayoutOrder = order, ZIndex = 55, Parent = parent })
-	Label.Body({ Text = text, Size = UDim2.new(1, -120, 1, 0), ZIndex = 56, Parent = row, Font = Theme.Font.BodyBold })
+	Label.Display({ Text = text, TextSize = 18, Size = UDim2.new(1, -120, 1, 0), ZIndex = 56, Parent = row })
 	local b: Button.ButtonHandle
 	b = Button.new({
 		Text = if get() then "On" else "Off",
 		Icon = icon,
-		IconSize = 16,
+		IconSize = 32,
 		Palette = if get() then "Grass" else "Slate",
 		Size = UDim2.fromOffset(110, 44),
 		Position = UDim2.new(1, 0, 0.5, 0),
@@ -51,7 +51,7 @@ local function toggleRow(parent: Instance, order: number, text: string, icon: st
 end
 
 function Settings.new(deps: SettingsDeps)
-	local panel = Panel.new({ Title = "Settings", Icon = "settings", Palette = "Slate", Parent = deps.Parent, OnClose = deps.OnClose, Name = "Settings", Width = 640 })
+	local panel = Panel.new({ Title = "Settings", Icon = "settings", Parent = deps.Parent, OnClose = deps.OnClose, Name = "Settings", Width = 640 })
 	local body = panel.Body
 	local scroll: ScrollingFrame = Make("ScrollingFrame", { BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.fromScale(1, 1), CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 6, ScrollBarImageColor3 = Theme.Color.Ink, ZIndex = 53, Parent = body })
 	Decor.List(scroll, Enum.FillDirection.Vertical, Theme.Space.M)
@@ -84,12 +84,12 @@ function Settings.new(deps: SettingsDeps)
 	end)
 	-- Treat Pocket mode cycles through the config list.
 	local tpRow: Frame = Make("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 44), LayoutOrder = 2, ZIndex = 55, Parent = reveals })
-	Label.Body({ Text = "Use Treat Pockets", Size = UDim2.new(1, -160, 1, 0), ZIndex = 56, Parent = tpRow, Font = Theme.Font.BodyBold })
+	Label.Display({ Text = "Use Treat Pockets", TextSize = 18, Size = UDim2.new(1, -160, 1, 0), ZIndex = 56, Parent = tpRow })
 	local tpButton: Button.ButtonHandle
 	local function tpLabel(mode: string): string
 		return if mode == "Always" then "Always" elseif mode == "EpicPlus" then "Epic and up" else "Never"
 	end
-	tpButton = Button.new({ Text = tpLabel(S.TreatPocketMode), Icon = "treat", IconSize = 16, Palette = "Sky", Size = UDim2.fromOffset(150, 44), Position = UDim2.new(1, 0, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), TextSize = Theme.Text.Body, Shadow = false, ZIndex = 56, Parent = tpRow, OnClick = function()
+	tpButton = Button.new({ Text = tpLabel(S.TreatPocketMode), Icon = "treat", IconSize = 32, Palette = "Sky", Size = UDim2.fromOffset(150, 44), Position = UDim2.new(1, 0, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), TextSize = Theme.Text.Body, Shadow = false, ZIndex = 56, Parent = tpRow, OnClick = function()
 		local idx = table.find(ShopConfig.TreatPocketModes, S.TreatPocketMode) or 1
 		local nextMode = ShopConfig.TreatPocketModes[idx % #ShopConfig.TreatPocketModes + 1]
 		State.SetSetting("TreatPocketMode", nextMode)

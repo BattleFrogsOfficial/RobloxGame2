@@ -47,14 +47,14 @@ function TestPanel.new(deps: Deps)
 		Palette = "Purple",
 		TextSize = Theme.Text.Body,
 		Size = UDim2.fromOffset(170, 44),
-		Position = if touch then UDim2.fromOffset(E, E + 52 + 6 + 48 + Theme.Space.M) else UDim2.new(1, -E, 0.5, 0),
+		Position = if touch then UDim2.fromOffset(E, E + 58 + Theme.Space.S + 52 + Theme.Space.S) else UDim2.new(1, -E, 0.5, 0),
 		AnchorPoint = if touch then Vector2.new(0, 0) else Vector2.new(1, 0.5),
 		ZIndex = 44,
 		Parent = deps.Parent,
 	})
 	handle.Pill = pill
 
-	local panel = Panel.new({ Title = "Cutscene test", Icon = "star", Palette = "Purple", Parent = deps.Parent, Name = "CutsceneTestPanel", Width = 640, Height = 600, OnClose = function()
+	local panel = Panel.new({ Title = "Cutscene test", Icon = "star", Parent = deps.Parent, Name = "CutsceneTestPanel", Width = 640, Height = 600, OnClose = function()
 		if deps.Router then
 			deps.Router.Close()
 		else
@@ -99,8 +99,8 @@ function TestPanel.new(deps: Deps)
 	local grid = Panel.Section(scroll, "Play one outcome", 2)
 	for i, tier in Rarities.Order do
 		local r: Frame = Make("Frame", { Name = "Row_" .. tier, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 44), LayoutOrder = i, ZIndex = 55, Parent = grid })
-		Label.Body({ Text = tier, Color = Theme.RarityColor(tier):Lerp(Theme.Color.Ink, 0.35), Font = Theme.Font.BodyBold, Size = UDim2.new(0, 100, 1, 0), ZIndex = 56, Parent = r })
-		local buttons: Frame = Make("Frame", { Name = "Buttons", BackgroundTransparency = 1, Size = UDim2.new(1, -104, 1, 0), Position = UDim2.fromOffset(104, 0), ZIndex = 56, Parent = r })
+		Label.Display({ Text = tier, TextSize = 18, Color = Theme.RarityColor(tier), Size = UDim2.new(0, 108, 1, 0), ZIndex = 56, Parent = r })
+		local buttons: Frame = Make("Frame", { Name = "Buttons", BackgroundTransparency = 1, Size = UDim2.new(1, -112, 1, 0), Position = UDim2.fromOffset(112, 0), ZIndex = 56, Parent = r })
 		Decor.List(buttons, Enum.FillDirection.Horizontal, Theme.Space.S, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
 		local entries = { { "Caught", true, false }, { "Missed", false, false } }
 		if tier ~= "Common" then

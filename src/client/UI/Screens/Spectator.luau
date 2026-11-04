@@ -22,14 +22,15 @@ function Spectator.new(parent: Instance, isTouch: boolean)
 		Name = "SpectatorBanner",
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(if isTouch then 300 else 460, 40),
-		Position = if isTouch then UDim2.new(1, -(Theme.Space.M + 140 + Theme.Space.S), 0, Theme.Space.M + 44 + Theme.Space.S) else UDim2.new(0.5, 0, 0, E + 44 + Theme.Space.S),
+		Size = UDim2.fromOffset(if isTouch then 260 else 460, 44),
+		-- the HUD's event-banner slot (HUD: touch banner right edge = Edge + 150 + 8; height 48)
+		Position = if isTouch then UDim2.new(1, -(Theme.Space.M + 150 + Theme.Space.S), 0, Theme.Space.M + 48 + Theme.Space.S) else UDim2.new(0.5, 0, 0, E + 48 + Theme.Space.S),
 		AnchorPoint = if isTouch then Vector2.new(1, 0) else Vector2.new(0.5, 0),
 		Visible = false,
 		ZIndex = 39,
 		Parent = parent,
 	})
-	Decor.Corner(root, Theme.Radius.Pill)
+	Decor.Corner(root, Theme.Radius.Card)
 	Decor.Stroke(root, Theme.Stroke.Panel)
 	local gradient = Decor.PaletteGradient(root, Theme.Palette.Slate)
 	local icon = Icon.new({ Name = "dog", Size = 32, Position = UDim2.new(0, Theme.Space.S, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), ZIndex = 40, Parent = root })

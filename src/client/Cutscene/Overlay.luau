@@ -50,19 +50,19 @@ function Overlay.new(parent: Instance, isTouch: boolean): OverlayHandle
 	local count = Label.Display({ Name = "Count", Text = OddsCounter.Text(1), TextSize = C.Counter.TextSize, Size = UDim2.fromScale(1, 1), XAlign = Enum.TextXAlignment.Center, ZIndex = Z + 2, Parent = countHolder })
 	local stroke = count:FindFirstChildOfClass("UIStroke")
 	if stroke then
-		stroke.Thickness = 3
+		stroke.Thickness = 5 -- the heaviest outline in the game: it sits on the live 3D scene
 	end
 
 	local info: Frame = Make("Frame", { Name = "Info", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 120), Position = UDim2.fromOffset(0, C.Counter.TextSize + 28), Visible = false, ZIndex = Z + 1, Parent = block })
-	local nameLabel = Label.Display({ Name = "DogName", Text = "", TextSize = Theme.Text.H2 + 4, Size = UDim2.new(1, -40, 0, 34), Position = UDim2.fromScale(0.5, 0), AnchorPoint = Vector2.new(0.5, 0), XAlign = Enum.TextXAlignment.Center, ZIndex = Z + 2, Parent = info })
+	local nameLabel = Label.Display({ Name = "DogName", Text = "", TextSize = Theme.Text.H1, Size = UDim2.new(1, -40, 0, 34), Position = UDim2.fromScale(0.5, 0), AnchorPoint = Vector2.new(0.5, 0), XAlign = Enum.TextXAlignment.Center, ZIndex = Z + 2, Parent = info })
 	local tagRow: Frame = Make("Frame", { Name = "TagRow", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 36), Position = UDim2.fromOffset(0, 40), ZIndex = Z + 2, Parent = info })
 	Decor.List(tagRow, Enum.FillDirection.Horizontal, Theme.Space.S, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
 	local tag = Decor.Surface({ Name = "RarityTag", Palette = Theme.Palette.Slate, Radius = Theme.Radius.Pill, Size = UDim2.fromOffset(170, 36), LayoutOrder = 1, ZIndex = Z + 2, Parent = tagRow })
 	local tagGradient = tag:FindFirstChildOfClass("UIGradient") :: UIGradient
-	local tagText = Label.Pixel({ Name = "Text", Text = "COMMON", TextSize = 16, Size = UDim2.fromScale(1, 1), XAlign = Enum.TextXAlignment.Center, ZIndex = Z + 3, Parent = tag })
-	local badge = Decor.Surface({ Name = "VariantBadge", Palette = Theme.Palette.Paper, Radius = Theme.Radius.Pill, Size = UDim2.fromOffset(150, 36), LayoutOrder = 2, ZIndex = Z + 2, Parent = tagRow })
+	local tagText = Label.Display({ Name = "Text", Text = "COMMON", TextSize = 20, Size = UDim2.fromScale(1, 1), XAlign = Enum.TextXAlignment.Center, ZIndex = Z + 3, Parent = tag })
+	local badge = Decor.Surface({ Name = "VariantBadge", Palette = Theme.Palette.Dark, Radius = Theme.Radius.Pill, Size = UDim2.fromOffset(150, 36), LayoutOrder = 2, ZIndex = Z + 2, Parent = tagRow })
 	local badgeIcon = Icon.new({ Name = "variant_gold", Size = 16, Position = UDim2.new(0, Theme.Space.M, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), ZIndex = Z + 3, Parent = badge })
-	local badgeText = Label.Display({ Name = "Text", Text = "GOLD", TextSize = Theme.Text.Body, Color = Theme.Color.TextOnPaper, Stroke = false, Size = UDim2.new(1, -(Theme.Space.M + 16 + Theme.Space.S + Theme.Space.M), 1, 0), Position = UDim2.fromOffset(Theme.Space.M + 16 + Theme.Space.S, 0), ZIndex = Z + 3, Parent = badge })
+	local badgeText = Label.Display({ Name = "Text", Text = "GOLD", TextSize = Theme.Text.Body + 2, Size = UDim2.new(1, -(Theme.Space.M + 16 + Theme.Space.S + Theme.Space.M), 1, 0), Position = UDim2.fromOffset(Theme.Space.M + 16 + Theme.Space.S, 0), ZIndex = Z + 3, Parent = badge })
 	local flourish = Label.Display({ Name = "Flourish", Text = "", TextSize = Theme.Text.Button, Color = Theme.Palette.Cash.Top, Size = UDim2.new(1, -40, 0, 28), Position = UDim2.new(0.5, 0, 0, 84), AnchorPoint = Vector2.new(0.5, 0), XAlign = Enum.TextXAlignment.Center, ZIndex = Z + 2, Parent = info })
 	flourish.Visible = false
 
@@ -70,7 +70,7 @@ function Overlay.new(parent: Instance, isTouch: boolean): OverlayHandle
 	message.Visible = false
 
 	local skipConn: (() -> ())? = nil
-	local skip = Button.new({ Name = "Skip", Text = "Skip", Icon = "skip", IconSize = 16, Palette = "Slate", Size = UDim2.fromOffset(140, 48), Position = UDim2.new(0.5, 0, 1, -E), AnchorPoint = Vector2.new(0.5, 1), TextSize = Theme.Text.Button, ZIndex = Z + 3, Parent = root, OnClick = function()
+	local skip = Button.new({ Name = "Skip", Text = "Skip", Icon = "skip", IconSize = 32, Palette = "Dark", Size = UDim2.fromOffset(140, 48), Position = UDim2.new(0.5, 0, 1, -E), AnchorPoint = Vector2.new(0.5, 1), TextSize = Theme.Text.Button, ZIndex = Z + 3, Parent = root, OnClick = function()
 		if skipConn then
 			skipConn()
 		end

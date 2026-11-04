@@ -1,6 +1,7 @@
 --!strict
--- Yard manager: every owned dog as a card (virtualised), sorted by $/s. Display / Kennel / Sell actions,
--- slot and income summary, puppy growth countdowns.
+-- Yard manager: every owned dog as a rarity-coloured card (virtualised; the shop card look: name, rarity word, the
+-- dog drawn in its own coat colours, a dark stat strip with its $/s, then Show/Kennel + Sell), sorted by $/s.
+-- Slot and income summary, puppy growth countdowns.
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Util = Shared:WaitForChild("Util")
 local FormatNumber = require(Util:WaitForChild("FormatNumber"))
@@ -18,6 +19,7 @@ local Tabs = require(Components:WaitForChild("Tabs"))
 local Icon = require(Components:WaitForChild("Icon"))
 local Label = require(Components:WaitForChild("Label"))
 local Button = require(Components:WaitForChild("Button"))
+local Card = require(Components:WaitForChild("Card"))
 local VirtualGrid = require(Components:WaitForChild("VirtualGrid"))
 
 local Dogs = {}
@@ -29,10 +31,10 @@ export type DogsDeps = {
 	OnClose: () -> (),
 }
 
-local CELL = Vector2.new(150, 236)
+local CELL = Vector2.new(164, 236)
 
 function Dogs.new(deps: DogsDeps)
-	local panel = Panel.new({ Title = "My Dogs", Icon = "dog", Palette = "Sky", Parent = deps.Parent, OnClose = deps.OnClose, Name = "Dogs" })
+	local panel = Panel.new({ Title = "My Dogs", Icon = "dog", Parent = deps.Parent, OnClose = deps.OnClose, Name = "Dogs" })
 	local body = panel.Body
 	Decor.List(body, Enum.FillDirection.Vertical, Theme.Space.M)
 
@@ -50,7 +52,7 @@ function Dogs.new(deps: DogsDeps)
 			filter = id
 		end,
 	})
-	local stats = Label.Body({ Name = "Stats", Text = "", Size = UDim2.new(1, -460, 0, 44), XAlign = Enum.TextXAlignment.Right, LayoutOrder = 2, ZIndex = 54, Parent = summary, Font = Theme.Font.BodyBold })
+	local stats = Label.Display({ Name = "Stats", Text = "", TextSize = 18, Size = UDim2.new(1, -460, 0, 44), XAlign = Enum.TextXAlignment.Right, LayoutOrder = 2, ZIndex = 54, Parent = summary })
 
 	local list: { any } = {}
 	local now = os.time()
@@ -79,20 +81,21 @@ function Dogs.new(deps: DogsDeps)
 	local function createCell(): GuiObject
 		local cell: Frame = Make("Frame", { Name = "DogCell", BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 54 })
 		Decor.Corner(cell, Theme.Radius.Card)
-		Decor.Stroke(cell, Theme.Stroke.Panel)
-		Decor.PaletteGradient(cell, Theme.Palette.Paper)
-		local preview: Frame = Make("Frame", { Name = "Preview", BackgroundColor3 = Theme.Color.PaperShade, BorderSizePixel = 0, Size = UDim2.new(1, -16, 0, 84), Position = UDim2.fromOffset(8, 8), ZIndex = 55, Parent = cell })
-		Decor.Corner(preview, Theme.Radius.Card - 2)
-		Decor.Stroke(preview, 3, Theme.Color.Track)
-		Icon.new({ Name = "dog", Size = 48, Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), ZIndex = 56, Parent = preview }).Name = "DogIcon"
-		Icon.new({ Name = "variant_gold", Size = 16, Position = UDim2.new(1, -4, 0, 4), AnchorPoint = Vector2.new(1, 0), ZIndex = 57, Parent = preview }).Name = "VariantIcon"
-		Label.Display({ Name = "Title", Text = "", TextSize = 14, Color = Theme.Color.TextOnPaper, Stroke = false, Font = Theme.Font.BodyBold, Size = UDim2.new(1, -16, 0, 36), Position = UDim2.fromOffset(8, 96), XAlign = Enum.TextXAlignment.Center, YAlign = Enum.TextYAlignment.Top, Wrap = true, ZIndex = 55, Parent = cell })
-		Label.Caption({ Name = "Rarity", Text = "", Size = UDim2.new(1, -16, 0, 14), Position = UDim2.fromOffset(8, 134), XAlign = Enum.TextXAlignment.Center, Font = Theme.Font.BodyBold, ZIndex = 55, Parent = cell })
-		Label.Caption({ Name = "Income", Text = "", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.fromOffset(8, 150), XAlign = Enum.TextXAlignment.Center, YAlign = Enum.TextYAlignment.Top, Wrap = true, TextSize = Theme.Text.Caption, ZIndex = 55, Parent = cell })
-		local row: Frame = Make("Frame", { Name = "Actions", BackgroundTransparency = 1, Size = UDim2.new(1, -16, 0, 44), Position = UDim2.new(0, 8, 1, -8), AnchorPoint = Vector2.new(0, 1), ZIndex = 55, Parent = cell })
+		Decor.Stroke(cell, Theme.Stroke.Card)
+		Card.Paint(cell, Theme.RarityColor("Common"))
+		Label.Display({ Name = "Title", Text = "", TextSize = 18, Size = UDim2.new(1, -12, 0, 36), Position = UDim2.fromOffset(6, 3), XAlign = Enum.TextXAlignment.Center, Wrap = true, ZIndex = 55, Parent = cell })
+		Label.Display({ Name = "Rarity", Text = "", TextSize = 14, Size = UDim2.new(1, -12, 0, 18), Position = UDim2.fromOffset(6, 39), XAlign = Enum.TextXAlignment.Center, ZIndex = 55, Parent = cell })
+		local preview: Frame = Make("Frame", { Name = "Preview", BackgroundTransparency = 1, Size = UDim2.new(1, -12, 0, 78), Position = UDim2.fromOffset(6, 58), ZIndex = 55, Parent = cell })
+		Icon.new({ Name = "dog", Size = 64, Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), ZIndex = 56, Parent = preview }).Name = "DogIcon"
+		Icon.new({ Name = "variant_gold", Size = 32, Position = UDim2.fromOffset(0, 0), ZIndex = 57, Parent = preview }).Name = "VariantIcon"
+		local strip: Frame = Make("Frame", { Name = "Strip", BackgroundColor3 = Theme.Color.Strip, BackgroundTransparency = Theme.StripTransparency, BorderSizePixel = 0, Size = UDim2.new(1, -12, 0, 40), Position = UDim2.fromOffset(6, 138), ZIndex = 55, Parent = cell })
+		Decor.Corner(strip, 6)
+		Decor.Stroke(strip, 2)
+		Label.Display({ Name = "Income", Text = "", TextSize = 16, Size = UDim2.new(1, -8, 1, -2), Position = UDim2.fromOffset(4, 1), XAlign = Enum.TextXAlignment.Center, Wrap = true, ZIndex = 56, Parent = strip })
+		local row: Frame = Make("Frame", { Name = "Actions", BackgroundTransparency = 1, Size = UDim2.new(1, -12, 0, 44), Position = UDim2.new(0, 6, 1, -6), AnchorPoint = Vector2.new(0, 1), ZIndex = 55, Parent = cell })
 		Decor.List(row, Enum.FillDirection.Horizontal, Theme.Space.XS)
-		Button.new({ Name = "Toggle", Text = "Show", Palette = "Sky", TextSize = Theme.Text.Caption + 1, Size = UDim2.fromOffset(84, 44), Shadow = false, ZIndex = 56, LayoutOrder = 1, Parent = row })
-		Button.new({ Name = "Sell", Icon = "cash", IconSize = 16, Palette = "Danger", Size = UDim2.fromOffset(46, 44), Shadow = false, ZIndex = 56, LayoutOrder = 2, Parent = row })
+		Button.new({ Name = "Toggle", Text = "Show", Palette = "Sky", TextSize = 16, Size = UDim2.new(1, -56, 0, 44), Shadow = false, ZIndex = 56, LayoutOrder = 1, Parent = row })
+		Button.new({ Name = "Sell", Icon = "cash", IconSize = 32, Palette = "Danger", Size = UDim2.fromOffset(52, 44), Shadow = false, ZIndex = 56, LayoutOrder = 2, Parent = row })
 		return cell
 	end
 
@@ -105,33 +108,43 @@ function Dogs.new(deps: DogsDeps)
 		local def = DogCatalog.Get(d.DogId)
 		local name = if def then def.Name else tostring(d.DogId)
 		local rarity = if def then def.Rarity else "Common"
-		local preview = cell:FindFirstChild("Preview") :: Frame
 		local rarityColor = Theme.RarityColor(rarity)
-		;(preview:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = rarityColor
+		Card.Paint(cell, rarityColor)
+		local preview = cell:FindFirstChild("Preview") :: Frame
+		Icon.Set(preview:FindFirstChild("DogIcon") :: Frame, "dog", Icon.DogColors(def) or {})
 		local vIcon = preview:FindFirstChild("VariantIcon") :: Frame
 		local variantName = Icon.ForVariant(d.Variant)
 		vIcon.Visible = variantName ~= nil
 		if variantName then
 			Icon.Set(vIcon, variantName)
 		end
-		;(cell:FindFirstChild("Title") :: TextLabel).Text = name
+		local title = cell:FindFirstChild("Title") :: TextLabel
+		title.Text = name
+		-- one line when it fits at 14+, else two lines at 14
+		title.TextSize = Card.FitSize(name, CELL.X - 12, { 18, 16, 14 })
 		local rl = cell:FindFirstChild("Rarity") :: TextLabel
-		rl.Text = string.upper(rarity)
-		rl.TextColor3 = rarityColor
-		local il = cell:FindFirstChild("Income") :: TextLabel
+		rl.Text = rarity .. (if d.Variant then " " .. d.Variant else "")
+		rl.TextColor3 = Card.TagColor(rarityColor)
+		local il = (cell:FindFirstChild("Strip") :: Frame):FindFirstChild("Income") :: TextLabel
 		local puppy = PlayerStats.IsPuppy(d, now)
 		local rate = PlayerStats.DogRate(d, now)
 		if d.Held then
 			il.Text = "Waiting for a slot"
 		elseif puppy then
-			il.Text = FormatNumber.PerSecond(rate) .. "\ngrows in " .. FormatNumber.Duration((d.GrownAt or now) - now)
+			il.Text = FormatNumber.PerSecond(rate) .. "\nGrows in " .. FormatNumber.Duration((d.GrownAt or now) - now)
 		else
 			il.Text = FormatNumber.PerSecond(rate)
 		end
+		il.TextSize = if puppy and not d.Held then 14 else 18
 		local actions = cell:FindFirstChild("Actions") :: Frame
 		local toggle = actions:FindFirstChild("Toggle") :: TextButton
 		local toggleLabel = toggle:FindFirstChildWhichIsA("TextLabel", true) :: TextLabel
 		toggleLabel.Text = if d.Displayed then "Kennel" else "Show"
+		local toggleGradient = toggle:FindFirstChildOfClass("UIGradient")
+		if toggleGradient then
+			local p = if d.Displayed then Theme.Palette.Slate else Theme.Palette.Sky
+			toggleGradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, p.Top), ColorSequenceKeypoint.new(1, p.Bottom) })
+		end
 		-- Rebind click handlers by replacing the invisible overlay each render (cheap: two buttons).
 		local old = actions:FindFirstChild("Bind")
 		if old then

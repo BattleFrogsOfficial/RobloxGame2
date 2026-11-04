@@ -141,7 +141,7 @@ function Decor.Stripes(parent: GuiObject, opts: { Bands: number?, Strength: numb
 		table.insert(kps, NumberSequenceKeypoint.new(a + w + 0.001, 1))
 	end
 	table.insert(kps, NumberSequenceKeypoint.new(1, 1))
-	Make("UIGradient", { Transparency = NumberSequence.new(kps), Rotation = o.Rotation or 20, Parent = f })
+	Make("UIGradient", { Color = ColorSequence.new(Color3.new(1, 1, 1)), Transparency = NumberSequence.new(kps), Rotation = o.Rotation or 20, Parent = f })
 	local corner = parent:FindFirstChildOfClass("UICorner")
 	if corner then
 		corner:Clone().Parent = f

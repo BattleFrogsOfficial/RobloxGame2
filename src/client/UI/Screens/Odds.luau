@@ -43,7 +43,7 @@ local function oneIn(p: number): string
 end
 
 function OddsScreen.new(deps: OddsDeps)
-	local panel = Panel.new({ Title = "Odds", Icon = "odds", Palette = "Slate", Parent = deps.Parent, OnClose = deps.OnClose, Name = "Odds", Height = 600 })
+	local panel = Panel.new({ Title = "Odds", Icon = "odds", Parent = deps.Parent, OnClose = deps.OnClose, Name = "Odds", Height = 600 })
 	local body = panel.Body
 	local scroll: ScrollingFrame = Make("ScrollingFrame", { BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.fromScale(1, 1), CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 6, ScrollBarImageColor3 = Theme.Color.Ink, ZIndex = 53, Parent = body })
 	Decor.List(scroll, Enum.FillDirection.Vertical, Theme.Space.M)
@@ -59,7 +59,9 @@ function OddsScreen.new(deps: OddsDeps)
 		local labels = {}
 		local x = 0
 		for i, v in values do
-			local l = Label.Body({ Text = v, Size = UDim2.new(COL_W[i], -4, 1, 0), Position = UDim2.fromScale(x, 0), Color = if i == 1 and color then color else Theme.Color.TextOnPaper, Font = if bold or i == 1 then Theme.Font.BodyBold else Theme.Font.Body, XAlign = if i == 1 then Enum.TextXAlignment.Left else Enum.TextXAlignment.Right, ZIndex = 56, Parent = row })
+			local l = if i == 1 and not bold
+				then Label.Display({ Text = v, TextSize = 18, Size = UDim2.new(COL_W[i], -4, 1, 0), Position = UDim2.fromScale(x, 0), Color = color, ZIndex = 56, Parent = row })
+				else Label.Body({ Text = v, Size = UDim2.new(COL_W[i], -4, 1, 0), Position = UDim2.fromScale(x, 0), Color = if bold then Theme.Color.TextMuted else Theme.Color.TextOnPaper, Font = if bold then Theme.Font.BodyBold else Theme.Font.Body, XAlign = if i == 1 then Enum.TextXAlignment.Left else Enum.TextXAlignment.Right, ZIndex = 56, Parent = row })
 			table.insert(labels, l)
 			x += COL_W[i]
 		end
@@ -75,7 +77,7 @@ function OddsScreen.new(deps: OddsDeps)
 	local vrows: { [string]: { TextLabel } } = {}
 	makeRow(variantBox, 1, { "Variant", "Chance", "Income", "", "" }, Theme.Color.TextMuted, true)
 	for i, v in Rarities.VariantOrder do
-		vrows[v] = makeRow(variantBox, i + 1, { v, "", "", "", "" }, Theme.Variant[v])
+		vrows[v] = makeRow(variantBox, i + 1, { v, "", "", "", "" }, if v == "Shadow" then Theme.Variant.Shadow:Lerp(Theme.Color.White, 0.5) else Theme.Variant[v])
 	end
 
 	-- Luck sources

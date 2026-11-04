@@ -138,25 +138,54 @@ function UI.Start(deps: StartDeps?)
 	local throwInFlight: string? = nil
 	local chargeClock = 0
 	local chargeTutorial = false
+	local lastChargeBeginSent = -math.huge -- os.clock() of the last ChargeBegin fired (see OnChargeBegin)
+	local beginWaiting = false -- an OnChargeBegin is waiting out MinRestartSeconds
 	local serverThrows: { [string]: boolean } = {} -- ThrowIds the server sent us (only these get CutsceneFinished)
 	local reported: { [string]: boolean } = {} -- ThrowIds CutsceneFinished was already sent for
+	local insetY = 0
+	pcall(function()
+		insetY = GuiService:GetGuiInset().Y
+	end)
 	ui.HUD = HUD.new({
 		Parent = root,
 		IsTouch = isTouch,
+		ScreenHeight = (viewport().Y - insetY) / uiScale.Scale,
 		Open = function(screen)
 			Router.Open(screen)
 		end,
 		OwnsThrowInput = d.OwnsThrowInput,
+		EquipBall = function(ballId)
+			fire("EquipBall", ballId)
+		end,
 		ClaimDailyWalk = function()
 			task.spawn(function()
 				local ok, msg = invoke("ClaimDailyWalk")
 				toast(msg or (if ok then "Daily walk claimed!" else "Not ready yet"), "walk", if ok then "Cash" else "Danger")
 			end)
 		end,
+		-- The bar appeared (InThrowZone) or the untapped sweep restarts on a period boundary: (re)start the charge.
 		OnChargeBegin = function()
 			if throwInFlight then
 				return
 			end
+			-- The server ignores a restart sooner than Game.Throw.MinRestartSeconds after the last (re)start; a bar
+			-- started then would sweep out of step with the server's clock. Wait out the gap (at most ~1 s) and
+			-- start the sweep only when the ChargeBegin is really sent.
+			if beginWaiting then
+				return -- one waiter is enough
+			end
+			local gap = ((Game.Throw :: any).MinRestartSeconds or 0) + 0.05 - (os.clock() - lastChargeBeginSent)
+			beginWaiting = gap > 0
+			while gap > 0 do
+				task.wait(gap)
+				if throwInFlight then
+					beginWaiting = false
+					return
+				end
+				gap = ((Game.Throw :: any).MinRestartSeconds or 0) + 0.05 - (os.clock() - lastChargeBeginSent)
+			end
+			beginWaiting = false
+			lastChargeBeginSent = os.clock()
 			fire("ChargeBegin")
 			-- Same period the server uses (ThrowService: tutorial until TutorialThrowDone).
 			local tutorial = Game.Tutorial.Enabled and State.Get().TutorialThrowDone ~= true
@@ -164,6 +193,7 @@ function UI.Start(deps: StartDeps?)
 			chargeTutorial = tutorial
 			ui.HUD:SetCharging(true, chargeClock, tutorial)
 		end,
+		-- The one tap.
 		OnChargeRelease = function()
 			if not ui.HUD:IsCharging() then
 				return

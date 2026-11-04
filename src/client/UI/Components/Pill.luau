@@ -1,5 +1,7 @@
 --!strict
--- Currency / stat pill: icon on the left, value on the right, palette gradient, count-up on change.
+-- Currency / stat chip: a dark charcoal pill with a heavy Ink outline, a big icon hanging off its left end and the
+-- value in outlined display type. Every chip is the same charcoal (few colours per screen); the icon carries the
+-- colour. Count-up on change.
 local Make = require(script.Parent.Parent:WaitForChild("Make"))
 local Theme = require(script.Parent.Parent:WaitForChild("Theme"))
 local Motion = require(script.Parent.Parent:WaitForChild("Motion"))
@@ -20,6 +22,7 @@ export type PillProps = {
 	Name: string?,
 	ZIndex: number?,
 	Suffix: string?, -- static text after the number
+	TextSize: number?,
 	OnClick: (() -> ())?,
 }
 
@@ -34,7 +37,6 @@ export type PillHandle = {
 function Pill.new(props: PillProps): PillHandle
 	local palette = Theme.Palette[props.Palette or "Cash"] or Theme.Palette.Cash
 	local h = props.Height or 40
-	local iconSize = if h >= 40 then 32 else 16
 	local root: Frame = Make("Frame", {
 		Name = props.Name or ("Pill_" .. props.Icon),
 		BackgroundColor3 = Color3.new(1, 1, 1),
@@ -44,30 +46,30 @@ function Pill.new(props: PillProps): PillHandle
 		ZIndex = props.ZIndex or 2,
 	})
 	Decor.Corner(root, Theme.Radius.Pill)
-	Decor.Stroke(root, Theme.Stroke.Panel)
-	Decor.PaletteGradient(root, palette)
+	Decor.Stroke(root, Theme.Stroke.Button)
+	Decor.Gradient(root, Theme.Palette.Dark.Top, Theme.Palette.Dark.Bottom)
+	local _ = palette -- every chip is the same charcoal; the icon carries the colour
 	Decor.Shadow(root, "Hard")
-	-- Icon sits in an ink-ringed circle hanging slightly off the left edge.
+	-- the icon hangs off the left end, bigger than the pill (no ring: the icons carry their own outline)
+	local iconPx = if h >= 40 then 48 else 32
 	local ring: Frame = Make("Frame", {
 		Name = "Ring",
-		BackgroundColor3 = Theme.Color.Paper,
-		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(h, h),
-		Position = UDim2.new(0, -4, 0.5, 0),
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(iconPx, iconPx),
+		Position = UDim2.new(0, -iconPx * 0.28, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
 		ZIndex = root.ZIndex + 1,
 		Parent = root,
 	})
-	Decor.Corner(ring, Theme.Radius.Pill)
-	Decor.Stroke(ring, Theme.Stroke.Panel)
-	local iconFrame = Icon.new({ Name = props.Icon, Size = iconSize, Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), ZIndex = root.ZIndex + 2, Parent = ring })
+	local iconFrame = Icon.new({ Name = props.Icon, Size = iconPx, Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), ZIndex = root.ZIndex + 2, Parent = ring })
+	local textX = math.floor(iconPx * 0.72) + 4
 	local value = Label.Display({
 		Name = "Value",
 		Text = "0",
-		TextSize = if h >= 40 then Theme.Text.Currency else Theme.Text.Body,
-		Color = palette.Text,
-		Size = UDim2.new(1, -(h + Theme.Space.M), 1, 0),
-		Position = UDim2.new(0, h, 0, 0),
+		TextSize = props.TextSize or (if h >= 40 then Theme.Text.Currency else Theme.Text.Body + 2),
+		Color = Theme.Color.White,
+		Size = UDim2.new(1, -(textX + Theme.Space.S), 1, 0),
+		Position = UDim2.new(0, textX, 0, 0),
 		XAlign = Enum.TextXAlignment.Left,
 		ZIndex = root.ZIndex + 1,
 		Parent = root,
