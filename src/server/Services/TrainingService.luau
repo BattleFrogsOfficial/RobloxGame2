@@ -95,6 +95,7 @@ function TrainingService.Rep(player: Player, stationId: string): (boolean, strin
 		return false, ("%s unlocks at %d ThrowPower"):format(station.Name, station.UnlockPower), 0
 	end
 	local cap = Training.PowerCap(state.TrainingLevel or 0)
+	-- At or above the cap (a dev-tools ThrowPower can be far above it): refuse the rep, never clamp power down.
 	if state.ThrowPower >= cap then
 		if (state.TrainingLevel or 0) >= Training.Upgrades.MaxLevel or cap >= Training.MaxThrowPower then
 			return false, "ThrowPower is maxed!", 0
@@ -107,7 +108,7 @@ function TrainingService.Rep(player: Player, stationId: string): (boolean, strin
 	end
 	lastRep[player] = now
 	local gain = station.Gain * Training.Mult(state.TrainingLevel or 0)
-	state.ThrowPower = math.min(cap, state.ThrowPower + gain)
+	state.ThrowPower = Training.ApplyRep(state.ThrowPower, gain, cap)
 	DataService.Push(player)
 	return true, "+" .. FormatNumber.Compact(gain) .. " ThrowPower", gain
 end

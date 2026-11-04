@@ -17,7 +17,7 @@ Timers.PuppyIncomeFraction = 0.2
 -- + (Flight.Max - ReferenceFlight) (the longest on-screen flight) + Fallback.HoldMax (a late ThrowResult)
 -- + EndCard.AutoClose (the Reveal card closes itself) + Return.Time. ThrowService finishes the throw at
 -- release + FlightTime + Timers.Cutscene + CutscenePadding when no CutsceneFinished arrives.
--- Values: Common 16.5, Uncommon 18.5, Rare 20.5, Epic 23, Legendary 25.5, Mythic 28 (s).
+-- Values: Common 16.75, Uncommon 18.75, Rare 20.75, Epic 23.25, Legendary 25.75, Mythic 28.25 (s).
 local CutsceneConfig = require(script.Parent:WaitForChild("Cutscene"))
 Timers.Cutscene = {} :: { [string]: number }
 for _, rarity in { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" } do

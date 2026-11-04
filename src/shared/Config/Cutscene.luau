@@ -27,12 +27,14 @@ Cutscene.Beats = {
 -- Target total per rarity (release -> end card) at Budget.ReferenceFlight. The test asserts every rarity's
 -- beats sum to its budget within Tolerance. A longer throw adds (flight - ReferenceFlight) on top.
 Cutscene.Budget = {
-	Common = 5.5, -- "about 5 s": 0.95 release + 1.5 flight + 1.5 counter alone are already 3.95 s
-	Uncommon = 6.5, -- s
-	Rare = 7.5, -- s
-	Epic = 9.0, -- s
-	Legendary = 10.5, -- s
-	Mythic = 12.0, -- s
+	-- Every budget grew by 0.25 s when WindUp.ReleaseAt went 0.95 -> 1.2 (a readable wind-up; the beats after the
+	-- release are unchanged). Old values: 5.5 / 6.5 / 7.5 / 9.0 / 10.5 / 12.0.
+	Common = 5.75, -- "about 5-6 s": 1.2 release + 1.5 flight + 1.5 counter alone are already 4.2 s
+	Uncommon = 6.75, -- s
+	Rare = 7.75, -- s
+	Epic = 9.25, -- s
+	Legendary = 10.75, -- s
+	Mythic = 12.25, -- s
 	Tolerance = 0.05, -- s, allowed difference between the summed beats and the budget
 	ReferenceFlight = 1.5, -- s, flight length the budgets assume (= Flight.Min, a short throw)
 }
@@ -41,49 +43,58 @@ Cutscene.Budget = {
 -- Beat 1: WIND-UP (starts when the player releases the meter; the rarity is not known yet)
 ----------------------------------------------------------------------------------------------------
 Cutscene.AnimationIds = {
-	WindUp = 0, -- rbxassetid of an uploaded wind-up Animation; 0 (or Throw = 0) = procedural Motor6D throw
+	WindUp = 0, -- rbxassetid of an uploaded wind-up Animation; 0 (or Throw = 0) = the built-in throw (Cutscene/Rig:
+	-- a KeyframeSequence built from Pose at runtime, else Motor6D C0 / AnimationConstraint.Transform keyframes)
 	Throw = 0, -- rbxassetid of the throw Animation, started at WindUp.ReleaseAt - Throw.Lead
 }
 
 Cutscene.WindUp = {
-	Duration = 1.2, -- whole wind-up + throw + follow-through (the follow-through overlaps the flight)
-	ReleaseAt = 0.95, -- the release frame: the ball leaves the hand and the flight starts
+	Duration = 1.5, -- whole wind-up + throw + follow-through (the follow-through overlaps the flight). Was 1.2:
+	-- the 1.2 s throw was over before the camera sweep settled, so the wind-up never read on screen.
+	ReleaseAt = 1.2, -- the release frame: the ball leaves the hand and the flight starts (was 0.95; = Pose[5].At x Duration)
 	ThrowLead = 0.15, -- uploaded Throw animation starts this long before ReleaseAt
 	Recover = 0.35, -- after Duration, the procedural pose eases back to the rest pose over this
-	SweepTime = 0.9, -- camera half circle from the default view to the front shot
+	SweepTime = 0.75, -- camera half circle from the default view to the front shot (was 0.9: it now settles before
+	-- the cocked pose at 0.55 x Duration = 0.83 s and holds still on the body for the throw itself)
 	SweepDirection = 1, -- 1 = round the player's right (throwing-arm) side, -1 = round the left side
 	MaxSweepDegrees = 225, -- if the preferred side is longer than this, sweep the other way round
-	FrontDistance = 7, -- front shot: studs in front of the player
-	FrontSide = 1.5, -- front shot: studs toward the player's left so the ball does not fly into the lens
-	FrontHeight = 0.6, -- front shot: camera height above the HumanoidRootPart (chest is ~1; lower = bigger)
-	LookHeight = 1.9, -- front shot: looks at this height above the HumanoidRootPart (the face)
-	Fov = 60, -- field of view during the wind-up
+	-- Front shot: framed on the WHOLE body (raised throwing hand ~+4.5 to the feet ~-3 studs around the
+	-- HumanoidRootPart), so the arm wind-back and the raised knee are in frame, not just the face.
+	FrontDistance = 10, -- front shot: studs in front of the player (was 7: head and shoulders only)
+	FrontSide = 2, -- front shot: studs toward the player's left so the ball does not fly into the lens (was 1.5)
+	FrontHeight = 0.4, -- front shot: camera height above the HumanoidRootPart (a low angle; was 0.6)
+	LookHeight = 0.9, -- front shot: looks at this height above the HumanoidRootPart (mid body; was 1.9 = the face)
+	Fov = 60, -- field of view during the wind-up (vertical: 11.5 studs of body room at FrontDistance)
 	BallGrip = 0.9, -- R6 only: ball sits this far down the Right Arm (R15 uses the RightHand centre)
 }
 
--- Procedural throw (used when AnimationIds are 0). Keyframes: At = fraction of WindUp.Duration, angles in
+-- The built-in throw (used when AnimationIds are 0). Keyframes: At = fraction of WindUp.Duration, angles in
 -- degrees about the parent part's axes (X = pitch: + swings a limb forward/up, Y = yaw: + turns left,
--- Z = roll). The last key must equal the rest pose (0 or a multiple of 360) so every C0 restores cleanly.
--- Joints: Waist (R15 Waist / R6 RootJoint), RightShoulder, RightElbow (R15 only), LeftShoulder,
--- LeftHip, LeftKnee (R15 only), RightHip, RightKnee (R15 only).
+-- Z = roll). The last key must equal the rest pose (0 or a multiple of 360) so every joint restores cleanly.
+-- Consecutive keys of one joint differ by < 180 degrees per axis (the KeyframeSequence path slerps the shortest
+-- way between keys). Joints: Waist (R15 Waist / R6 RootJoint), RightShoulder, RightElbow (R15 only),
+-- LeftShoulder, LeftHip, LeftKnee (R15 only), RightHip, RightKnee (R15 only).
+-- Widened for readability: torso coil -45 -> -60, throwing arm -150 -> -165 (cocked) and -170 -> -185 (step),
+-- knee lift 70 -> 85, a bigger follow-through. Key 5 (release) sits at ReleaseAt / Duration = 0.80.
 Cutscene.Pose = {
 	{ At = 0.00, Waist = { 0, 0, 0 }, RightShoulder = { 0, 0, 0 }, RightElbow = { 0, 0, 0 }, LeftShoulder = { 0, 0, 0 },
 		LeftHip = { 0, 0, 0 }, LeftKnee = { 0, 0, 0 }, RightHip = { 0, 0, 0 }, RightKnee = { 0, 0, 0 } }, -- rest
-	{ At = 0.20, Waist = { 0, -12, 0 }, RightShoulder = { -45, 0, -10 }, RightElbow = { 20, 0, 0 }, LeftShoulder = { 25, 0, 0 },
-		LeftHip = { 15, 0, 0 }, LeftKnee = { -15, 0, 0 }, RightHip = { 0, 0, 0 }, RightKnee = { -5, 0, 0 } }, -- anticipation
-	{ At = 0.55, Waist = { 10, -45, 0 }, RightShoulder = { -150, 0, -25 }, RightElbow = { 95, 0, 0 }, LeftShoulder = { 80, 0, 10 },
-		LeftHip = { 70, 0, 0 }, LeftKnee = { -75, 0, 0 }, RightHip = { -5, 0, 0 }, RightKnee = { -12, 0, 0 } }, -- cocked, knee up
-	{ At = 0.68, Waist = { 8, -32, 0 }, RightShoulder = { -170, 0, -25 }, RightElbow = { 105, 0, 0 }, LeftShoulder = { 60, 0, 10 },
-		LeftHip = { 35, 0, 0 }, LeftKnee = { -30, 0, 0 }, RightHip = { -8, 0, 0 }, RightKnee = { -15, 0, 0 } }, -- step + start
-	{ At = 0.79, Waist = { -15, 25, 0 }, RightShoulder = { -265, 0, -10 }, RightElbow = { 10, 0, 0 }, LeftShoulder = { -10, 0, 5 },
-		LeftHip = { 10, 0, 0 }, LeftKnee = { -10, 0, 0 }, RightHip = { -15, 0, 0 }, RightKnee = { -20, 0, 0 } }, -- release
-	{ At = 0.90, Waist = { -25, 40, 0 }, RightShoulder = { -320, 0, 25 }, RightElbow = { 15, 0, 0 }, LeftShoulder = { -25, 0, 0 },
-		LeftHip = { 5, 0, 0 }, LeftKnee = { -5, 0, 0 }, RightHip = { -25, 0, 0 }, RightKnee = { -35, 0, 0 } }, -- follow-through
-	{ At = 1.00, Waist = { -15, 30, 0 }, RightShoulder = { -330, 0, 15 }, RightElbow = { 10, 0, 0 }, LeftShoulder = { -15, 0, 0 },
+	{ At = 0.20, Waist = { 0, -20, 0 }, RightShoulder = { -60, 0, -15 }, RightElbow = { 25, 0, 0 }, LeftShoulder = { 35, 0, 0 },
+		LeftHip = { 20, 0, 0 }, LeftKnee = { -20, 0, 0 }, RightHip = { 0, 0, 0 }, RightKnee = { -8, 0, 0 } }, -- anticipation
+	{ At = 0.55, Waist = { 12, -60, 0 }, RightShoulder = { -165, 0, -35 }, RightElbow = { 110, 0, 0 }, LeftShoulder = { 90, 0, 15 },
+		LeftHip = { 85, 0, 0 }, LeftKnee = { -90, 0, 0 }, RightHip = { -5, 0, 0 }, RightKnee = { -15, 0, 0 } }, -- cocked, knee up
+	{ At = 0.68, Waist = { 10, -45, 0 }, RightShoulder = { -185, 0, -35 }, RightElbow = { 120, 0, 0 }, LeftShoulder = { 70, 0, 15 },
+		LeftHip = { 40, 0, 0 }, LeftKnee = { -35, 0, 0 }, RightHip = { -10, 0, 0 }, RightKnee = { -18, 0, 0 } }, -- step + start
+	{ At = 0.80, Waist = { -20, 35, 0 }, RightShoulder = { -270, 0, -10 }, RightElbow = { 10, 0, 0 }, LeftShoulder = { -20, 0, 5 },
+		LeftHip = { 15, 0, 0 }, LeftKnee = { -10, 0, 0 }, RightHip = { -20, 0, 0 }, RightKnee = { -25, 0, 0 } }, -- release
+	{ At = 0.90, Waist = { -30, 50, 0 }, RightShoulder = { -325, 0, 25 }, RightElbow = { 15, 0, 0 }, LeftShoulder = { -30, 0, 0 },
+		LeftHip = { 5, 0, 0 }, LeftKnee = { -5, 0, 0 }, RightHip = { -30, 0, 0 }, RightKnee = { -40, 0, 0 } }, -- follow-through
+	{ At = 1.00, Waist = { -15, 30, 0 }, RightShoulder = { -335, 0, 15 }, RightElbow = { 10, 0, 0 }, LeftShoulder = { -15, 0, 0 },
 		LeftHip = { 0, 0, 0 }, LeftKnee = { 0, 0, 0 }, RightHip = { -15, 0, 0 }, RightKnee = { -20, 0, 0 } }, -- settle
-	{ At = 1.29, Waist = { 0, 0, 0 }, RightShoulder = { -360, 0, 0 }, RightElbow = { 0, 0, 0 }, LeftShoulder = { 0, 0, 0 },
-		LeftHip = { 0, 0, 0 }, LeftKnee = { 0, 0, 0 }, RightHip = { 0, 0, 0 }, RightKnee = { 0, 0, 0 } }, -- rest (= Duration + Recover)
+	{ At = 1.2333, Waist = { 0, 0, 0 }, RightShoulder = { -360, 0, 0 }, RightElbow = { 0, 0, 0 }, LeftShoulder = { 0, 0, 0 },
+		LeftHip = { 0, 0, 0 }, LeftKnee = { 0, 0, 0 }, RightHip = { 0, 0, 0 }, RightKnee = { 0, 0, 0 } }, -- rest (= (Duration + Recover) / Duration)
 }
+
 
 ----------------------------------------------------------------------------------------------------
 -- Beat 2: LAUNCH AND BALL POV

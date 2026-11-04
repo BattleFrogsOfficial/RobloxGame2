@@ -7,6 +7,9 @@
 -- without a local release, spectator throw) and proves after each: the camera is back (Custom, subject, FOV),
 -- the HUD is visible, every cutscene instance / render binding is gone, every Motor6D C0 is restored, and
 -- CutsceneFinished went to the server exactly once for an answered real throw (never for fakes / unanswered).
+-- K: every Rig animation path (KeyframeSequence on the Animator with idle muted + restored and the id cached,
+-- a track that never loads -> C0, AnimationConstraint joints, R6 C0, no joints). The main runs have no Animator
+-- or KeyframeSequenceProvider, so they also prove the C0 fallback.
 local roblox = require("@lune/roblox")
 local process = require("@lune/process")
 local task = require("@lune/task")
@@ -139,6 +142,7 @@ local Game = R.Require(Shared.Config.Game)
 local DogCatalog = R.Require(Shared.Util.DogCatalog)
 local BallFlight = R.Require(Shared.Util.BallFlight)
 local OddsCounter = R.Require(Shared.Cutscene.OddsCounter)
+local Path = R.Require(Shared.Cutscene.Path)
 
 local Enum = R.Enum
 local Instance = R.Instance
@@ -626,6 +630,213 @@ do
 	check(firstCF ~= nil and (firstCF.Position - front.Position).Magnitude < 1e-3, "M: hard cut straight to the front shot (no sweep)")
 	check(seen.maxFov <= math.max(70, C.ReducedMotion.PovFov) + 1e-6, "M: no wide POV FOV", tostring(seen.maxFov))
 	cleanState("M", 1, r.ThrowId)
+end
+
+-- ------------------------------------------------------------------ K: the rig's animation paths
+-- KeyframeSequence on the Animator (registered once per rig type, Action4, lower tracks muted + restored), a track
+-- that never loads (falls back to C0), AnimationConstraint joints (Avatar Joint Upgrade), R6, and no joints at all.
+do
+	local Rig = R.Require(cutsceneModule:FindFirstChild("Rig"))
+	local registeredSeqs = {}
+	M.RegisterKeyframeSequence = function(_, kfs)
+		table.insert(registeredSeqs, kfs)
+		return "rbxtemp://" .. #registeredSeqs
+	end
+	local trackLength = Path.PoseLength()
+	local loaded = {}
+	M.LoadAnimation = function(_, anim)
+		local tr = { AnimationId = anim.AnimationId, Length = trackLength, Priority = Enum.AnimationPriority.Core, Looped = true,
+			IsPlaying = false, WeightTarget = 1, Plays = 0 }
+		function tr.Play(self, _fade, w)
+			self.IsPlaying = true
+			self.Plays += 1
+			self.PlayWeight = w
+		end
+		function tr.Stop(self)
+			self.IsPlaying = false
+		end
+		function tr.AdjustWeight(self, w)
+			self.WeightTarget = w
+		end
+		table.insert(loaded, tr)
+		return tr
+	end
+	local idle = { Priority = Enum.AnimationPriority.Core, IsPlaying = true, WeightTarget = 1 }
+	function idle.AdjustWeight(self, w)
+		self.WeightTarget = w
+	end
+	local action = { Priority = Enum.AnimationPriority.Action, IsPlaying = true, WeightTarget = 1 }
+	function action.AdjustWeight(self, w)
+		self.WeightTarget = w
+	end
+	M.GetPlayingAnimationTracks = function()
+		return { idle, action }
+	end
+	local function runFor(seconds)
+		for _ = 1, math.ceil(seconds / DT) do
+			frame()
+		end
+	end
+
+	-- K1: R15 + Animator -> KeyframeSequence
+	local who = Instance.new("Player")
+	who.Name = "AnimR15"
+	local c1, h1, m1 = buildCharacter(who)
+	local animator = Instance.new("Animator")
+	animator.Parent = h1
+	local ballPart = Instance.new("Part")
+	ballPart.Parent = R.Services.Workspace
+	local rig = Rig.Play(c1, ballPart, V3.new(), { Assets = true })
+	check(rig.Path == "KeyframeSequence (R15)", "K1: R15 + Animator plays the KeyframeSequence", rig.Path)
+	check(Rig._printed[rig.Path] == true, "K1: the path is reported once (Studio diagnostic)")
+	check(#registeredSeqs == 1, "K1: registered one KeyframeSequence")
+	local kfs = registeredSeqs[1]
+	check(kfs and kfs.ClassName == "KeyframeSequence" and #kfs:GetChildren() == #C.Pose, "K1: one Keyframe per pose key")
+	check(kfs and kfs.Priority == Enum.AnimationPriority.Action4 and kfs.Loop == false, "K1: sequence is Action4, not looped")
+	local firstKey = kfs and kfs:GetChildren()[1]
+	local rootPose = firstKey and firstKey:FindFirstChild("HumanoidRootPart")
+	local lower = rootPose and rootPose:FindFirstChild("LowerTorso")
+	local upper = lower and lower:FindFirstChild("UpperTorso")
+	check(upper and upper:FindFirstChild("RightUpperArm") and upper.RightUpperArm:FindFirstChild("RightLowerArm") ~= nil
+		and lower:FindFirstChild("LeftUpperLeg") and lower.LeftUpperLeg:FindFirstChild("LeftLowerLeg") ~= nil, "K1: R15 pose hierarchy")
+	check(upper and upper.EasingStyle == Enum.PoseEasingStyle.Cubic and upper.EasingDirection == Enum.PoseEasingDirection.InOut,
+		"K1: poses ease Cubic InOut")
+	local tr = loaded[#loaded]
+	check(tr and tr.AnimationId == "rbxtemp://1" and tr.IsPlaying and tr.Plays == 1, "K1: the registered id is loaded and played")
+	check(tr and tr.Priority == Enum.AnimationPriority.Action4 and tr.Looped == false and tr.PlayWeight == 1, "K1: track Action4, weight 1, not looped")
+	check(idle.WeightTarget == 0, "K1: the idle track is muted while the throw plays")
+	check(action.WeightTarget == 1, "K1: Action tracks are left alone")
+	runFor(0.5)
+	check((ballPart.Position - rig:HandPosition()).Magnitude < 1e-4, "K1: the ball follows the hand")
+	for _, pair in m1 do
+		check(pair[1].C0 == pair[2], "K1: C0 untouched on the KeyframeSequence path " .. pair[1].Name)
+	end
+	rig:Release()
+	runFor(Path.PoseLength())
+	check(idle.WeightTarget == 1, "K1: the idle track weight is restored after the throw")
+	check(tr and not tr.IsPlaying, "K1: the throw track stopped")
+	rig:Stop()
+	-- second avatar of the same rig type reuses the cached id
+	local who2 = Instance.new("Player")
+	who2.Name = "AnimR15b"
+	local c2, h2 = buildCharacter(who2)
+	Instance.new("Animator").Parent = h2
+	local rig2 = Rig.Play(c2, nil, V3.new(), { Assets = false })
+	check(rig2.Path == "KeyframeSequence (R15)" and #registeredSeqs == 1, "K1: the registered id is cached per rig type", tostring(#registeredSeqs))
+	rig2:Stop()
+	c1:Destroy()
+	c2:Destroy()
+
+	-- K2: the track never loads (Length 0) -> Motor6D C0 fallback
+	trackLength = 0
+	local who3 = Instance.new("Player")
+	who3.Name = "AnimNoLoad"
+	local c3, h3, m3 = buildCharacter(who3)
+	Instance.new("Animator").Parent = h3
+	local rig3 = Rig.Play(c3, nil, V3.new(), {})
+	runFor(0.7)
+	check(string.find(rig3.Path, "fell back to Motor6D C0", 1, true) ~= nil, "K2: an unloaded track falls back to C0", rig3.Path)
+	local moved = false
+	for _, pair in m3 do
+		if pair[1].C0 ~= pair[2] then
+			moved = true
+		end
+	end
+	check(moved, "K2: the C0 fallback moves the joints")
+	rig3:Stop()
+	for _, pair in m3 do
+		check(pair[1].C0 == pair[2], "K2: C0 restored " .. pair[1].Name)
+	end
+	check(idle.WeightTarget == 1, "K2: idle restored")
+	trackLength = Path.PoseLength()
+	c3:Destroy()
+
+	-- K3: AnimationConstraint joints (Avatar Joint Upgrade), no Animator -> Transform each frame
+	local c4 = Instance.new("Model")
+	c4.Name = "Upgraded"
+	local hrp = part("HumanoidRootPart", c4, CF.new(0, 3, 0))
+	local hum4 = Instance.new("Humanoid")
+	hum4.RigType = Enum.HumanoidRigType.R15
+	hum4.Parent = c4
+	local parts = { HumanoidRootPart = hrp }
+	local constraints = {}
+	for _, spec in { { "LowerTorso", "HumanoidRootPart", "Root" }, { "UpperTorso", "LowerTorso", "Waist" }, { "RightUpperArm", "UpperTorso", "RightShoulder" },
+		{ "RightLowerArm", "RightUpperArm", "RightElbow" }, { "LeftUpperArm", "UpperTorso", "LeftShoulder" }, { "LeftUpperLeg", "LowerTorso", "LeftHip" },
+		{ "LeftLowerLeg", "LeftUpperLeg", "LeftKnee" }, { "RightUpperLeg", "LowerTorso", "RightHip" }, { "RightLowerLeg", "RightUpperLeg", "RightKnee" } } do
+		local p = part(spec[1], c4, hrp.CFrame)
+		parts[spec[1]] = p
+		local a0 = Instance.new("Attachment")
+		a0.Name = spec[3] .. "RigAttachment"
+		a0.CFrame = CF.new(0, 0.5, 0)
+		a0.Parent = parts[spec[2]]
+		local a1 = Instance.new("Attachment")
+		a1.Name = spec[3] .. "RigAttachment"
+		a1.Parent = p
+		local ac = Instance.new("AnimationConstraint")
+		ac.Name = spec[3]
+		ac.Attachment0 = a0
+		ac.Attachment1 = a1
+		ac.Transform = CF.new()
+		ac.Parent = p
+		local bs = Instance.new("BallSocketConstraint")
+		bs.Name = spec[3] .. "BallSocket"
+		bs.Parent = p
+		constraints[spec[3]] = ac
+	end
+	part("RightHand", c4, hrp.CFrame * CF.new(1.5, -1, 0))
+	c4.Parent = R.Services.Workspace
+	local rig4 = Rig.Play(c4, nil, V3.new(), {})
+	check(string.find(rig4.Path, "AnimationConstraint", 1, true) == 1, "K3: AnimationConstraint joints are driven", rig4.Path)
+	runFor(0.8)
+	check(constraints.RightShoulder.Transform ~= CF.new() and constraints.LeftHip.Transform ~= CF.new(), "K3: Transform written during the wind-up")
+	check(constraints.Root.Transform == CF.new(), "K3: the root joint is left at rest")
+	rig4:Stop()
+	for name, ac in constraints do
+		check(ac.Transform == CF.new(), "K3: Transform restored " .. name)
+	end
+	c4:Destroy()
+
+	-- K4: R6 Motor6Ds, no Animator; K5: no joints at all
+	local c5 = Instance.new("Model")
+	c5.Name = "Classic"
+	local hrp5 = part("HumanoidRootPart", c5, CF.new(0, 3, 0))
+	local hum5 = Instance.new("Humanoid")
+	hum5.RigType = Enum.HumanoidRigType.R6
+	hum5.Parent = c5
+	local torso = part("Torso", c5, hrp5.CFrame)
+	part("Right Arm", c5, hrp5.CFrame * CF.new(1.5, 0, 0))
+	local r6m = {}
+	for _, spec in { { hrp5, "RootJoint" }, { torso, "Right Shoulder" }, { torso, "Left Shoulder" }, { torso, "Left Hip" }, { torso, "Right Hip" } } do
+		local m = Instance.new("Motor6D")
+		m.Name = spec[2]
+		m.C0 = CF.new(1, 0.5, 0) * CF.Angles(0, math.pi / 2, 0)
+		m.Parent = spec[1]
+		table.insert(r6m, { m, m.C0 })
+	end
+	local rig5 = Rig.Play(c5, nil, V3.new(), {})
+	check(string.find(rig5.Path, "Motor6D C0", 1, true) == 1, "K4: R6 without an Animator uses C0", rig5.Path)
+	runFor(0.8)
+	check(r6m[2][1].C0 ~= r6m[2][2], "K4: R6 shoulder moves")
+	check((rig5:HandPosition() - (c5["Right Arm"].CFrame * CF.new(0, -C.WindUp.BallGrip, 0)).Position).Magnitude < 1e-4, "K4: R6 hand grip")
+	rig5:Stop()
+	for _, pair in r6m do
+		check(pair[1].C0 == pair[2], "K4: R6 C0 restored " .. pair[1].Name)
+	end
+	c5:Destroy()
+	local c6 = Instance.new("Model")
+	c6.Name = "Statue"
+	part("HumanoidRootPart", c6, CF.new())
+	local rig6 = Rig.Play(c6, nil, V3.new(1, 2, 3), {})
+	check(rig6.Path == "NONE: no joints found on Statue (R6)", "K5: no joints is reported", rig6.Path)
+	check(rig6:HandPosition() == V3.new(1, 2, 3), "K5: no hand -> fallback position")
+	rig6:Stop()
+
+	M.RegisterKeyframeSequence = nil
+	M.GetPlayingAnimationTracks = nil
+	M.LoadAnimation = function()
+		error("no uploaded animations in the harness")
+	end
+	table.clear(warnings)
 end
 
 -- ------------------------------------------------------------------ L: spectator (someone else's throw)

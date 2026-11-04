@@ -37,6 +37,7 @@ local ORDER = {
 	"ShopService",
 	"TrainingService",
 	"LeaderboardService",
+	"DevService", -- dev tools panel (Config/Game.DevTools; refuses everyone in a live server unless listed)
 }
 for _, name in ORDER do
 	local mod = Services:FindFirstChild(name)

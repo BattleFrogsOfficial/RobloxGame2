@@ -20,6 +20,10 @@
 --                                   ("SetKeepDupes", "<Rarity>=true|false"); echoed back in PlayerState.Settings
 -- ClaimDailyWalk     RemoteFunction C->S () -> (ok, msg)          the HUD's "Claim daily walk" banner
 -- ClaimBookReward    RemoteFunction C->S (zoneId, milestone) -> (ok, msg)
+-- DevCommand         RemoteFunction C->S (command, arg?) -> (ok, msg)   dev tools (DevService; refused unless
+--                                   Game.DevTools allows the player: Studio, or a listed UserId). Commands:
+--                                   "AddPower" (100|1000|10000), "PowerForZone" (zoneId), "MaxPower", "ResetPower",
+--                                   "AddCash", "GiveBalls"; each pushes a StateUpdate
 -- Broadcast          RemoteEvent    S->C ({Kind, Text, Rarity?, Variant?, Global: boolean})
 -- EventState         RemoteEvent    S->All ({Kind: "Squirrel"|"RunawayDog"|"DailyWalk", Active, EndsAt, Data})
 --
@@ -39,6 +43,7 @@
 --   BookRewards, Boosts: {[boostId]: expiresAt}, Whistles, TreatPockets, LuckyStreak, LastDailyWalk, TutorialDone,
 --   Computed = PlayerStats.Compute(...) incl. BallCounts, BallId (ball the next throw uses), Prices["Ball:<id>"] }
 -- Player attributes set by the server: Cash, Bones, ThrowPower, IncomePerSec, PadIndex (yard index),
+--   DevTools (true for players the dev tools allow; absent otherwise),
 --   OnPlatform (boolean), ThrowQueuePos (0 = not queued, 1 = your turn, 2+ = waiting: your place in line).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -47,7 +52,8 @@ local Remotes = {}
 
 Remotes.Events = { "ChargeBegin", "ChargeRelease", "ThrowResult", "CutsceneFinished", "StateUpdate", "EquipBall",
 	"Train", "Broadcast", "EventState" }
-Remotes.Functions = { "UseWhistle", "RequestState", "ShopPurchase", "DogAction", "ClaimDailyWalk", "ClaimBookReward" }
+Remotes.Functions = { "UseWhistle", "RequestState", "ShopPurchase", "DogAction", "ClaimDailyWalk", "ClaimBookReward",
+	"DevCommand" }
 
 function Remotes.Init()
 	assert(RunService:IsServer(), "Remotes.Init is server-only")

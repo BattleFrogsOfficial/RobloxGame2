@@ -146,6 +146,20 @@ local function testPanel(open)
 	end
 end
 
+-- Dev tools: the server marks devs with the "DevTools" attribute; the pill alone, next to the test pill, the panel.
+local function devTools(open, withTestPill)
+	return function(ui)
+		R.LocalPlayer:SetAttribute("DevTools", true)
+		if withTestPill then
+			testPanel(false)(ui)
+			ui.Dev:SetBesideTestPill(true)
+		end
+		if open then
+			ui.Router.Open("Dev")
+		end
+	end
+end
+
 local SCENARIOS = {
 	{ name = "hud", setup = function(ui) end },
 	{ name = "throw-off-platform", setup = function(ui)
@@ -238,6 +252,9 @@ local SCENARIOS = {
 	end },
 	{ name = "cutscene-testmode-hud", setup = testPanel(false) },
 	{ name = "cutscene-testpanel", setup = testPanel(true) },
+	{ name = "dev-pill", setup = devTools(false, false) },
+	{ name = "dev-pill-testmode", setup = devTools(false, true) },
+	{ name = "dev-panel", setup = devTools(true, false) },
 	{ name = "reveal-missed", setup = function(ui)
 		local def = DogCatalog.ZoneTierList(Zones[1].Id, "Mythic")[1] or DogCatalog.All()[1]
 		ui:ShowReveal({ ThrowId = "t2", ThrowerUserId = 1, Distance = 80, ZoneId = Zones[1].Id, DogId = def.Id, Rarity = def.Rarity, Caught = false, CatchChance = 0.3, WhistleOwned = true, WhistleCount = 1 })
@@ -579,6 +596,7 @@ for _, vp in VIEWPORTS do
 		local ok, err = pcall(function()
 			-- The UI module caches State across starts; reset the parts a scenario touches.
 			setPlatform(false, 0)
+			R.LocalPlayer:SetAttribute("DevTools", nil)
 			local ui = UIModule.Start({ Parent = R.PlayerGui, IsTouch = vp.touch, Viewport = vp.size, Remotes = remoteByName })
 			ui.State.Server.Events = {}
 			ui.State.Set(fakeState())

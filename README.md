@@ -62,7 +62,7 @@ src/server/
                                field + 9 filled zones; walls, lighting, WorldCheck); see docs/WORLD.md
   Services/                    DataService, CharacterService, BroadcastService, DogService, BookService,
                                EventService, ThrowService (+ ThrowQueue, pure), RollService (pure),
-                               ShopService, TrainingService, LeaderboardService (leaderstats)
+                               ShopService, TrainingService, LeaderboardService (leaderstats), DevService (dev tools)
   Tests/RollService.spec.luau  roll distribution checks
 src/client/
   Main.client.luau             the only entry: UI, then Cutscene and WorldController
@@ -180,9 +180,31 @@ lune run tools/tests/cutscene_counter.luau # "1 out of N" target = Odds panel, c
 lune run tools/tests/cutscene_path.luau    # arc sampling, retarget, bounces, pose, camera shots
 lune run tools/tests/cutscene_director.luau # every cutscene branch under the UI emulator (CutsceneFinished once)
 lune run tools/tests/cutscene_compile.luau # cutscene modules compile, retired modules gone
+lune run tools/tests/devservice.luau       # dev tools permission gate + PowerForZone / MaxPower maths
 python3 tools/balance_sim.py               # F2P / scenario pacing simulation (zone first-reach times)
 python3 tools/icons.py                     # regenerate assets/icons + src/shared/UI/PixelIcons.luau (--check: validate)
 ```
+
+## Dev tools
+
+In Studio every player is a dev: press Play, then the purple **Dev** pill (desktop: right edge, mid-height;
+phone / tablet: left edge under the side menu) opens the Dev panel. It shows your live ThrowPower and the zone a
+Good throw reaches with your equipped ball.
+
+- **+100 / +1K / +10K**: add ThrowPower (ignores the training caps; training afterwards just stops adding).
+- **Max**: enough ThrowPower for a Perfect Tennis Ball throw to reach the end of Mythic Meadow.
+- **Reset**: back to `Game.StartingThrowPower`.
+- **Reach <zone>** (9 buttons): sets ThrowPower so a Good throw with the equipped ball lands mid-zone.
+- **+$1M**: cash for consumable balls. **+10 balls**: +10 throws of every consumable ball.
+
+Every button calls the `DevCommand` remote; `DevService` logs it to the output. Config: `Config/Game.luau →
+DevTools = { Enabled, StudioOnly, UserIds }`. Live servers have no dev tools (`StudioOnly = true`). To allow
+someone in a live server, set `StudioOnly = false` and add their UserId: `UserIds = { 12345678 }`. Turn it all
+off with `Enabled = false`.
+
+The client also prints, in Studio, which path animated the throw once per session, e.g.
+`[Cutscene] throw animation: KeyframeSequence (R15)` (or `Motor6D C0`, `AnimationConstraint`, `uploaded ids`,
+`NONE: no joints found on <rig>`).
 
 ## Tests in Studio
 

@@ -53,6 +53,15 @@ function Training.PowerCap(level: number): number
 	return math.min(Training.MaxThrowPower, caps[i])
 end
 
+-- ThrowPower after one rep: never above the cap, and never LOWERED by it (a dev-tools ThrowPower above the cap
+-- stays as it is; training just stops adding until the cap passes it).
+function Training.ApplyRep(power: number, gain: number, cap: number): number
+	if power >= cap then
+		return power
+	end
+	return math.min(cap, power + gain)
+end
+
 function Training.UpgradeCost(nextLevel: number): number
 	return math.floor(Training.Upgrades.BaseCost * Training.Upgrades.CostGrowth ^ (nextLevel - 1))
 end

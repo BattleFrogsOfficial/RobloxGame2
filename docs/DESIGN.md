@@ -123,7 +123,7 @@ The source of truth is `src/shared/Config/Layout.luau` (module-level detail: `do
  └──────────────── ThrowPower up, better ball ─► reach further zones ◄──┘
 ```
 
-**Session rhythm:** a throw takes about 5-25 s including the cutscene (5.5 s Common ... 12 s Mythic to the end card, plus the card), then the next player in line throws. Training reps at the one training station fill the gaps between turns. Every 15 min a squirrel event pulls everyone into the plaza. The daily walk is a once-a-day reason to come back. Puppy growth is a "come back later" reason.
+**Session rhythm:** a throw takes about 5-25 s including the cutscene (5.75 s Common ... 12.25 s Mythic to the end card, plus the card), then the next player in line throws. Training reps at the one training station fill the gaps between turns. Every 15 min a squirrel event pulls everyone into the plaza. The daily walk is a once-a-day reason to come back. Puppy growth is a "come back later" reason.
 
 ---
 
@@ -513,7 +513,7 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 |------|------|-------|
 | 0:00 | Spawn at a `PlazaSpawn` on the plaza. An arrow points to the throwing platform at the cliff edge (walk straight onto the flush deck). | The yard is auto-assigned and the YardSign shows your name. |
 | 0:10 | On the deck (queue if others are there). **Tutorial throw:** "Click to throw", then click again near the top of the meter. The meter runs at half speed for this throw only, client and server alike (`IsTutorial`). | Server forces Backyard, a Common and **a guaranteed catch**. |
-| 0:20 | **Cutscene** (Common length, ~5.5 s) → end card "+$1/s". | It cannot be skipped this first time. |
+| 0:20 | **Cutscene** (Common length, ~5.75 s) → end card "+$1/s". | It cannot be skipped this first time. |
 | 0:30 | Guide arrow to your yard. The puppy appears at a DogSpot, a "+$" floater appears, and a tooltip explains puppy → adult (Common: 5 min). | |
 | 0:50 | "Throw again!" Second turn (back of the line if others are queued) with normal odds and normal meter. The catch chance line on the HUD is highlighted. | |
 | 1:20 | Cash ≥ the first training upgrade price (starter cash $50). Arrow to the training station → a few reps, then the shop panel's Yard tab → **first training purchase** → the power cap rises and the reach line updates. | Starter cash could instead buy one Rubber Ball throw; the guide points at training first. |
@@ -535,7 +535,7 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 
 ### 20.2 Beats (in order)
 
-1. **Wind-up** (`WindUp.Duration` 1.2 s, release frame at `ReleaseAt` 0.95 s). The camera sweeps a half circle (`SweepTime` 0.9 s, round the throwing-arm side) from the default view to a low front shot at chest height looking at the face. The avatar winds up (body turns, arm back and up, one knee up) and throws overhand: uploaded `AnimationIds.WindUp/Throw` when both are non-zero, else procedural Motor6D C0 keyframes (`Config.Pose`, R15 and R6, every C0 restored). The ball (`Balls.ById[BallId].Color`) follows the right hand until the release frame.
+1. **Wind-up** (`WindUp.Duration` 1.5 s, release frame at `ReleaseAt` 1.2 s; were 1.2 / 0.95 s, too short to read). The camera sweeps a half circle (`SweepTime` 0.75 s, round the throwing-arm side) from the default view to a low front shot 10 studs out that frames the **whole body** (raised hand to feet), then holds still for the cocked pose and the throw. The avatar winds up (torso coils 60 degrees, arm far back and up, one knee up) and throws overhand. Animation paths (`Cutscene/Rig`, first that works): uploaded `AnimationIds.WindUp/Throw` when both are non-zero; else `Config.Pose` built at runtime into a **KeyframeSequence** (`Shared/Cutscene/ThrowAnim`: R15 / R6 pose tree, keys at `At × Duration`, Cubic InOut, each joint's angles converted into its Transform space with its real C0 / `Attachment0` rotation), registered with `KeyframeSequenceProvider` (cached per rig type) and played on `Humanoid.Animator` at **Action4**, weight 1, not looped, with the default idle / walk tracks faded to weight 0 meanwhile and restored after; else per joint, Motor6D C0 keyframes or `AnimationConstraint.Transform` (Avatar Joint Upgrade rigs), every joint restored. In Studio the client prints the path once per session: `[Cutscene] throw animation: KeyframeSequence (R15)` / `Motor6D C0` / `AnimationConstraint` / `uploaded ids` / `NONE: no joints found on <rig>`. The ball (`Balls.ById[BallId].Color`) follows the right hand's world CFrame until the release frame on every path.
 2. **Launch + ball POV.** Whoosh, small camera shake, the camera whips (`WhipTime` 0.2 s) to just behind and `PovUp` 3.5 studs above the ball, looking along its travel (pitch follows 45% of the climb), FOV 78. On-screen flight = `result.FlightTime` remapped from the server's 1.0-2.3 s into **1.5-4 s**; the `Util/BallFlight` arc is time-scaled, starts in the hand, blends into the arc over 0.3 s and lands exactly on `LandPos`. Trail + looped wind whose volume / pitch rise with speed.
 3. **Landing** (last 25% of the flight). The camera eases up and back to a wide shot (30 back, 24 up) looking down at the landing spot; the ball touches `LandPos` and makes 3 decaying bounces. Per-zone dust / splash / sparks + sound (`ImpactFX`: grass, sand, snow, roof grit, metal clank + sparks on the Space Station, crystal glitter in the Meadow).
 4. **The dog arrives** (`Beats.DogArrive` 0.6-1.5 s). The real `DogId` model (`DogFactory` + `VariantFX`) hops in from off camera (inside the field edges) and stops beside the ball; the camera holds wide, then pushes in.
@@ -548,16 +548,16 @@ Principles: no pay-to-win stealing, no purchase popup during a loss, every paid 
 
 | Rarity | Release | Flight | Settle | Dog | Counter | Hold | Outcome | **Total** |
 |---|---|---|---|---|---|---|---|---|
-| Common | 0.95 | 1.5 | 0.2 | 0.6 | 1.5 | 0.25 | 0.5 | **5.5 s** |
-| Uncommon | 0.95 | 1.5 | 0.25 | 0.8 | 2.0 | 0.35 | 0.65 | **6.5 s** |
-| Rare | 0.95 | 1.5 | 0.3 | 1.0 | 2.5 | 0.45 | 0.8 | **7.5 s** |
-| Epic | 0.95 | 1.5 | 0.35 | 1.2 | 3.0 | 0.6 | 1.4 | **9.0 s** |
-| Legendary | 0.95 | 1.5 | 0.4 | 1.4 | 3.5 | 0.75 | 2.0 | **10.5 s** |
-| Mythic | 0.95 | 1.5 | 0.5 | 1.5 | 4.0 | 1.05 | 2.5 | **12.0 s** |
+| Common | 1.2 | 1.5 | 0.2 | 0.6 | 1.5 | 0.25 | 0.5 | **5.75 s** |
+| Uncommon | 1.2 | 1.5 | 0.25 | 0.8 | 2.0 | 0.35 | 0.65 | **6.75 s** |
+| Rare | 1.2 | 1.5 | 0.3 | 1.0 | 2.5 | 0.45 | 0.8 | **7.75 s** |
+| Epic | 1.2 | 1.5 | 0.35 | 1.2 | 3.0 | 0.6 | 1.4 | **9.25 s** |
+| Legendary | 1.2 | 1.5 | 0.4 | 1.4 | 3.5 | 0.75 | 2.0 | **10.75 s** |
+| Mythic | 1.2 | 1.5 | 0.5 | 1.5 | 4.0 | 1.05 | 2.5 | **12.25 s** |
 
 A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums every beat per rarity against `Budget`. The Reveal end card then closes itself after `EndCard.AutoClose` (5 s Common ... 10 s Mythic) unless the player closes it first.
 
-**Server timeout.** `Config/Timers.luau` computes `Timers.Cutscene[rarity]` from this file: `Budget + (Flight.Max - ReferenceFlight) + Fallback.HoldMax + EndCard.AutoClose + Return.Time` = **16.5 / 18.5 / 20.5 / 23 / 25.5 / 28 s** (Common ... Mythic). `ThrowService` finishes a throw on its own at release + `FlightTime` + that + `Timers.CutscenePadding` (5 s) if no `CutsceneFinished` arrives, so it never cuts a real cutscene short. A `CutsceneFinished` sooner than `0.9 × Timeline.EarliestEnd` (the Skip point, or the short-Common end, at this throw's on-screen flight) is held to that time. The platform turn ends `MinSecondsBetweenThrows` after the throw finishes, so the next player in line waits for the real cutscene, never for the timeout unless the thrower disconnects or stalls. The HUD's own safety unlock (`ui.Config.ReleaseSafetySeconds` = `Timeline.SafetySeconds()`, ~11.6 s) only covers a release the server refused.
+**Server timeout.** `Config/Timers.luau` computes `Timers.Cutscene[rarity]` from this file: `Budget + (Flight.Max - ReferenceFlight) + Fallback.HoldMax + EndCard.AutoClose + Return.Time` = **16.75 / 18.75 / 20.75 / 23.25 / 25.75 / 28.25 s** (Common ... Mythic). `ThrowService` finishes a throw on its own at release + `FlightTime` + that + `Timers.CutscenePadding` (5 s) if no `CutsceneFinished` arrives, so it never cuts a real cutscene short. A `CutsceneFinished` sooner than `0.9 × Timeline.EarliestEnd` (the Skip point, or the short-Common end, at this throw's on-screen flight) is held to that time. The platform turn ends `MinSecondsBetweenThrows` after the throw finishes, so the next player in line waits for the real cutscene, never for the timeout unless the thrower disconnects or stalls. The HUD's own safety unlock (`ui.Config.ReleaseSafetySeconds` = `Timeline.SafetySeconds()`, ~11.8 s) only covers a release the server refused.
 
 ### 20.4 Rules
 
@@ -565,8 +565,8 @@ A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums ever
 - **Settings.HideCommonReveals** ("Short Common reveals"): a Common plays wind-up + flight + landing, then the end card (no dog, no counter).
 - **Late result:** if no `ThrowResult` has arrived by the release frame the ball flies an estimated arc (the server's distance formula without scatter) and blends into the real one when it arrives; at touchdown it holds the landing shot up to `Fallback.HoldMax` 3 s, then shows "The ball rolled away..." and unlocks without `CutsceneFinished`. A result that still arrives later only shows the end card (and then reports once).
 - **Reduced motion** (`Settings.ReducedMotion`): no sweep / whip / push-in / follow / shakes / counter punches; hard cuts between the front, POV, wide and close shots.
-- **Cleanup:** the whole sequence is `pcall`-wrapped; finish, skip, any error, death (`Humanoid.Died`) or character removal destroy every instance, connection, sound, tween and render binding (two `Janitor`s), restore every C0, the camera and the HUD, and unlock.
-- **Spectators:** other clients get no camera work. `src/client/BallFlight.client.luau` → `Cutscene/Spectator` animates the thrower's avatar locally (procedural C0s do not replicate; uploaded animations replicate by themselves) and flies the same time-scaled ball, which bounces and rests for 6 s. The UI shows its Spectator banner.
+- **Cleanup:** the whole sequence is `pcall`-wrapped; finish, skip, any error, death (`Humanoid.Died`) or character removal destroy every instance, connection, sound, tween and render binding (two `Janitor`s), restore every joint (C0 / Transform / animation tracks), the camera and the HUD, and unlock.
+- **Spectators:** other clients get no camera work. `src/client/BallFlight.client.luau` → `Cutscene/Spectator` animates the thrower's avatar locally with the same `Rig` paths (a runtime-registered KeyframeSequence plays only on the client that registered it, so every client plays its own; procedural C0s do not replicate; uploaded animations replicate by themselves) and flies the same time-scaled ball, which bounces and rests for 6 s. The UI shows its Spectator banner.
 
 ### 20.5 Test place
 
@@ -574,7 +574,7 @@ A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums ever
 
 ### 20.6 Checks
 
-`tools/tests/cutscene.luau` (budgets, config, flight remap, skip / short-Common / fallback rules, fakes), `cutscene_counter.luau` (target = Odds panel for every zone × tier × luck, colour climb, tick schedule), `cutscene_path.luau` (arc sampling, retarget, bounces, pose, camera shots), `cutscene_director.luau` (every branch end-to-end under the UI emulator with a virtual clock: camera / HUD / C0 restored, nothing left behind, `CutsceneFinished` exactly once), `cutscene_compile.luau`; `tools/uicheck` scenarios `cutscene-*` (counter at each colour, stopped with name / badge / flourish, Skip, fallback, test panel). PNGs in `docs/qa/cutscene/`. Camera feel, animation look, sounds and particle look can only be judged in Studio.
+`tools/tests/cutscene.luau` (budgets, config, flight remap, skip / short-Common / fallback rules, fakes), `cutscene_counter.luau` (target = Odds panel for every zone × tier × luck, colour climb, tick schedule), `cutscene_path.luau` (arc sampling, retarget, bounces, pose, KeyframeSequence description per rig, camera shots incl. whole-body front framing), `cutscene_director.luau` (every branch end-to-end under the UI emulator with a virtual clock: camera / HUD / C0 restored, nothing left behind, `CutsceneFinished` exactly once; every Rig path: KeyframeSequence + muted idle, unloaded track -> C0, AnimationConstraint, R6, no joints), `cutscene_compile.luau`; `tools/uicheck` scenarios `cutscene-*` (counter at each colour, stopped with name / badge / flourish, Skip, fallback, test panel). PNGs in `docs/qa/cutscene/`. Camera feel, animation look, sounds and particle look can only be judged in Studio.
 
 ---
 
@@ -602,6 +602,7 @@ A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums ever
 - `ThrowService`: platform presence + queue, charge timing, meter, distance, ball use-up, landing / flight (`BallFlight`), roll, `ThrowResult`, cutscene finish, Golden Whistle. Uses `ThrowQueue` (pure FIFO, Lune-tested) and `RollService` (pure rolls: tier, dog, variant, catch, Treat Pocket, Lucky Streak).
 - `ShopService`: cash / Bones purchases (balls, training, slots, boosts, items, cosmetics), `EquipBall`, `ProcessReceipt`, game passes.
 - `TrainingService`: the one station ("Main"), prompt + `Train` remote, power cap, AFK cut-off.
+- `DevService`: the dev tools `DevCommand` remote (§21.5), Studio or listed UserIds only.
 - `LeaderboardService`: `leaderstats` only.
 - `World/**`: the world builder (`WorldBuilder`, `Outskirts`, `Yards`, `Street`, `Plaza`, `Platform`, `ThrowLine`, `Cliff`, `Field`, `Zones/*`, `Boundaries`, `Walls`, `Lighting`, `WorldCheck`; see `docs/WORLD.md`).
 
@@ -616,7 +617,7 @@ A longer throw adds up to 2.5 s of flight. `tools/tests/cutscene.luau` sums ever
 **Client (`src/client/`)**
 - `Main.client.luau`: the only entry script. Starts the UI (`PlaceholderCutscene = false`), then `Cutscene` (`src/client/Cutscene/init.luau`: the thrower's cutscene → Reveal card → `ui:FinishThrow` → `CutsceneFinished`; if it fails to start, the UI's built-in end card takes over so throws still finish) and `Controllers/WorldController` (yard / runaway dog animation, shop counter prompt).
 - `Cutscene/`: `init` (controller: release → `Director` session, ThrowResult buffering, `RequestStreamAroundAsync(LandPos)`, test panel), `Director` (the thrower's sequence, camera, skip, fallback, cleanup), `Spectator` (other players' throws: avatar + ball, no camera), `Rig` (procedural / uploaded throw), `Ball`, `DogActor`, `Effects` (impact FX, ground raycast with a `GroundY` fallback), `Sfx`, `Overlay` (counter / Skip / fallback UI), `TestPanel` (only when `Game.CutsceneTestMode`), `Janitor`.
-- `UI/`: `init.luau` (wires remotes), `State`, `Router`, `Theme`, `Motion`, `Make`; `Screens/` HUD (currencies, boost chips, Lucky Streak, event banner, throw prompt + `Components/PowerMeter` vertical meter, queue line), Shop, Dogs, Book, Odds, Settings, Reveal, Spectator; `Components/` (Button, Card, Panel, Tabs, VirtualGrid, Toast, Icon, …).
+- `UI/`: `init.luau` (wires remotes), `State`, `Router`, `Theme`, `Motion`, `Make`; `Screens/` HUD (currencies, boost chips, Lucky Streak, event banner, throw prompt + `Components/PowerMeter` vertical meter, queue line), Shop, Dogs, Book, Odds, Settings, Reveal, Spectator, Dev (dev tools, §21.5); `Components/` (Button, Card, Panel, Tabs, VirtualGrid, Toast, Icon, …).
 - `BallFlight.client.luau`: other players' throws: hands each `ThrowResult` to `Cutscene/Spectator` (the thrower's own throw is the cutscene's).
 - `ZoneAmbience.client.luau`: per-zone lighting ambience (section 5).
 
@@ -650,6 +651,7 @@ Variants are applied at runtime by `VariantFX`.
 | ShopPurchase, DogAction, UseWhistle, Claim* | 5 req/s, token bucket |
 | EquipBall | 2 req/s |
 | RequestState | 1 per 5 s |
+| DevCommand | 4 req/s, burst 6 (dev tools only) |
 
 Anti-autofarm measures:
 - Throws need physical presence on the platform and the turn; an idle turn-holder goes to the back after 15 s.
@@ -657,6 +659,21 @@ Anti-autofarm measures:
 - Training reps stop crediting after **15 min with no movement** (AFK).
 - Income itself is idle by design, so autofarming the throw is the only thing worth stopping.
 - Every rejection is counted. Repeated violations are logged (analytics) but never auto-banned in v1.
+
+### 21.5 Dev tools (`Config/Game.luau → DevTools`, `server/Services/DevService.luau`, `client/UI/Screens/Dev.luau`)
+
+A purple **Dev** pill (right edge mid-height on desktop, under the side menu on touch; next to the "Test cutscene" pill when `CutsceneTestMode` is on) opens the Dev panel. It shows only for players the server marks with the `DevTools` attribute: `DevTools.Enabled and (Studio or (StudioOnly = false and UserId in UserIds))` (`Shared/Util/DevTools.IsAllowed`). Shipped values: `Enabled = true, StudioOnly = true, UserIds = {}`, so every live server refuses everyone. Buttons call the `DevCommand` RemoteFunction (rate-limited, validated, logged to the server output, followed by a StateUpdate; the gate is re-checked on every call):
+
+| Button | Command | Effect |
+|---|---|---|
+| +100 / +1K / +10K | `AddPower` 100 / 1000 / 10000 | ThrowPower + n (ignores the training caps) |
+| Max | `MaxPower` | `ceil(MaxFieldDistance / (1 - Scatter))` = 3,266: a Perfect Tennis throw reaches the end of the Mythic Meadow |
+| Reset | `ResetPower` | `Game.StartingThrowPower` |
+| Reach <zone> (9) | `PowerForZone` zoneId | `mid-zone / (ball RangeMult × mid-Good quality 0.885)`: every Good release with the equipped ball lands in that zone |
+| +$1M | `AddCash` | Cash + 1,000,000 (buy consumable balls) |
+| +10 balls | `GiveBalls` | +10 throws of every consumable ball |
+
+The panel also shows the live ThrowPower and the zone a Good throw reaches. Training after a dev power never clamps it down (`Training.ApplyRep`): reps just stop adding past the cap. `tools/tests/devservice.luau` covers the gate and the maths; uicheck scenarios `dev-pill`, `dev-pill-testmode`, `dev-panel`.
 
 ---
 

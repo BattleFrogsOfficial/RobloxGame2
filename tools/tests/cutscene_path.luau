@@ -3,8 +3,9 @@
 -- Proves: the time-scaled flight starts in the hand, blends into the server arc and lands EXACTLY on LandPos at
 -- the on-screen duration; Z keeps moving forward; velocity matches the position's derivative; a mid-flight
 -- retarget lands on the real LandPos; bounces decay and come to rest; the procedural pose starts and ends at
--- rest and swings the arm through the throw; camera shots sit where the spec says (front: in front, chest
--- height, low, looking at the face; sweep: a half circle from behind to the front; POV: behind + above the
+-- rest and swings the arm through the throw; the KeyframeSequence description (ThrowAnim) maps every joint per rig
+-- type, keys at At x Duration, rest at both ends, Transform = the C0 path; camera shots sit where the spec says (front: in front, chest
+-- height, low, framing the whole body; sweep: a half circle from behind to the front; POV: behind + above the
 -- ball looking along its travel; wide: back + up looking down at the landing spot); shakes decay to zero.
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
@@ -20,6 +21,7 @@ local BallFlight = Loader.Require(Shared.Util.BallFlight)
 local Path = Loader.Require(Shared.Cutscene:WaitForChild("Path"))
 local Shots = Loader.Require(Shared.Cutscene.Shots)
 local Timeline = Loader.Require(Shared.Cutscene.Timeline)
+local ThrowAnim = Loader.Require(Shared.Cutscene.ThrowAnim)
 
 local EPS = 0.02 -- Vector3 is float32
 local spot = Layout.Platform.ThrowSpot
@@ -132,6 +134,15 @@ do
 	local toFace = ((root + Vector3.new(0, C.WindUp.LookHeight, 0)) - front.Position).Unit
 	check((front.LookVector - toFace).Magnitude < 1e-3, "front shot looks at the face")
 	check(front.LookVector.Y > 0, "front shot looks slightly up (low angle)")
+	-- whole body in frame: the raised throwing hand (~4.5 above the root) down to the feet (~3 below), plus the
+	-- raised knee and the wound-back arm to the side, all inside the vertical FOV (Fov is vertical in Roblox)
+	local half = math.rad(C.WindUp.Fov / 2)
+	for _, off in { Vector3.new(0, 4.5, 0), Vector3.new(0, -3, 0), Vector3.new(-1.5, 3.5, 1.5), Vector3.new(0.5, -0.5, -1) } do
+		local d = (root + off) - front.Position
+		local localD = front:VectorToObjectSpace(d)
+		local vert = math.atan2(localD.Y, -localD.Z)
+		check(-localD.Z > 0 and math.abs(vert) < half * 0.92, "front shot frames the body point " .. tostring(off), tostring(math.deg(vert)))
+	end
 	-- default camera: behind and above
 	local start = Shots.LookAt(root + Vector3.new(0, 5, -12), root + Vector3.new(0, 1.5, 0))
 	local s0 = Shots.Sweep(start, root, facing, 0)
@@ -176,6 +187,105 @@ do
 	check(Shots.Shake(0, 3, 1, 1, 0.3) == CFrame.new() and Shots.Shake(0.3, 3, 1, 1, 0.3) == CFrame.new(), "shake is zero at both ends")
 	local a, b = Shots.Shake(0.02, 3, 1, 1, 0.3), Shots.Shake(0.25, 3, 1, 1, 0.3)
 	check(a.Position.Magnitude <= 1.001 and b.Position.Magnitude < 0.1, "shake decays")
+end
+
+-- 7. Built-in throw as a KeyframeSequence (ThrowAnim): joint mapping per rig type, keyframes, rest pose, and the
+-- Transform conversion equals what the C0 fallback shows.
+do
+	local function names(node, out)
+		out[node.Name] = node
+		for _, c in node.Children do
+			names(c, out)
+		end
+		return out
+	end
+	local function parentOf(root, name)
+		local found = nil
+		local function walk(n)
+			for _, c in n.Children do
+				if c.Name == name then
+					found = n.Name
+				end
+				walk(c)
+			end
+		end
+		walk(root)
+		return found
+	end
+	local expect = {
+		R15 = { LowerTorso = "HumanoidRootPart", UpperTorso = "LowerTorso", RightUpperArm = "UpperTorso", RightLowerArm = "RightUpperArm",
+			LeftUpperArm = "UpperTorso", LeftUpperLeg = "LowerTorso", LeftLowerLeg = "LeftUpperLeg", RightUpperLeg = "LowerTorso",
+			RightLowerLeg = "RightUpperLeg" },
+		R6 = { Torso = "HumanoidRootPart", ["Right Arm"] = "Torso", ["Left Arm"] = "Torso", ["Left Leg"] = "Torso", ["Right Leg"] = "Torso" },
+	}
+	local driven = { R15 = { "Waist", "RightShoulder", "RightElbow", "LeftShoulder", "LeftHip", "LeftKnee", "RightHip", "RightKnee" },
+		R6 = { "Waist", "RightShoulder", "LeftShoulder", "LeftHip", "RightHip" } }
+	-- R6 joints carry rotated C0s (shoulders / hips / RootJoint); R15 C0s are near identity
+	local r6Rot = {
+		Torso = CFrame.new(0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0),
+		["Right Arm"] = CFrame.new(1, 0.5, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0) - Vector3.new(1, 0.5, 0),
+		["Left Arm"] = CFrame.new(-1, 0.5, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0) - Vector3.new(-1, 0.5, 0),
+		["Left Leg"] = CFrame.new(0, 0, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0),
+		["Right Leg"] = CFrame.new(0, 0, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0),
+	}
+	for rigType, parents in expect do
+		local rots = if rigType == "R6" then r6Rot else nil
+		local spec = ThrowAnim.Build(rigType, rots)
+		check(spec.RigType == rigType, rigType .. ": spec rig type")
+		check(#spec.Keyframes == #C.Pose, rigType .. ": one keyframe per Config pose key", tostring(#spec.Keyframes))
+		for i, k in spec.Keyframes do
+			check(math.abs(k.Time - C.Pose[i].At * C.WindUp.Duration) < 1e-9, rigType .. ": keyframe time = At x Duration " .. i)
+			check(k.Root.Name == "HumanoidRootPart", rigType .. ": pose tree rooted at the HumanoidRootPart " .. i)
+			local all = names(k.Root, {})
+			for part, parent in parents do
+				check(all[part] ~= nil and parentOf(k.Root, part) == parent, ("%s: %s posed under %s (key %d)"):format(rigType, part, parent, i))
+			end
+		end
+		check(math.abs(spec.Length - Path.PoseLength()) < 1e-9, rigType .. ": sequence length = Path.PoseLength")
+		-- first and last keyframes = rest (identity transform on every joint)
+		for _, k in { spec.Keyframes[1], spec.Keyframes[#spec.Keyframes] } do
+			for _, node in names(k.Root, {}) do
+				local cf = node.CFrame
+				check((cf.LookVector - Vector3.new(0, 0, -1)).Magnitude < 1e-4 and (cf.UpVector - Vector3.new(0, 1, 0)).Magnitude < 1e-4
+					and cf.Position.Magnitude < 1e-6, rigType .. ": rest pose at the ends " .. node.Name)
+			end
+		end
+		-- conversion: C0 * Transform == C0' of the fallback (T(p) * A * R) for every driven joint at every key
+		local byJoint = {}
+		for _, j in ThrowAnim.Rigs[rigType] do
+			if j.Joint then
+				byJoint[j.Joint] = j
+			end
+		end
+		for _, jn in driven[rigType] do
+			check(byJoint[jn] ~= nil, rigType .. ": joint mapped " .. jn)
+		end
+		for i, key in C.Pose do
+			local all = names(spec.Keyframes[i].Root, {})
+			for jn, j in byJoint do
+				local v = key[jn]
+				local a = CFrame.Angles(math.rad(v[1]), math.rad(v[2]), math.rad(v[3]))
+				local R = (rots and rots[j.Part]) or CFrame.new()
+				local c0 = CFrame.new(0.5, 1, 0) * R
+				local viaAnim = c0 * all[j.Part].CFrame
+				local viaC0 = CFrame.new(c0.Position) * a * R
+				local err = (viaAnim.LookVector - viaC0.LookVector).Magnitude + (viaAnim.UpVector - viaC0.UpVector).Magnitude
+					+ (viaAnim.Position - viaC0.Position).Magnitude
+				check(err < 1e-4, ("%s: Transform matches the C0 path %s key %d"):format(rigType, jn, i), tostring(err))
+			end
+		end
+	end
+	-- consecutive keys < 180 degrees apart per axis (the animator slerps the shortest way)
+	for i = 2, #C.Pose do
+		for _, jn in Path.Joints do
+			local a, b = C.Pose[i - 1][jn], C.Pose[i][jn]
+			for ax = 1, 3 do
+				check(math.abs(b[ax] - a[ax]) < 180, ("pose step < 180 deg: %s key %d axis %d"):format(jn, i, ax))
+			end
+		end
+	end
+	check(ThrowAnim.Signature("R15") ~= ThrowAnim.Signature("R6"), "cache key differs per rig type")
+	check(ThrowAnim.Signature("R6", r6Rot) == ThrowAnim.Signature("R6", r6Rot), "cache key stable")
 end
 
 -- 6. Estimate (late ThrowResult): same distance formula, scatter 0.

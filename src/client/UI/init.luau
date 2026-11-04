@@ -36,6 +36,7 @@ local Odds = require(Screens:WaitForChild("Odds"))
 local Settings = require(Screens:WaitForChild("Settings"))
 local Reveal = require(Screens:WaitForChild("Reveal"))
 local Spectator = require(Screens:WaitForChild("Spectator"))
+local Dev = require(Screens:WaitForChild("Dev"))
 
 local UI = {}
 
@@ -218,6 +219,11 @@ function UI.Start(deps: StartDeps?)
 	Router.Register("Book", ui.Book)
 	Router.Register("Odds", ui.Odds)
 	Router.Register("Settings", ui.Settings)
+	-- Dev tools: the pill shows only when the server set the "DevTools" attribute (Config/Game.DevTools).
+	ui.Dev = Dev.new({ Parent = root, IsTouch = isTouch, Router = Router, Player = player, Toast = toast,
+		BesideTestPill = (Game :: any).CutsceneTestMode == true, Command = function(command, arg)
+			return invoke("DevCommand", command, arg)
+		end })
 
 	-- While a modal is open the throw prompt/meter hide and clicks never start a throw.
 	Router.OnChange(function(name)
@@ -339,7 +345,7 @@ function UI.Start(deps: StartDeps?)
 
 	-- Tear everything down (tests, or a full UI rebuild). Disconnects screen listeners before destroying.
 	function ui.Destroy()
-		for _, key in { "Shop", "Dogs", "Book", "Odds", "Settings" } do
+		for _, key in { "Shop", "Dogs", "Book", "Odds", "Settings", "Dev" } do
 			local s = ui[key]
 			if s and s.Destroy then
 				s:Destroy()

@@ -63,7 +63,12 @@ for _, r in Rarities.Order do
 	prev = C.Budget[r]
 end
 check(C.WindUp.ReleaseAt < C.WindUp.Duration, "release frame inside the wind-up")
-check(near(C.WindUp.Duration, 1.2, 0.3), "wind-up about 1.2 s")
+check(near(C.WindUp.Duration, 1.5, 0.3), "wind-up about 1.5 s")
+-- a readable wind-up: at least ~1.1 s on screen before the release, and the camera sweep has settled on the front
+-- shot before the cocked pose (Pose[3]) so the arm wind-back is seen from a still camera
+check(C.WindUp.ReleaseAt >= 1.1, "wind-up has screen time before the release", tostring(C.WindUp.ReleaseAt))
+check(C.WindUp.SweepTime <= C.Pose[3].At * C.WindUp.Duration, "sweep settles before the cocked pose")
+check(near(C.Budget.Common - C.WindUp.ReleaseAt, 4.55, 0.06), "Common after-release beats unchanged (4.55 s)")
 check(C.Beats.DogArrive.Mythic <= 1.6, "dog arrives in about 1.5 s")
 check(C.Landing.Share > 0 and C.Landing.Share < 1 and near(C.Landing.Share, 0.25), "landing eases over the last 25%")
 check(C.Landing.Bounces >= 2 and C.Landing.Bounces <= 3, "2-3 bounces")

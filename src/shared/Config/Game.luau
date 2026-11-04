@@ -9,6 +9,14 @@ Game.MaxPlayers = 6
 
 -- Debug: adds a client button that plays random cutscene outcomes (client/Cutscene reads this).
 Game.CutsceneTestMode = false
+-- Dev tools panel (server/Services/DevService + client UI/Screens/Dev): +ThrowPower, power for a zone, cash, balls.
+-- In Studio everyone is a dev; in a live server only listed UserIds, and only when StudioOnly = false. Safe to
+-- publish as is: StudioOnly = true keeps every live server without dev tools.
+Game.DevTools = {
+	Enabled = true, -- master switch (false = no dev tools anywhere, Studio included)
+	StudioOnly = true, -- true = Studio only; false = also live servers, for the UserIds below
+	UserIds = {} :: { number }, -- live-server devs (only read when StudioOnly = false), e.g. { 12345678 }
+}
 -- Studio: skip DataStores (in-memory mock) even if API access is on. Mock is also used automatically
 -- when DataStores are unavailable in Studio.
 Game.UseMockData = false
@@ -94,6 +102,7 @@ Game.RateLimits = {
 	EquipBall = { 2, 3 },
 	RequestState = { 0.2, 2 },
 	CutsceneFinished = { 2, 4 },
+	DevCommand = { 4, 6 }, -- dev panel buttons (DevService)
 }
 
 -- Fall rescue (CharacterService): a character whose root drops this far below Layout.HubY (e.g. glitched over the

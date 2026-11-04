@@ -180,6 +180,9 @@ function Director._lock(self: any)
 	if ui.CutsceneTest and not ui.CutsceneTest:IsLooping() then
 		ui.CutsceneTest.Pill.Root.Visible = false
 	end
+	if ui.Dev then
+		ui.Dev:SetHidden(true)
+	end
 	setControls(false)
 	local cam = workspace.CurrentCamera
 	self.Saved = { CameraType = cam.CameraType, Subject = cam.CameraSubject, Fov = cam.FieldOfView, CFrame = cam.CFrame }
@@ -275,6 +278,9 @@ function Director._unlock(self: any)
 	ui.HUD.Root.Visible = true
 	if ui.CutsceneTest then
 		ui.CutsceneTest.Pill.Root.Visible = true
+	end
+	if ui.Dev then
+		ui.Dev:SetHidden(false)
 	end
 	pcall(function()
 		ui.HUD:RefreshThrow()
