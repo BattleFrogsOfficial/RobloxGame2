@@ -62,6 +62,18 @@ function Button.new(props: ButtonProps): ButtonHandle
 	if props.Shadow ~= false then
 		Decor.Shadow(root, "Hard")
 	end
+	-- toy gloss: a soft white band across the top half
+	local gloss = Make("Frame", {
+		Name = "Gloss",
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 0.8,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -6, 0.42, -2),
+		Position = UDim2.fromOffset(3, 3),
+		ZIndex = (props.ZIndex or 1),
+		Parent = root,
+	})
+	Decor.Corner(gloss, math.max(2, (props.Radius or Theme.Radius.Button) - 2))
 
 	local iconFrame: Frame? = nil
 	local label: TextLabel? = nil
@@ -186,6 +198,8 @@ function Button.new(props: ButtonProps): ButtonHandle
 				d.BackgroundTransparency = t
 			elseif d:IsA("UIStroke") then
 				d.Transparency = t
+			elseif d:IsA("Frame") and d.Name == "Gloss" then
+				d.BackgroundTransparency = if on then 0.8 else 0.92
 			end
 		end
 	end
@@ -215,9 +229,25 @@ function Button.new(props: ButtonProps): ButtonHandle
 	return handle :: ButtonHandle
 end
 
--- The red round close button that hangs off a panel's top-right corner.
+-- The square red close button with a heavy white X, inside the panel header's right end.
+Button.CloseSize = 48
 function Button.Close(parent: Instance, onClick: () -> ()): ButtonHandle
 	return Button.new({
+		Name = "Close",
+		Icon = "close",
+		IconSize = 32,
+		Palette = "Danger",
+		Size = UDim2.fromOffset(Button.CloseSize, Button.CloseSize),
+		Position = UDim2.new(1, -10, 0, 8),
+		AnchorPoint = Vector2.new(1, 0),
+		Radius = 8,
+		ZIndex = 60,
+		Parent = parent,
+		OnClick = onClick,
+	})
+end
+
+return Button.new({
 		Name = "Close",
 		Icon = "close",
 		IconSize = 16,

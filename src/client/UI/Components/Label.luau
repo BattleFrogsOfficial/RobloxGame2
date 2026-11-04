@@ -46,12 +46,11 @@ local function base(props: LabelProps, font: Enum.Font, size: number, color: Col
 		ZIndex = props.ZIndex or 1,
 		AutomaticSize = props.AutoSize or Enum.AutomaticSize.None,
 	})
-	-- Ink strokes only belong on light text; dark text on paper gets none even for Display labels.
-	local c = label.TextColor3
-	local light = (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) > 0.6
-	local useStroke = if props.Stroke ~= nil then props.Stroke else (stroke and light)
+	-- Display text always carries a heavy Ink stroke that grows with the size (Theme.TextStrokeFor);
+	-- body copy (light, on the dark body) never does. Stroke = false opts out, Stroke = true forces it.
+	local useStroke = if props.Stroke ~= nil then props.Stroke else stroke
 	if useStroke then
-		Decor.TextStroke(label)
+		Decor.TextStroke(label, Theme.TextStrokeFor(label.TextSize))
 	end
 	if props.Parent then
 		label.Parent = props.Parent
@@ -59,12 +58,12 @@ local function base(props: LabelProps, font: Enum.Font, size: number, color: Col
 	return label
 end
 
--- Big friendly type: titles, numbers, button text. White with an Ink stroke by default.
+-- Big friendly type: titles, names, prices, numbers, button text. White with a heavy Ink stroke by default.
 function Label.Display(props: LabelProps): TextLabel
 	return base(props, Theme.Font.Display, Theme.Text.H2, Theme.Color.White, true)
 end
 
--- Body copy on paper: dark text, no stroke.
+-- Body copy on the dark panel body: light text, no stroke.
 function Label.Body(props: LabelProps): TextLabel
 	return base(props, Theme.Font.Body, Theme.Text.Body, Theme.Color.TextOnPaper, false)
 end
@@ -76,6 +75,11 @@ function Label.Caption(props: LabelProps): TextLabel
 	return base(p, Theme.Font.Body, Theme.Text.Caption, Theme.Color.TextMuted, false)
 end
 
+-- The loudest callouts (TAP TO THROW!, the meter value, the strength number): LuckiestGuy, heavy stroke.
+function Label.Shout(props: LabelProps): TextLabel
+	return base(props, Theme.Font.Shout, Theme.Text.H1, Theme.Color.White, true)
+end
+
 -- Pixel font pop label (floating "+12", rarity tags). Always >= 14px.
 function Label.Pixel(props: LabelProps): TextLabel
 	local p = table.clone(props)
@@ -85,7 +89,7 @@ end
 
 -- Estimated text width in px for layout decisions when TextBounds is not yet available.
 function Label.EstimateWidth(text: string, textSize: number, font: Enum.Font?): number
-	local k = if font == Theme.Font.Display then 0.56 elseif font == Theme.Font.Pixel then 1.0 else 0.6
+	local k = if font == Theme.Font.Display then 0.56 elseif font == Theme.Font.Shout then 0.6 elseif font == Theme.Font.Pixel then 1.0 else 0.66
 	return #text * textSize * k
 end
 

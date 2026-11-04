@@ -75,16 +75,14 @@ WorldTheme.ThrowLine = {
 	Line = rgb(255, 255, 255),
 }
 
--- The throwing platform: a deck flush with the plaza paving at the cliff edge (deck surface = Layout.HubY).
-WorldTheme.Platform = {
-	Deck = rgb(255, 255, 255),
-	DeckPlank = rgb(236, 236, 244),
-	DeckTrim = rgb(255, 210, 60),
-	Rail = rgb(255, 255, 255),
-	RailPost = rgb(60, 60, 80),
-	ThrowSpot = rgb(255, 90, 90),
-	ThrowSpotRing = rgb(255, 255, 255),
-	QueueSpot = rgb(70, 160, 255),
+-- The throw zone (World/ThrowZone.luau): a brown dirt strip flush with the plaza paving at the cliff edge
+-- (surface = Layout.HubY) with a bold light-tan border so it reads as "the throw zone".
+WorldTheme.ThrowZone = {
+	Dirt = rgb(139, 94, 58),
+	DirtPatch = rgb(118, 78, 47), -- darker scuffed patches (decal-thin)
+	DirtLight = rgb(158, 110, 70), -- lighter raked patches
+	Border = rgb(236, 206, 150), -- the bold lighter border
+	Material = Enum.Material.Ground,
 }
 
 -- The plateau cliff (Cliff.luau): the hub plateau (Layout.HubY) drops to the field (Layout.GroundY) along the throw

@@ -3,16 +3,18 @@
 -- instances, then runs:
 --   * WorldCheck.Check (every tagged part on its surface: hub items on the plateau at Layout.HubY, field items
 --     at Layout.GroundY; nothing inside a collidable part; spawn standing volumes clear; tag counts)
---   * area overlap checks (yards / street / plaza / platform deck / shop / training / spawns / lawn / walls)
---   * hub plateau + cliff: every hub floor's top at HubY, the flush deck at the edge, the cliff face covered
+--   * area overlap checks (yards / street / plaza / throw zone / shop / training / spawns / lawn / walls)
+--   * hub plateau + cliff: every hub floor's top at HubY, the flush brown throw zone at the edge (Layout.ThrowZone:
+--     on the plateau surface, inside the plaza, touching the throw line, nothing collidable in it, no spawn in it,
+--     clearly brown with a lighter border), the cliff face covered
 --     by rock slabs from wall to wall, the invisible edge guard + railings, and no walkable route to the field
 --   * walls: outside the field + margin, >= 200 studs tall, hub-side chunks rise from the plateau and field
 --     chunks from the field, no gap at the cliff junction, part budget, no overlap with gameplay parts
 --   * landing lane |x| <= 56 over the field: nothing of ours in it (Field-owned items are reported apart);
 --     the ball arcs (BallFlight) of the shortest throws clear every cliff ledge
---   * camera box above/behind the thrower + ball launch: nothing in the way, front railing below launch
+--   * camera box above/behind the throwers (the whole zone width) + ball launch: nothing in the way, railing below launch
 --   * walking path lengths (grid shortest path around collidable obstacles on the plateau) between every
---     yard gate, the platform throw spot, the ball shop and the training area: must be <= 300 studs
+--     yard gate, the throw zone (its centre and back corners), the ball shop and the training area: must be <= 300 studs
 -- Usage (from the repo root):
 --   lune run tools/worldcheck/run.luau -- [--no-field] [--quiet] [--dump=parts.json]
 --        [--root=<dir>]            build the world from another checkout (e.g. an old revision)
@@ -432,7 +434,7 @@ end
 local F = {
 	Field = map:FindFirstChild("Field"),
 	Walls = map:FindFirstChild("Walls"),
-	Platform = map:FindFirstChild("Platform"),
+	ThrowZone = map:FindFirstChild("ThrowZone"),
 	Plaza = map:FindFirstChild("Plaza"),
 	Yards = map:FindFirstChild("Yards"),
 	Street = map:FindFirstChild("Street"),
@@ -538,15 +540,15 @@ local function feat(name, inst)
 	end
 	feats[name] = { Inst = inst, Box = boundsOf(inst) }
 end
-local plat = F.Platform
+local zoneF = F.ThrowZone
 local function find(root, name)
 	return root and root:FindFirstChild(name, true)
 end
-local deckPart = plat and plat:FindFirstChild("Deck")
-if deckPart then
-	feats.Platform = { Box = Bounds(deckPart) }
+local zonePart = zoneF and zoneF:FindFirstChild("ThrowZone")
+if zonePart then
+	feats.ThrowZone = { Box = Bounds(zonePart) }
 else
-	fail("missing feature: Platform deck")
+	fail("missing feature: ThrowZone floor")
 end
 feat("Shop", find(F.Plaza, "Shop_Balls"))
 feat("Training", find(F.Plaza, "TrainingArea"))
@@ -573,47 +575,80 @@ for i = 1, #featNames do
 	end
 end
 
--- platform geometry vs the Layout contract: a deck set flush into the plateau at the cliff edge
+-- throw zone geometry vs the Layout contract: a brown strip set flush into the plateau at the cliff edge
 do
-	local P = Layout.Platform
+	local Z = Layout.ThrowZone
 	local HUB = Layout.HubY
 	if Layout.HubY - Layout.GroundY < 40 - 1e-6 then
 		fail(("Layout.HubY %s is not 40 studs above Layout.GroundY %s"):format(fmt(Layout.HubY), fmt(Layout.GroundY)))
 	end
-	if math.abs(Layout.ThrowLine.Y - HUB) > 1e-6 or math.abs(P.Center.Y - HUB) > 1e-6 or math.abs(P.ThrowSpot.Y - HUB) > 1e-6 then
-		fail("flush deck: ThrowLine.Y, Platform.Center.Y and Platform.ThrowSpot.Y must equal Layout.HubY")
+	if math.abs(Layout.ThrowLine.Y - HUB) > 1e-6 or math.abs(Z.Y - HUB) > 1e-6 then
+		fail("throw zone: ThrowLine.Y and ThrowZone.Y must equal Layout.HubY")
 	end
-	for i, q in P.QueueSpots do
-		if math.abs(q.Y - HUB) > 1e-6 then
-			fail(("Platform.QueueSpots[%d].Y %s ~= HubY"):format(i, fmt(q.Y)))
-		end
+	if math.abs(Z.MaxZ - Layout.ThrowLine.Z) > 1e-6 then
+		fail(("Layout.ThrowZone.MaxZ %s must be the throw line Z %s"):format(fmt(Z.MaxZ), fmt(Layout.ThrowLine.Z)))
+	end
+	if Z.MaxX - Z.MinX < 60 or Z.MaxZ - Z.MinZ < 14 then
+		fail(("throw zone is too small to read as a zone (%s x %s)"):format(fmt(Z.MaxX - Z.MinX), fmt(Z.MaxZ - Z.MinZ)))
+	end
+	if not insideXZ({ MinX = Z.MinX, MaxX = Z.MaxX, MinZ = Z.MinZ, MaxZ = Z.MaxZ }, areas.Plaza) then
+		fail("Layout.ThrowZone is not inside the plaza")
+	end
+	-- the compatibility spot is the zone centre on the surface
+	local ts = Layout.Platform.ThrowSpot
+	if math.abs(ts.X - (Z.MinX + Z.MaxX) / 2) > 1e-6 or math.abs(ts.Z - (Z.MinZ + Z.MaxZ) / 2) > 1e-6
+		or math.abs(ts.Y - HUB) > 1e-6 then
+		fail("Layout.Platform.ThrowSpot must be the throw zone centre at Y = HubY")
+	end
+	if Layout.Platform.QueueSpots or Layout.Platform.StandRadius then
+		fail("Layout.Platform still describes the old queue (QueueSpots / StandRadius)")
 	end
 	for _, c in { { "Shop", Layout.Shop.Center }, { "Training", Layout.Training.Center } } do
 		if math.abs(c[2].Y - HUB) > 1e-6 then
 			fail(("Layout.%s.Center.Y %s ~= HubY"):format(c[1], fmt(c[2].Y)))
 		end
 	end
-	if P.RampBottom or P.RampTop then
-		fail("Layout.Platform still describes a ramp (the deck is flush: no ramp)")
-	end
-	local deck = find(plat, "Deck")
-	if deck then
-		local b = Bounds(deck)
-		if math.abs(b.MaxY - Layout.ThrowLine.Y) > 0.02 then
-			fail("deck top must equal ThrowLine.Y")
+	if zonePart then
+		local b = Bounds(zonePart)
+		if math.abs(b.MaxY - HUB) > 0.02 then
+			fail("throw zone floor top must equal HubY")
 		end
 		if math.abs(b.MaxZ - Layout.ThrowLine.Z) > 0.02 then
-			fail(("deck front edge Z %s ~= ThrowLine.Z %s"):format(fmt(b.MaxZ), fmt(Layout.ThrowLine.Z)))
+			fail(("throw zone front edge Z %s ~= ThrowLine.Z %s"):format(fmt(b.MaxZ), fmt(Layout.ThrowLine.Z)))
 		end
-		if b.MaxY - Layout.GroundY < 40 - 0.02 then
-			fail("deck is less than 40 studs above the field")
+		if math.abs(b.MinX - Z.MinX) > 0.02 or math.abs(b.MaxX - Z.MaxX) > 0.02 or math.abs(b.MinZ - Z.MinZ) > 0.02 then
+			fail(("throw zone floor %s does not match Layout.ThrowZone"):format(boxStr(b)))
 		end
-		-- flush: the paving around the deck has its top at the deck surface on the three open sides
+		if not zonePart.CanCollide then
+			fail("throw zone floor must be collidable (it is the ground)")
+		end
+		if not (zonePart:HasTag("ThrowZone") and zonePart:HasTag("ThrowPad") and zonePart:GetAttribute("PadIndex") == 1) then
+			fail("throw zone floor must be tagged ThrowZone and ThrowPad (PadIndex 1)")
+		end
+		-- brown: clearly warm (R > G > B) and darker than the plaza paving; the border is lighter than the dirt
+		local c = zonePart.Color
+		local function lum(col)
+			return 0.299 * col.R + 0.587 * col.G + 0.114 * col.B
+		end
+		if not (c.R > c.G and c.G > c.B and c.R - c.B > 0.2) then
+			fail(("throw zone floor is not brown (rgb %d, %d, %d)"):format(c.R * 255, c.G * 255, c.B * 255))
+		end
+		local borders, borderMin = 0, math.huge
+		for _, d in zoneF:GetDescendants() do
+			if d:IsA("BasePart") and d.Name == "ZoneBorder" then
+				borders += 1
+				borderMin = math.min(borderMin, lum(d.Color) - lum(c))
+			end
+		end
+		if borders < 4 or borderMin < 0.2 then
+			fail(("throw zone needs a bold lighter border on all sides (%d strips, contrast %s)"):format(borders, fmt(borderMin)))
+		end
+		-- flush: the paving around the zone has its top at the zone surface on the three open sides
 		local function floorTopAt(x, z)
 			local best = -math.huge
 			for _, o in allParts do
 				local pb = o.Box
-				if o.Part ~= deck and o.Part.CanCollide and x >= pb.MinX and x <= pb.MaxX and z >= pb.MinZ and z <= pb.MaxZ
+				if o.Part ~= zonePart and o.Part.CanCollide and x >= pb.MinX and x <= pb.MaxX and z >= pb.MinZ and z <= pb.MaxZ
 					and pb.MaxY <= b.MaxY + 0.3 then
 					best = math.max(best, pb.MaxY)
 				end
@@ -623,27 +658,36 @@ do
 		for _, pt in { { b.MinX - 1, (b.MinZ + b.MaxZ) / 2 }, { b.MaxX + 1, (b.MinZ + b.MaxZ) / 2 }, { (b.MinX + b.MaxX) / 2, b.MinZ - 1 } } do
 			local top = floorTopAt(pt[1], pt[2])
 			if math.abs(top - b.MaxY) > 0.02 then
-				fail(("deck is not flush: paving top at (%s, %s) is %s, deck %s"):format(fmt(pt[1]), fmt(pt[2]), fmt(top), fmt(b.MaxY)))
+				fail(("throw zone is not flush: paving top at (%s, %s) is %s, zone %s"):format(fmt(pt[1]), fmt(pt[2]), fmt(top), fmt(b.MaxY)))
 			end
 		end
-		-- StandRadius covers the whole deck
-		local ts = P.ThrowSpot
-		for _, c in { { b.MinX, b.MinZ }, { b.MinX, b.MaxZ }, { b.MaxX, b.MinZ }, { b.MaxX, b.MaxZ } } do
-			local d = math.sqrt((c[1] - ts.X) ^ 2 + (c[2] - ts.Z) ^ 2)
-			if d > P.StandRadius + 0.01 then
-				fail(("StandRadius %s does not cover deck corner (%s, %s) at %s"):format(fmt(P.StandRadius), fmt(c[1]), fmt(c[2]), fmt(d)))
+		-- nothing of ours stands in the zone: no collidable part (bar the invisible edge guard), no prop over head
+		-- height that is visible, no tagged item, no spawn
+		local above = { MinX = Z.MinX, MaxX = Z.MaxX, MinY = HUB + 0.02, MaxY = HUB + 40, MinZ = Z.MinZ, MaxZ = Z.MaxZ }
+		local inside = 0
+		for _, o in allParts do
+			local p = o.Part
+			if p ~= zonePart and Overlaps(o.Box, above, 0.02) then
+				local guard = p:GetAttribute("EdgeGuard") == true
+				local flat = o.Box.MaxY <= HUB + 0.15 and not p.CanCollide -- decal-thin border / dirt / throw line
+				local railing = isUnder(p, F.ThrowLine) and not p.CanCollide and o.Box.MinZ >= Layout.ThrowLine.Z - 2
+				if not (guard or flat or railing) then
+					inside += 1
+					if inside <= 6 then
+						fail(("throw zone: %s (%s) stands in the zone"):format(pathOf(p), boxStr(o.Box)))
+					end
+				end
+				if p:IsA("SpawnLocation") then
+					fail("throw zone: a spawn is inside the zone: " .. pathOf(p))
+				end
 			end
 		end
-		if ts.Z < b.MaxZ - 6 then
-			fail("ThrowSpot is not at the front edge of the deck")
-		end
+		note(("throw zone: x %s..%s z %s..%s at Y %s, flush, brown with %d border strips, %d props in it"):format(
+			fmt(Z.MinX), fmt(Z.MaxX), fmt(Z.MinZ), fmt(Z.MaxZ), fmt(Z.Y), borders, inside))
 	end
-	if #P.QueueSpots ~= 5 then
-		fail("Layout.Platform.QueueSpots must hold 5 spots")
-	end
-	-- railings: front railing below the launch height (deck + Game.Throw.LaunchHeight)
-	local launchY = Layout.ThrowLine.Y + 4
-	for _, root in { plat, F.ThrowLine } do
+	-- railings: the edge railing tops out below the launch height (surface + Game.Throw.LaunchHeight)
+	local launchY = Layout.ThrowZone.Y + Game.Throw.LaunchHeight
+	for _, root in { zoneF, F.ThrowLine } do
 		if root then
 			for _, d in root:GetDescendants() do
 				if d:IsA("BasePart") and d.Transparency < 1 then
@@ -661,11 +705,11 @@ end
 do
 	local HUB = Layout.HubY
 	local floors = {}
-	for _, root in { F.Yards, F.Street, F.Plaza, F.Platform } do
+	for _, root in { F.Yards, F.Street, F.Plaza, F.ThrowZone } do
 		if root then
 			for _, d in root:GetDescendants() do
 				if d:IsA("BasePart") and d.CanCollide and (d.Name == "YardPlot" or d.Name == "GapGround" or d.Name == "Road"
-					or d.Name == "PlazaFloor" or d.Name == "Deck") then
+					or d.Name == "PlazaFloor" or d.Name == "ThrowZone") then
 					table.insert(floors, d)
 				end
 			end
@@ -738,13 +782,13 @@ do
 	for _, g in guards do
 		gh = math.max(gh, g.Box.MaxY - HUB)
 	end
-	-- visible railings along the edge (deck front + either side)
+	-- visible railings along the whole plaza front
 	local railed = 0
 	local total = 0
 	x = Layout.Plaza.MinX + 1
 	while x < Layout.Plaza.MaxX - 1 do
 		total += 1
-		for _, root in { plat, F.ThrowLine } do
+		for _, root in { zoneF, F.ThrowLine } do
 			local hit = false
 			if root then
 				for _, d in root:GetDescendants() do
@@ -874,13 +918,15 @@ do
 			fmt(edgeZ + Game.Throw.MinDistance)))
 	end
 	-- the shortest throws' arcs (as the server and every client solve them) clear every ledge
-	local spot = Layout.Platform.ThrowSpot
-	local launchY = Layout.ThrowLine.Y + Game.Throw.LaunchHeight
+	-- launched from the cliff edge in front of a thrower anywhere across the zone (Util/ThrowZone.LaunchPos)
+	local launchY = Layout.ThrowZone.Y + Game.Throw.LaunchHeight
 	local hits = 0
 	local worstClear = math.huge
+	local zx = { Layout.ThrowZone.MinX, Layout.ThrowZone.MinX / 2, 0, Layout.ThrowZone.MaxX / 2, Layout.ThrowZone.MaxX }
 	for _, dist in { Game.Throw.MinDistance, 6, 8, 10, 15, 20, 30, 50 } do
-		for _, landX in { -56, -40, -20, -10, 0, 10, 20, 40, 56 } do
-			local launch, land = BallFlight.Endpoints(spot, launchY, Layout.ThrowLine.Z, Layout.GroundY, dist, landX)
+		for k, landX in { -56, -40, -20, -10, 0, 10, 20, 40, 56 } do
+			local thrower = Vector3.new(zx[(k % #zx) + 1], Layout.ThrowZone.Y, Layout.ThrowZone.MinZ + 5)
+			local launch, land = BallFlight.Endpoints(thrower, launchY, Layout.ThrowLine.Z, Layout.GroundY, dist, landX)
 			local arc = BallFlight.ForThrow(launch, land)
 			for i = 0, 400 do
 				local pt = arc.Position(arc.Duration * i / 400)
@@ -1156,8 +1202,9 @@ end
 ----------------------------------------------------------------------------------------------------
 local lane = { MinX = -56, MaxX = 56, MinY = Layout.GroundY + 0.25, MaxY = 400, MinZ = Layout.Field.MinZ,
 	MaxZ = Layout.Field.MaxZ }
-local camBox = { MinX = -30, MaxX = 30, MinY = Layout.ThrowLine.Y + 3.4, MaxY = Layout.ThrowLine.Y + 60,
-	MinZ = Layout.Platform.Center.Z - Layout.Platform.Size.Z / 2 - 14, MaxZ = Layout.ThrowLine.Z + 260 }
+-- over the shoulders of throwers anywhere in the zone, out over the field
+local camBox = { MinX = Layout.ThrowZone.MinX - 4, MaxX = Layout.ThrowZone.MaxX + 4, MinY = Layout.ThrowZone.Y + 3.4,
+	MaxY = Layout.ThrowZone.Y + 60, MinZ = Layout.ThrowZone.MinZ - 14, MaxZ = Layout.ThrowLine.Z + 260 }
 local fieldLane, fieldCam = {}, {}
 for _, o in allParts do
 	local p = o.Part
@@ -1176,7 +1223,7 @@ for _, o in allParts do
 		if isUnder(p, F.Field) then
 			table.insert(fieldCam, ("%s (%s)"):format(pathOf(p), boxStr(o.Box)))
 		else
-			fail(("camera box: %s (%s) is where the platform camera / ball flies"):format(pathOf(p), boxStr(o.Box)))
+			fail(("camera box: %s (%s) is where the throw camera / ball flies"):format(pathOf(p), boxStr(o.Box)))
 		end
 	end
 end
@@ -1303,7 +1350,7 @@ do
 		return dist
 	end
 
-	local P = Layout.Platform
+	local TZ = Layout.ThrowZone
 	local points = {}
 	local order = {}
 	local function addPoint(name, pos)
@@ -1319,7 +1366,10 @@ do
 	end
 	addPoint("Shop", Layout.Shop.Center + Vector3.new(0, 0, -3.5))
 	addPoint("Training", Layout.Training.Center)
-	addPoint("Platform", P.ThrowSpot) -- the deck is flush: walk straight onto it
+	-- the zone is flush: walk straight in (its centre and both back corners, just inside the border)
+	addPoint("Zone", Layout.Platform.ThrowSpot)
+	addPoint("ZoneW", Vector3.new(TZ.MinX + 2, TZ.Y, TZ.MinZ + 2))
+	addPoint("ZoneE", Vector3.new(TZ.MaxX - 2, TZ.Y, TZ.MinZ + 2))
 	local dists = {}
 	for _, name in order do
 		dists[name] = dijkstra(points[name])
@@ -1438,7 +1488,7 @@ if #fieldLane > 0 then
 		table.concat({ fieldLane[1], fieldLane[2] or "", fieldLane[3] or "" }, ", ")))
 end
 if #fieldCam > 0 then
-	print(("note: %d Field-owned parts are inside the platform camera box, e.g.:"):format(#fieldCam))
+	print(("note: %d Field-owned parts are inside the throw camera box, e.g.:"):format(#fieldCam))
 	for i = 1, math.min(5, #fieldCam) do
 		print("  " .. fieldCam[i])
 	end

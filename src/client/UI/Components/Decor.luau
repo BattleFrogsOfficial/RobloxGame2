@@ -115,6 +115,40 @@ function Decor.Grid(parent: Instance, cell: Vector2, gap: number): UIGridLayout
 	})
 end
 
+-- Diagonal highlight stripes (the panel header's shine): a full-size white overlay whose UIGradient
+-- transparency alternates in bands, rotated so the bands run diagonally. No rotated frames, so clipping holds.
+function Decor.Stripes(parent: GuiObject, opts: { Bands: number?, Strength: number?, Rotation: number?, ZIndex: number? }?): Frame
+	local o = opts or {}
+	local bands = math.clamp(o.Bands or 4, 1, 4) -- NumberSequence holds at most 20 keypoints
+	local strength = o.Strength or 0.78 -- transparency of a band (1 = invisible)
+	local f: Frame = Make("Frame", {
+		Name = "Stripes",
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = o.ZIndex or (parent.ZIndex + 1),
+		Parent = parent,
+	})
+	local kps = { NumberSequenceKeypoint.new(0, 1) }
+	-- bands sit in the right two thirds (the title stays clean on the left)
+	local step = 0.62 / bands
+	for i = 0, bands - 1 do
+		local a = 0.34 + i * step
+		local w = step * (if i % 2 == 0 then 0.55 else 0.3)
+		table.insert(kps, NumberSequenceKeypoint.new(a, 1))
+		table.insert(kps, NumberSequenceKeypoint.new(a + 0.001, strength))
+		table.insert(kps, NumberSequenceKeypoint.new(a + w, strength))
+		table.insert(kps, NumberSequenceKeypoint.new(a + w + 0.001, 1))
+	end
+	table.insert(kps, NumberSequenceKeypoint.new(1, 1))
+	Make("UIGradient", { Transparency = NumberSequence.new(kps), Rotation = o.Rotation or 20, Parent = f })
+	local corner = parent:FindFirstChildOfClass("UICorner")
+	if corner then
+		corner:Clone().Parent = f
+	end
+	return f
+end
+
 -- A plain gradient surface: Frame + corner + stroke + gradient (+ optional shadow).
 function Decor.Surface(props: { Palette: Theme.Palette?, Radius: number?, Stroke: number?, Shadow: ("Hard" | "Soft")?, Size: UDim2?, Position: UDim2?, AnchorPoint: Vector2?, Parent: Instance?, Name: string?, LayoutOrder: number?, ZIndex: number? }): Frame
 	local palette = props.Palette or Theme.Palette.Paper

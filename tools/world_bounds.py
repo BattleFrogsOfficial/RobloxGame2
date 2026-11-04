@@ -4,11 +4,12 @@
 Parses src/shared/Config/Layout.luau (+ Zones.luau, World/Walls.luau constants) and asserts the
 map-level contract of the compact T layout:
   * yard / street / plaza / field rectangles tile without overlapping, field starts at the throw line,
-  * two levels: the hub (yards, street, plaza, shop, training, platform) is on the plateau at Layout.HubY,
+  * two levels: the hub (yards, street, plaza, shop, training, throw zone) is on the plateau at Layout.HubY,
     40 studs above the field at Layout.GroundY,
-  * the platform deck is flush with the plateau (ThrowLine.Y = Platform Y = HubY, no ramp) with its front edge
-    on ThrowLine.Z (the cliff edge), StandRadius covers it, 5 queue spots on the deck,
-  * shop, training and deck are inside the plaza and do not overlap each other,
+  * the brown throw zone (Layout.ThrowZone) is flush with the plateau (Y = ThrowLine.Y = HubY) with its front edge
+    MaxZ on ThrowLine.Z (the cliff edge), inside the plaza; Layout.Platform keeps only ThrowSpot (= the zone centre),
+    no QueueSpots / StandRadius,
+  * shop, training, the runaway lawn and the throw zone are inside the plaza and do not overlap each other,
   * zone bands are contiguous and end at Layout.Field.MaxZ,
   * the scenery walls stay outside the field (+ margin),
   * straight-line walking estimates (gate -> street -> plaza opening -> target) are <= 300 studs.
@@ -81,16 +82,9 @@ YCZ = float(grab(rf"CenterZ\s*=\s*({NUM})", yb, "Yards.CenterZ").group(1))
 YCX = nums(grab(r"CentersX\s*=\s*\{([^}]*)\}", yb, "Yards.CentersX").group(1))
 STREET, PLAZA, FIELD = rect("Street"), rect("Plaza"), rect("Field")
 TL = rect("ThrowLine")
+TZ = rect("ThrowZone")
 pb = block("Platform")
-
-
-def pvec(key: str) -> list[float]:
-    return nums(grab(rf"{key}\s*=\s*Vector3\.new\(([^)]*)\)", pb, f"Platform.{key}").group(1))
-
-
-P_CENTER, P_SIZE, P_SPOT = pvec("Center"), pvec("Size"), pvec("ThrowSpot")
-P_RADIUS = float(grab(rf"StandRadius\s*=\s*({NUM})", pb, "StandRadius").group(1))
-P_QUEUE = vec(grab(r"QueueSpots\s*=\s*\{(.*?)\n\t\}", pb, "QueueSpots").group(1))
+P_SPOT = nums(grab(r"ThrowSpot\s*=\s*Vector3\.new\(([^)]*)\)", pb, "Platform.ThrowSpot").group(1))
 SHOP = nums(grab(r"Layout\.Shop\s*=\s*\{\s*Center\s*=\s*Vector3\.new\(([^)]*)\)", lay, "Shop").group(1))
 TRAIN = nums(grab(r"Layout\.Training\s*=\s*\{\s*Center\s*=\s*Vector3\.new\(([^)]*)\)", lay, "Training").group(1))
 
@@ -134,21 +128,20 @@ for name in ("Yards", "Street", "Plaza"):
     y = re.search(rf"\bY\s*=\s*({NUM})", block(name))
     check(y is not None and float(y.group(1)) == HUB_Y, f"Layout.{name}.Y must be HubY")
 check(SHOP[1] == HUB_Y and TRAIN[1] == HUB_Y, "shop / training centres must be at HubY")
-check("RampBottom" not in pb and "RampTop" not in pb, "the flush deck has no ramp (remove RampBottom / RampTop)")
+check("RampBottom" not in pb and "RampTop" not in pb, "no ramp (remove RampBottom / RampTop)")
+check("QueueSpots" not in pb and "StandRadius" not in pb, "the queue is gone: remove Platform.QueueSpots / StandRadius")
 
-# ---------------------------------------------------------------- platform
-deck = R(P_CENTER[0] - P_SIZE[0] / 2, P_CENTER[0] + P_SIZE[0] / 2, P_CENTER[2] - P_SIZE[2] / 2, P_CENTER[2] + P_SIZE[2] / 2)
-check(P_CENTER[1] == TL["Y"] == HUB_Y, "deck surface must be ThrowLine.Y = HubY (flush deck)")
-check(abs(deck[3] - TL["Z"]) < 1e-6, "deck front edge must be ThrowLine.Z (the cliff edge)")
-check(abs(P_SPOT[2] - deck[3]) <= 6 and P_SPOT[1] == TL["Y"], "ThrowSpot must be at the deck front, on the deck")
-for cx, cz in ((deck[0], deck[2]), (deck[0], deck[3]), (deck[1], deck[2]), (deck[1], deck[3])):
-    check(math.hypot(cx - P_SPOT[0], cz - P_SPOT[2]) <= P_RADIUS, "StandRadius does not cover the deck")
-check(len(P_QUEUE) == 5, "need 5 queue spots")
-for q in P_QUEUE:
-    check(deck[0] < q[0] < deck[1] and deck[2] < q[2] < deck[3] and q[1] == TL["Y"], f"queue spot {q} not on the deck")
+# ---------------------------------------------------------------- throw zone
+zone = R(TZ["MinX"], TZ["MaxX"], TZ["MinZ"], TZ["MaxZ"])
+check(TZ["Y"] == TL["Y"] == HUB_Y, "throw zone surface must be ThrowLine.Y = HubY (flush)")
+check(abs(zone[3] - TL["Z"]) < 1e-6, "throw zone MaxZ must be ThrowLine.Z (the cliff edge)")
+check(zone[1] - zone[0] >= 60 and zone[3] - zone[2] >= 14, "throw zone too small to read as a zone")
+check(abs(P_SPOT[0] - (zone[0] + zone[1]) / 2) < 1e-6 and abs(P_SPOT[2] - (zone[2] + zone[3]) / 2) < 1e-6
+      and P_SPOT[1] == HUB_Y, "Platform.ThrowSpot must be the throw zone centre at HubY")
 shop = R(SHOP[0] - 11, SHOP[0] + 11, SHOP[2] - 2, SHOP[2] + 12)  # Plaza.Shop: 22 wide, counter + 12 deep
 train = R(TRAIN[0] - 12, TRAIN[0] + 12, TRAIN[2] - 12, TRAIN[2] + 13)  # 24-stud mat + sign
-feats = {"deck": deck, "shop": shop, "training": train}
+lawn = R(PLAZA["MinX"] + 4 - 1, -24 + 1, 18 - 1, TZ["MinZ"] - 4 + 1)  # Plaza.Lawn + its 1-stud edge
+feats = {"throw zone": zone, "shop": shop, "training": train, "lawn": lawn}
 for n, f in feats.items():
     check(inside(f, floors["Plaza"]), f"{n} is not inside the plaza")
 fn = list(feats)
@@ -165,7 +158,7 @@ check(TL["Z"] + prev == FIELD["MaxZ"], "zone bands must end at Layout.Field.MaxZ
 check(WALL_X >= FIELD["MaxX"] + 40, f"walls (|x| = {WALL_X}) too close to the field")
 check(WALL_X > STREET["MaxX"], "walls cut through the crossbar")
 
-# ---------------------------------------------------------------- walk estimates (straight lines; flush deck, no ramp)
+# ---------------------------------------------------------------- walk estimates (straight lines; flush zone, no ramp)
 def ground(a, b) -> float:
     """a, b = (x, z). Street <-> plaza goes through the opening; the plateau is otherwise open."""
     ax, az = a
@@ -183,7 +176,9 @@ targets = {f"Gate{i + 1}": (x, YCZ + YD / 2 + 1.5) for i, x in enumerate(YCX)}
 targets["Shop"] = (SHOP[0], SHOP[2] - 3.5)
 targets["Training"] = (TRAIN[0], TRAIN[2])
 worst = (0.0, "")
-targets["Platform"] = (P_SPOT[0], P_SPOT[2])
+targets["Zone"] = (P_SPOT[0], P_SPOT[2])
+targets["ZoneW"] = (zone[0] + 2, zone[2] + 2)
+targets["ZoneE"] = (zone[1] - 2, zone[2] + 2)
 tn = list(targets)
 for i, a in enumerate(tn):
     for b in tn[i + 1:]:
@@ -192,7 +187,7 @@ for i, a in enumerate(tn):
         if d > worst[0]:
             worst = (d, f"{a} -> {b}")
 
-print(f"world_bounds: {checks} checks; hub at Y {HUB_Y:g}, field at Y {GROUND_Y:g}, flush deck; worst walk estimate {worst[1]} {worst[0]:.0f} studs "
+print(f"world_bounds: {checks} checks; hub at Y {HUB_Y:g}, field at Y {GROUND_Y:g}, flush throw zone; worst walk estimate {worst[1]} {worst[0]:.0f} studs "
       f"({worst[0] / 32:.1f} s at WalkSpeed 32)")
 print("(full part-level check: lune run tools/worldcheck/run.luau)")
 if fails:

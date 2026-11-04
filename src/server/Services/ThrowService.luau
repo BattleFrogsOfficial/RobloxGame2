@@ -1,27 +1,29 @@
 --!nonstrict
--- The throw: ChargeBegin/ChargeRelease timing (server clock only; the client clicks once to start and once
--- to release), one throw in flight per player, cooldowns + rate limits, the ONE shared throwing platform and
--- its FIFO queue, distance/landing/zone, consumable balls, the full roll (RollService), the outcome committed to
--- the player's data, then ThrowResult to EVERY client immediately (before any visual, toast, StateUpdate or
--- display refresh), cutscene completion (CutsceneFinished or timeout), broadcasts, runaway spawn on a miss and
--- the Golden Whistle recall (UseWhistle).
+-- The throw: ChargeBegin/ChargeRelease timing (server clock only; ONE TAP: the meter sweeps from ChargeBegin, which
+-- the client fires the moment the bar appears and again to restart the sweep, and ChargeRelease is the tap), one
+-- throw in flight per player, cooldowns + rate limits, the brown THROW ZONE (no turns: everyone in it can throw at
+-- once), distance/landing/zone, consumable balls, the full roll (RollService), the outcome committed to the player's
+-- data, then ThrowResult to EVERY client immediately (before any visual, toast, StateUpdate or display refresh),
+-- cutscene completion (CutsceneFinished or timeout), broadcasts, runaway spawn on a miss and the Golden Whistle
+-- recall (UseWhistle).
 --
--- Flight: the platform deck is flush with the hub plateau (Layout.ThrowLine.Y = Layout.HubY = 40); the ball leaves
--- at LaunchPos (ThrowSpot, Y = deck + Game.Throw.LaunchHeight = 44) and lands on the field at LandPos
+-- Throw zone (Layout.ThrowZone, rules in Util/ThrowZone): a player is "in the zone" while their HumanoidRootPart XZ is
+-- inside the rectangle grown by Game.ThrowZone.EdgeMargin and Y >= Layout.ThrowZone.Y - Game.ThrowZone.YTolerance.
+-- Sampled every Game.ThrowZone.SampleInterval into the player attributes "InThrowZone" (boolean), plus for one
+-- release the deprecated "OnPlatform" (same value) and "ThrowQueuePos" (1 in the zone, 0 otherwise).
+-- Charge rules (checked live, not from the sampled attribute):
+--   ChargeBegin: refused outside the zone, while a throw of yours is in flight, or within MinSecondsBetweenThrows of
+--     your last release; while already charging it RESTARTS the sweep (new timestamp) unless the current charge is
+--     younger than Game.Throw.MinRestartSeconds.
+--   ChargeRelease: throws at elapsed = now - (last) start; outside the zone it cancels the charge (no throw).
+--   No release within Game.Throw.MaxChargeSeconds of the (re)start: the charge is cancelled silently (no auto-throw).
+--   Leaving the zone also drops an unreleased charge.
+--
+-- Flight: the ball leaves the cliff edge in front of the thrower, LaunchPos = (root X clamped into the zone,
+-- Layout.ThrowZone.Y + Game.Throw.LaunchHeight = 44, Layout.ThrowLine.Z), and lands on the field at LandPos
 -- (Y = Layout.GroundY, Z = ThrowLine.Z + Distance). Util/BallFlight.ForThrow adds that drop to the flight: same
 -- horizontal distance, longer flight. ThrowResult.FlightTime = ForThrow(LaunchPos, LandPos).Duration, the arc every
 -- client renders.
---
--- Platform queue: a player is "on the platform" while their root is inside the deck rectangle (Layout.Platform
--- Center/Size grown by Game.Platform.EdgeMargin; the deck is flush, so height alone cannot tell) and at
--- Y >= Layout.ThrowLine.Y - Game.Platform.YTolerance (sampled every
--- Game.Platform.SampleInterval). Arrivals join the back of the line; position 1 has the turn and is the only
--- one allowed to ChargeBegin (one throw per turn). Waiting players are moved onto
--- Layout.Platform.QueueSpots[pos - 1] when they arrive and whenever the line advances; a new turn-holder is
--- moved onto the ThrowSpot. The turn ends MinSecondsBetweenThrows after the throw finishes (CutsceneFinished
--- or the server timeout) and the thrower goes to the back; a turn-holder who does not start charging within
--- Game.Platform.TurnStartSeconds also goes to the back. Leaving the platform (or the server) leaves the line.
--- Player attributes: "OnPlatform" (boolean), "ThrowQueuePos" (0 = not queued, 1 = your turn, 2+ = waiting).
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -42,6 +44,7 @@ local PlayerStats = require(Util:WaitForChild("PlayerStats"))
 local DogCatalog = require(Util:WaitForChild("DogCatalog"))
 local RateLimiter = require(Util:WaitForChild("RateLimiter"))
 local BallFlight = require(Util:WaitForChild("BallFlight"))
+local ThrowZone = require(Util:WaitForChild("ThrowZone"))
 local Timeline = require(Shared:WaitForChild("Cutscene"):WaitForChild("Timeline")) -- pure cutscene timing
 
 local Services = script.Parent
@@ -51,7 +54,6 @@ local RollService = require(Services:WaitForChild("RollService"))
 local BookService = require(Services:WaitForChild("BookService"))
 local EventService = require(Services:WaitForChild("EventService"))
 local BroadcastService = require(Services:WaitForChild("BroadcastService"))
-local ThrowQueue = require(Services:WaitForChild("ThrowQueue"))
 
 local ThrowService = {}
 
@@ -77,19 +79,10 @@ local lastRelease: { [Player]: number } = {}
 local throws: { [string]: ThrowRec } = {}
 local tokenCounter = 0
 
--- Current turn (queue position 1). One throw per turn.
-type Turn = { Player: Player, StartedAt: number, Charged: boolean, Throw: ThrowRec?, EndsAt: number? }
-local turn: Turn? = nil
-local queue = ThrowQueue.new()
-local onPlatform: { [Player]: boolean } = {}
-local lastQueuePos: { [Player]: number } = {}
+local inZone: { [Player]: boolean } = {}
 
-function ThrowService.QueuePosition(player: Player): number
-	return queue:Position(player)
-end
-
-function ThrowService.IsOnPlatform(player: Player): boolean
-	return onPlatform[player] == true
+function ThrowService.IsInThrowZone(player: Player): boolean
+	return inZone[player] == true
 end
 
 local function zoneById(id: string): any
@@ -102,38 +95,16 @@ local function zoneById(id: string): any
 end
 
 ----------------------------------------------------------------------------------------------------
--- Platform geometry: Layout.Platform only (the ThrowPad-tagged deck part's centre is NOT the throw spot)
+-- Throw zone geometry: Layout.ThrowZone (Util/ThrowZone)
 ----------------------------------------------------------------------------------------------------
-local function deckY(): number
-	return Layout.ThrowLine.Y
-end
-
+-- Compatibility: the zone centre (= Layout.Platform.ThrowSpot).
 function ThrowService.ThrowSpot(): Vector3
 	return Layout.Platform.ThrowSpot
 end
 
--- The ball leaves the thrower's hand: deck surface + Game.Throw.LaunchHeight (= 44, above the 43.35 railing caps).
+-- The ball leaves the thrower's hand: plateau surface + Game.Throw.LaunchHeight (= 44, above the 43.35 railing caps).
 function ThrowService.LaunchY(): number
-	return deckY() + Game.Throw.LaunchHeight
-end
-
--- Inside the flush deck's rectangle (+ EdgeMargin), in XZ.
-local function onDeckXZ(pos: Vector3): boolean
-	local c: Vector3, s: Vector3 = Layout.Platform.Center, Layout.Platform.Size
-	local m = Game.Platform.EdgeMargin or 0
-	return math.abs(pos.X - c.X) <= s.X / 2 + m and math.abs(pos.Z - c.Z) <= s.Z / 2 + m
-end
-
-local function standRadius(): number
-	return Layout.Platform.StandRadius
-end
-
-local function queueSpot(waitIndex: number): Vector3?
-	local spots = Layout.Platform.QueueSpots
-	if #spots == 0 then
-		return nil
-	end
-	return spots[math.clamp(waitIndex, 1, #spots)]
+	return Layout.ThrowZone.Y + Game.Throw.LaunchHeight
 end
 
 local function rootOf(player: Player): BasePart?
@@ -146,24 +117,10 @@ local function rootOf(player: Player): BasePart?
 	return hrp
 end
 
--- Player standing on the deck? Also true near their own queue spot, so a spot placed at the deck's edge
--- never bounces a waiting player out of the line.
-local function isOnPlatform(player: Player): boolean
+-- Live check (the attribute is the same rule, sampled ~4x per second).
+local function isInZone(player: Player): boolean
 	local hrp = rootOf(player)
-	if not hrp then
-		return false
-	end
-	local pos = hrp.Position
-	if pos.Y < deckY() - Game.Platform.YTolerance then
-		return false
-	end
-	local spot = ThrowService.ThrowSpot()
-	if onDeckXZ(pos) and Vector2.new(pos.X - spot.X, pos.Z - spot.Z).Magnitude <= standRadius() then
-		return true
-	end
-	local qp = queue:Position(player)
-	local mine = if qp >= 2 then queueSpot(qp - 1) else nil
-	return mine ~= nil and Vector2.new(pos.X - mine.X, pos.Z - mine.Z).Magnitude <= 6
+	return hrp ~= nil and ThrowZone.Contains(hrp.Position)
 end
 
 function ThrowService.IsInFlight(player: Player): boolean
@@ -181,9 +138,6 @@ local function finish(rec: ThrowRec)
 	local player = rec.Player
 	if inFlight[player] == rec then
 		inFlight[player] = nil
-	end
-	if turn and turn.Throw == rec and not turn.EndsAt then
-		turn.EndsAt = os.clock() + Game.Throw.MinSecondsBetweenThrows
 	end
 	local r = rec.Result
 	local name = player.DisplayName
@@ -220,7 +174,7 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Resolve a release
 ----------------------------------------------------------------------------------------------------
-local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
+local function resolveThrow(player: Player, elapsed: number, tutorial: boolean, rootPos: Vector3)
 	local state = DataService.Get(player)
 	if not state then
 		return
@@ -308,19 +262,18 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		state.Stats.Missed += 1
 	end
 
-	local spot = ThrowService.ThrowSpot()
+	-- Launch: the cliff edge right in front of the thrower (root X clamped into the zone, Y 44, Z = ThrowLine.Z).
+	local launchX = ThrowZone.LaunchX(rootPos.X)
 	-- Landing X: half the thrower's offset from the field centre plus a little scatter, clamped to the middle half
 	-- of the field (|x - centre| <= FieldWidth/4 - 4 = 56) so the landing wide shot and the dog's hop-in stay well
 	-- inside the zone boundaries. The field is filled edge to edge, but every prop / ground-cover part there is
 	-- non-colliding and non-queryable (World/Zones/Kit.luau), so nothing can catch the ball. Cutscene/Path.Estimate
 	-- mirrors this rule (Config/Cutscene Fallback.EstimateLaneX).
-	local fieldCX = (Layout.Field.MinX + Layout.Field.MaxX) / 2
-	local laneHalf = (Layout.Field.MaxX - Layout.Field.MinX) * 0.25 - 4
-	local landX = math.clamp(fieldCX + (spot.X - fieldCX) * 0.5
-		+ rng:Range(-Game.Throw.LateralScatter, Game.Throw.LateralScatter) * 0.5, fieldCX - laneHalf, fieldCX + laneHalf)
-	-- Plateau -> field: same horizontal distance; the arc starts at hand height on the deck and drops to the field
-	-- (GroundY); BallFlight adds the drop to the flight time.
-	local launchPos, landPos = BallFlight.Endpoints(spot, ThrowService.LaunchY(), Layout.ThrowLine.Z, Layout.GroundY, distance, landX)
+	local landX = ThrowZone.LandX(launchX, rng:Range(-1, 1))
+	-- Plateau -> field: same horizontal distance; the arc starts at hand height over the cliff edge and drops to the
+	-- field (GroundY); BallFlight adds the drop to the flight time.
+	local launchPos, landPos = BallFlight.Endpoints(Vector3.new(launchX, Layout.ThrowZone.Y, Layout.ThrowLine.Z),
+		ThrowService.LaunchY(), Layout.ThrowLine.Z, Layout.GroundY, distance, landX)
 	local flightTime = BallFlight.ForThrow(launchPos, landPos).Duration
 	local adult = DogCatalog.AdultIncome(def, outcome.Variant) * PlayerStats.IncomeMult(ctx)
 	local throwId = HttpService:GenerateGUID(false)
@@ -330,7 +283,7 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		ThrowId = throwId,
 		ThrowerUserId = player.UserId,
 		ThrowerName = player.DisplayName,
-		PadIndex = 1, -- one shared platform (the "ThrowPad"-tagged deck)
+		PadIndex = 1, -- one shared throw zone (the "ThrowZone" / "ThrowPad"-tagged floor)
 		Distance = distance,
 		ZoneId = zone.Id,
 		DogId = outcome.DogId,
@@ -351,7 +304,7 @@ local function resolveThrow(player: Player, elapsed: number, tutorial: boolean)
 		Band = band,
 		BallId = ball.Id,
 		BallsLeft = ballsLeft, -- remaining throws of a consumable ball (nil for Tennis)
-		LaunchPos = launchPos, -- (ThrowSpot.X, ThrowLine.Y + Game.Throw.LaunchHeight = 44, ThrowSpot.Z)
+		LaunchPos = launchPos, -- (thrower X clamped into the zone, ThrowZone.Y + Game.Throw.LaunchHeight = 44, ThrowLine.Z)
 		LandPos = landPos, -- on the field: Y = Layout.GroundY (0), Z = ThrowLine.Z + Distance
 		FlightTime = flightTime, -- BallFlight.ForThrow(LaunchPos, LandPos).Duration (incl. the 44-stud drop)
 		StartPosition = launchPos, -- legacy names (cutscene contract)
@@ -408,62 +361,46 @@ local function release(player: Player)
 	if not charge then
 		return
 	end
+	local hrp = rootOf(player)
+	local action = ThrowZone.Release({ InZone = hrp ~= nil and ThrowZone.Contains(hrp.Position),
+		ChargeStart = charge.Start, Now = os.clock() })
 	charges[player] = nil
+	if action ~= "throw" or not hrp then
+		return -- tapped outside the zone: the charge is dropped, nothing is thrown
+	end
 	local elapsed = os.clock() - charge.Start
 	lastRelease[player] = os.clock()
-	local ok, err = pcall(resolveThrow, player, elapsed, charge.Tutorial)
+	local ok, err = pcall(resolveThrow, player, elapsed, charge.Tutorial, hrp.Position)
 	if not ok then
 		warn("[ThrowService] resolve error: " .. tostring(err))
-	end
-	local t = turn
-	if t and t.Player == player then
-		local rec = inFlight[player]
-		if ok and rec then
-			t.Throw = rec
-		else
-			t.EndsAt = os.clock() + Game.Throw.MinSecondsBetweenThrows
-		end
 	end
 end
 
 local function beginCharge(player: Player)
 	local state = DataService.Get(player)
-	if not state then
+	local current = charges[player]
+	local action = ThrowZone.Begin({
+		Loaded = state ~= nil,
+		InZone = isInZone(player),
+		InFlight = inFlight[player] ~= nil,
+		ChargeStart = if current then current.Start else nil,
+		LastRelease = lastRelease[player],
+		Now = os.clock(),
+	})
+	if not action or not state then
 		return
 	end
-	if charges[player] or inFlight[player] then
-		return
-	end
-	if os.clock() - (lastRelease[player] or -math.huge) < Game.Throw.MinSecondsBetweenThrows then
-		return
-	end
-	if not isOnPlatform(player) then
-		BroadcastService.Notify(player, "Walk up onto the throwing platform to throw!", "Hint")
-		return
-	end
-	local pos = queue:Position(player)
-	local t = turn
-	if pos ~= 1 or not t or t.Player ~= player then
-		if pos >= 2 then
-			BroadcastService.Notify(player, ("Wait for your turn: you're #%d in line."):format(pos), "Hint")
-		end
-		return
-	end
-	if t.Charged then
-		return -- one throw per turn
-	end
-	t.Charged = true
 	tokenCounter += 1
 	local token = tokenCounter
 	charges[player] = {
-		Start = os.clock(),
+		Start = os.clock(), -- a restart resets the sweep to 0 (the client restarts its meter on the same boundary)
 		Token = token,
 		Tutorial = Game.Tutorial.Enabled and not state.TutorialThrowDone,
 	}
 	task.delay(Game.Throw.MaxChargeSeconds, function()
 		local c = charges[player]
 		if c and c.Token == token then
-			release(player) -- auto-release (anti stall / macro)
+			charges[player] = nil -- no release in time: cancelled silently (no auto-throw)
 		end
 	end)
 end
@@ -515,99 +452,31 @@ local function useWhistle(player: Player, throwId: any): (boolean, string)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Platform queue upkeep
+-- Throw zone presence (attributes)
 ----------------------------------------------------------------------------------------------------
-local function moveTo(player: Player, spot: Vector3)
-	local char = player.Character
-	local hrp = rootOf(player)
-	if not char or not hrp then
-		return
+local function setZoneAttributes(player: Player, on: boolean)
+	if player:GetAttribute("InThrowZone") ~= on then
+		player:SetAttribute("InThrowZone", on)
 	end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	local up = if hum then hum.HipHeight + hrp.Size.Y / 2 else 3
-	local at = spot + Vector3.new(0, up + 0.1, 0)
-	char:PivotTo(CFrame.lookAt(at, at + Vector3.new(0, 0, 1))) -- face down the field (+Z)
+	-- DEPRECATED (one release): the old platform / queue attributes mirror the zone
+	if player:GetAttribute("OnPlatform") ~= on then
+		player:SetAttribute("OnPlatform", on)
+	end
+	local pos = if on then 1 else 0
+	if player:GetAttribute("ThrowQueuePos") ~= pos then
+		player:SetAttribute("ThrowQueuePos", pos)
+	end
 end
 
-local function startTurn(player: Player?)
-	turn = if player then { Player = player, StartedAt = os.clock(), Charged = false, Throw = nil, EndsAt = nil } else nil
-end
-
--- The current turn is over: the thrower goes to the back (stays at 1 when alone) and a fresh turn starts.
-local function endTurn()
-	local t = turn
-	if not t then
-		return
-	end
-	queue:ToBack(t.Player)
-	startTurn(queue:Head())
-end
-
--- Attributes for everyone + teleports for players whose place in line changed.
-local function commitQueue()
-	if not turn or turn.Player ~= queue:Head() then
-		startTurn(queue:Head())
-	end
+local function tickZone()
 	for _, player in Players:GetPlayers() do
-		local pos = queue:Position(player)
-		local prev = lastQueuePos[player] or 0
-		if player:GetAttribute("OnPlatform") ~= (onPlatform[player] == true) then
-			player:SetAttribute("OnPlatform", onPlatform[player] == true)
+		local on = isInZone(player)
+		inZone[player] = on
+		if not on then
+			charges[player] = nil -- walked out: an unreleased charge is dropped
 		end
-		if player:GetAttribute("ThrowQueuePos") ~= pos then
-			player:SetAttribute("ThrowQueuePos", pos)
-		end
-		if pos ~= prev then
-			lastQueuePos[player] = pos
-			if pos >= 2 then
-				local spot = queueSpot(pos - 1)
-				if spot then
-					moveTo(player, spot)
-				end
-			elseif pos == 1 and prev >= 2 then
-				moveTo(player, ThrowService.ThrowSpot()) -- your turn: step up to the throw spot
-				BroadcastService.Notify(player, "Your turn! Click to start the throw meter.", "Hint")
-			end
-		end
+		setZoneAttributes(player, on)
 	end
-end
-
-local function leaveQueue(player: Player)
-	if queue:Remove(player) then
-		charges[player] = nil -- an unreleased charge is dropped
-		if turn and turn.Player == player then
-			turn = nil
-		end
-	end
-end
-
-local function tickPlatform()
-	for _, player in Players:GetPlayers() do
-		local on = isOnPlatform(player)
-		onPlatform[player] = on
-		local pos = queue:Position(player)
-		if on and pos == 0 and DataService.Get(player) then
-			queue:Join(player)
-		elseif not on and pos > 0 then
-			leaveQueue(player)
-		end
-	end
-	local t = turn
-	if t and t.Player == queue:Head() then
-		local now = os.clock()
-		if t.EndsAt then
-			if now >= t.EndsAt then
-				endTurn()
-			end
-		elseif not t.Charged and not inFlight[t.Player] and not charges[t.Player]
-			and now - t.StartedAt > Game.Platform.TurnStartSeconds then
-			if queue:Count() > 1 then
-				BroadcastService.Notify(t.Player, "You took too long, so you moved to the back of the line.", "Hint")
-			end
-			endTurn()
-		end
-	end
-	commitQueue()
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -659,9 +528,7 @@ function ThrowService.Start()
 	end
 
 	Players.PlayerRemoving:Connect(function(player)
-		leaveQueue(player)
-		onPlatform[player] = nil
-		lastQueuePos[player] = nil
+		inZone[player] = nil
 		charges[player] = nil
 		lastRelease[player] = nil
 		local rec = inFlight[player]
@@ -678,24 +545,21 @@ function ThrowService.Start()
 		releaseLimiter:Clear(player)
 		finishLimiter:Clear(player)
 		whistleLimiter:Clear(player)
-		task.defer(commitQueue)
 	end)
 	Players.PlayerAdded:Connect(function(player)
-		player:SetAttribute("OnPlatform", false)
-		player:SetAttribute("ThrowQueuePos", 0)
+		setZoneAttributes(player, false)
 	end)
 	for _, player in Players:GetPlayers() do
-		player:SetAttribute("OnPlatform", false)
-		player:SetAttribute("ThrowQueuePos", 0)
+		setZoneAttributes(player, false)
 	end
 
-	-- platform presence + queue (~4x per second)
+	-- throw zone presence (~4x per second)
 	task.spawn(function()
 		while true do
-			task.wait(Game.Platform.SampleInterval)
-			local ok, err = pcall(tickPlatform)
+			task.wait(Game.ThrowZone.SampleInterval)
+			local ok, err = pcall(tickZone)
 			if not ok then
-				warn("[ThrowService] platform queue error: " .. tostring(err))
+				warn("[ThrowService] throw zone error: " .. tostring(err))
 			end
 		end
 	end)

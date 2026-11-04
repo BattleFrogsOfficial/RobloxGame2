@@ -1,5 +1,11 @@
 --!strict
--- Grid card: rarity-framed preview area, name, subtitle, optional price button. Used by Shop, Dogs and Book.
+-- Item card in the shop style (style guide section 5): a tall card whose BACKGROUND is its rarity colour, the name
+-- big at the top, the rarity word under it in a rarity-tinted outlined font, a big icon in the middle, a dark
+-- translucent stat strip ("x1.25 Range  +10% Luck"), then a bottom row: a grey cash price button and a purple Robux
+-- button (Robux mark + number). Equipped = one full-width grey button. A small badge (owned count "x3") sits in the
+-- top-right corner of the art. Used by the Shop; Dogs and the Kennel Book reuse Card.Paint for their pooled cells.
+--   Card.new({ Title, Rarity?, Tag?, Color?, Icon, IconRecolor?, Stat?, Badge?, Price?, PriceEnabled?, OnBuy?,
+--              Robux?, OnRobux?, Action?, ActionPalette?, OnAction?, Size?, Parent?, LayoutOrder? })
 local Make = require(script.Parent.Parent:WaitForChild("Make"))
 local Theme = require(script.Parent.Parent:WaitForChild("Theme"))
 local Motion = require(script.Parent.Parent:WaitForChild("Motion"))
@@ -12,24 +18,36 @@ local Card = {}
 
 export type CardProps = {
 	Title: string,
-	Subtitle: string?,
-	Icon: string?, -- pixel icon shown in the preview area
-	Rarity: string?, -- frames the preview in the rarity colour
-	Variant: string?, -- badge in the preview corner
-	Price: string?, -- button text; nil = no button
-	PricePalette: string?,
-	PriceIcon: string?,
+	Rarity: string?, -- background colour + the tag word (unless Tag / Color say otherwise)
+	Tag: string?, -- the word under the name (default: the rarity)
+	Color: Color3?, -- background colour for things without a rarity (boosts, upgrades)
+	Subtitle: string?, -- legacy alias for Stat
+	Stat: string?, -- the dark stat strip
+	Icon: string?,
+	IconRecolor: { [string]: Color3 }?,
+	IconTint: Color3?,
+	Badge: string?, -- top-right corner of the art ("x3")
+	Variant: string?, -- variant badge (top-left of the art)
+	Price: string?, -- cash button text; nil = no cash button
+	PriceIcon: string?, -- icon before the price (bones for cosmetics); cash prices are plain text like "$150"
+	PricePalette: string?, -- default Slate (grey)
+	PriceEnabled: boolean?,
+	OnBuy: (() -> ())?,
+	Robux: (number | string)?, -- Robux button (purple, Robux mark + number, or "Soon")
+	OnRobux: (() -> ())?,
+	Action: string?, -- one full-width button instead of the price row ("Equipped", "Equip", "Owned")
+	ActionPalette: string?,
+	OnAction: (() -> ())?,
 	Size: UDim2?,
 	Parent: Instance?,
 	LayoutOrder: number?,
 	ZIndex: number?,
-	OnClick: (() -> ())?, -- whole card
-	OnBuy: (() -> ())?, -- price button
-	Locked: boolean?,
+	OnClick: (() -> ())?,
 	Owned: boolean?,
-	Silhouette: boolean?, -- unknown dog in the book
+	Locked: boolean?,
+	Silhouette: boolean?,
 	Name: string?,
-	Preview: Instance?, -- custom preview content (e.g. a ViewportFrame) instead of an icon
+	Preview: Instance?,
 }
 
 export type CardHandle = {
@@ -38,119 +56,222 @@ export type CardHandle = {
 	Title: TextLabel,
 	Subtitle: TextLabel,
 	Buy: Button.ButtonHandle?,
+	RobuxButton: Button.ButtonHandle?,
 	SetPrice: (self: CardHandle, text: string?, enabled: boolean?) -> (),
 	SetSubtitle: (self: CardHandle, text: string) -> (),
 	SetSelected: (self: CardHandle, on: boolean) -> (),
 }
 
-Card.DefaultSize = UDim2.fromOffset(150, 224)
+Card.Width = 200
+Card.DefaultSize = UDim2.new(0, Card.Width, 1, -8)
+Card.MaxHeight = 330
+local BUTTON_H = 44
+local STRIP_H = 34
+local PAD = 6
+local TOP = 58 -- name + tag block
+
+-- Paint a frame as a rarity card: gradient of the colour (lighter top), Ink outline, rounded corners.
+function Card.Paint(frame: GuiObject, color: Color3): UIGradient
+	frame.BackgroundColor3 = Color3.new(1, 1, 1)
+	local g = frame:FindFirstChildOfClass("UIGradient")
+	local seq = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, color:Lerp(Theme.Color.White, 0.28)),
+		ColorSequenceKeypoint.new(1, color:Lerp(Theme.Color.Ink, 0.12)),
+	})
+	if g then
+		g.Color = seq
+		return g
+	end
+	return Make("UIGradient", { Color = seq, Rotation = 90, Parent = frame })
+end
+
+-- The rarity word colour on its own card: the tier hue pushed bright (Common stays near-white).
+function Card.TagColor(color: Color3): Color3
+	return color:Lerp(Theme.Color.White, 0.55)
+end
+
+-- Fit a name to the card: largest of the steps whose estimated width fits.
+function Card.FitSize(text: string, width: number, steps: { number }): number
+	for _, s in steps do
+		if Label.EstimateWidth(text, s, Theme.Font.Display) * 1.08 <= width then
+			return s
+		end
+	end
+	return steps[#steps]
+end
 
 function Card.new(props: CardProps): CardHandle
 	local size = props.Size or Card.DefaultSize
+	local color = props.Color or Theme.RarityColor(props.Rarity)
 	local root: Frame = Make("Frame", {
 		Name = props.Name or ("Card_" .. props.Title),
-		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
 		Size = size,
 		LayoutOrder = props.LayoutOrder or 0,
 		ZIndex = props.ZIndex or 53,
 	})
+	Make("UISizeConstraint", { MaxSize = Vector2.new(10000, Card.MaxHeight), Parent = root })
 	Decor.Corner(root, Theme.Radius.Card)
-	local outer = Decor.Stroke(root, Theme.Stroke.Panel)
-	Decor.PaletteGradient(root, Theme.Palette.Paper)
+	local outer = Decor.Stroke(root, Theme.Stroke.Card)
+	Card.Paint(root, color)
 	local z = root.ZIndex + 1
+	local innerW = (if size.X.Scale == 0 then size.X.Offset else Card.Width) - PAD * 2
 
-	local pad = Theme.Space.S
-	local previewH = math.floor(size.Y.Offset * 0.4)
-	local preview: Frame = Make("Frame", {
-		Name = "Preview",
-		BackgroundColor3 = Theme.Color.PaperShade,
-		BorderSizePixel = 0,
-		Size = UDim2.new(1, -pad * 2, 0, previewH),
-		Position = UDim2.fromOffset(pad, pad),
-		ZIndex = z,
-		ClipsDescendants = true,
-		Parent = root,
-	})
-	Decor.Corner(preview, Theme.Radius.Card - 2)
-	local rarityColor = Theme.RarityColor(props.Rarity)
-	Decor.Stroke(preview, 3, if props.Rarity then rarityColor else Theme.Color.Track)
-	if props.Rarity then
-		-- Soft tint of the rarity behind the preview
-		Decor.Gradient(preview, Theme.Color.Paper, rarityColor:Lerp(Theme.Color.Paper, 0.6))
-	end
-	if props.Preview then
-		props.Preview.Parent = preview
-	elseif props.Icon then
-		local iconPx = Icon.Snap(math.min(64, previewH - 16))
-		Icon.new({
-			Name = props.Icon,
-			Size = iconPx,
-			Position = UDim2.fromScale(0.5, 0.5),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			ZIndex = z + 1,
-			Tint = if props.Silhouette then Theme.Color.Ink else nil,
-			Parent = preview,
-		})
-	end
-	local variantIcon = Icon.ForVariant(props.Variant)
-	if variantIcon then
-		Icon.new({ Name = variantIcon, Size = 16, Position = UDim2.new(1, -4, 0, 4), AnchorPoint = Vector2.new(1, 0), ZIndex = z + 2, Parent = preview })
-	end
-	if props.Locked then
-		Icon.new({ Name = "lock", Size = 16, Position = UDim2.new(0, 4, 0, 4), ZIndex = z + 2, Parent = preview })
-	end
-	if props.Owned then
-		Icon.new({ Name = "check", Size = 16, Position = UDim2.new(0, 4, 0, 4), ZIndex = z + 2, Parent = preview })
-	end
-
-	local textY = pad + previewH + Theme.Space.XS
 	local title = Label.Display({
 		Name = "Title",
 		Text = props.Title,
-		TextSize = Theme.Text.Caption,
-		Color = Theme.Color.TextOnPaper,
-		Stroke = false,
-		Font = Theme.Font.BodyBold,
-		Size = UDim2.new(1, -pad * 2, 0, 36),
-		Position = UDim2.fromOffset(pad, textY),
+		TextSize = Card.FitSize(props.Title, innerW, { 22, 20, 18, 16 }),
+		Size = UDim2.new(1, -PAD * 2, 0, 30),
+		Position = UDim2.fromOffset(PAD, 6),
 		XAlign = Enum.TextXAlignment.Center,
-		YAlign = Enum.TextYAlignment.Top,
-		Wrap = true,
 		ZIndex = z,
 		Parent = root,
 	})
-	local subtitle = Label.Caption({
-		Name = "Subtitle",
-		Text = props.Subtitle or "",
-		Color = if props.Rarity then rarityColor else Theme.Color.TextMuted,
-		Size = UDim2.new(1, -pad * 2, 0, 34),
-		Position = UDim2.fromOffset(pad, textY + 36),
+	local tagText = props.Tag or props.Rarity or ""
+	local subtitle = Label.Display({
+		Name = "Tag",
+		Text = tagText,
+		TextSize = 16,
+		Color = Card.TagColor(color),
+		Size = UDim2.new(1, -PAD * 2, 0, 22),
+		Position = UDim2.fromOffset(PAD, 34),
 		XAlign = Enum.TextXAlignment.Center,
-		YAlign = Enum.TextYAlignment.Top,
-		Wrap = true,
-		TextSize = Theme.Text.Caption,
 		ZIndex = z,
-		Font = Theme.Font.BodyBold,
 		Parent = root,
 	})
 
+	local bottomH = (if props.Price or props.Robux or props.Action then BUTTON_H + PAD else 0) + PAD
+	local stat = props.Stat or props.Subtitle
+	local stripH = if stat and stat ~= "" then STRIP_H + PAD else 0
+	local preview: Frame = Make("Frame", {
+		Name = "Preview",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -PAD * 2, 1, -(TOP + bottomH + stripH)),
+		Position = UDim2.fromOffset(PAD, TOP),
+		ZIndex = z,
+		Parent = root,
+	})
+	if props.Preview then
+		props.Preview.Parent = preview
+	elseif props.Icon then
+		Icon.new({
+			Name = props.Icon,
+			Size = 96,
+			Position = UDim2.fromScale(0.5, 0.5),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			ZIndex = z + 1,
+			Recolor = props.IconRecolor,
+			Tint = if props.Silhouette then Theme.Color.Ink else props.IconTint,
+			Parent = preview,
+		})
+	end
+	if props.Badge then
+		local badge: Frame = Make("Frame", {
+			Name = "Badge",
+			BackgroundColor3 = Theme.Color.Ink,
+			BackgroundTransparency = 0.15,
+			BorderSizePixel = 0,
+			Size = UDim2.fromOffset(math.max(40, 18 + #props.Badge * 11), 28),
+			Position = UDim2.new(1, 0, 0, 0),
+			AnchorPoint = Vector2.new(1, 0),
+			ZIndex = z + 2,
+			Parent = preview,
+		})
+		Decor.Corner(badge, 6)
+		Decor.Stroke(badge, 2, Card.TagColor(color))
+		Label.Display({ Name = "Text", Text = props.Badge, TextSize = 18, Size = UDim2.fromScale(1, 1), XAlign = Enum.TextXAlignment.Center, ZIndex = z + 3, Parent = badge })
+	end
+	local variantIcon = Icon.ForVariant(props.Variant)
+	if variantIcon then
+		Icon.new({ Name = variantIcon, Size = 32, Position = UDim2.fromOffset(0, 0), ZIndex = z + 2, Parent = preview })
+	end
+	if props.Locked then
+		Icon.new({ Name = "lock", Size = 32, Position = UDim2.fromOffset(0, 0), ZIndex = z + 2, Parent = preview })
+	end
+
+	local statLabel: TextLabel? = nil
+	if stripH > 0 then
+		local strip: Frame = Make("Frame", {
+			Name = "Stat",
+			BackgroundColor3 = Theme.Color.Strip,
+			BackgroundTransparency = Theme.StripTransparency,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, -PAD * 2, 0, STRIP_H),
+			Position = UDim2.new(0, PAD, 1, -bottomH),
+			AnchorPoint = Vector2.new(0, 1),
+			ZIndex = z,
+			Parent = root,
+		})
+		Decor.Corner(strip, 6)
+		Decor.Stroke(strip, 2)
+		statLabel = Label.Display({
+			Name = "Text",
+			Text = stat :: string,
+			TextSize = Card.FitSize(stat :: string, innerW - 8, { 18, 16, 14 }),
+			Size = UDim2.new(1, -8, 1, 0),
+			Position = UDim2.fromOffset(4, 0),
+			XAlign = Enum.TextXAlignment.Center,
+			ZIndex = z + 1,
+			Parent = strip,
+		})
+	end
+
 	local buy: Button.ButtonHandle? = nil
-	if props.Price then
+	local robux: Button.ButtonHandle? = nil
+	local rowY = UDim2.new(0, PAD, 1, -PAD)
+	if props.Action then
 		buy = Button.new({
-			Text = props.Price,
-			Icon = props.PriceIcon,
-			IconSize = 16,
-			Palette = props.PricePalette or "Grass",
-			TextSize = Theme.Text.Caption + 2,
-			Size = UDim2.new(1, -pad * 2, 0, 44),
-			Position = UDim2.new(0, pad, 1, -pad),
+			Name = "Action",
+			Text = props.Action,
+			Palette = props.ActionPalette or "Slate",
+			TextSize = 20,
+			Size = UDim2.new(1, -PAD * 2, 0, BUTTON_H),
+			Position = rowY,
 			AnchorPoint = Vector2.new(0, 1),
 			Shadow = false,
 			ZIndex = z + 1,
 			Parent = root,
-			OnClick = props.OnBuy,
+			OnClick = props.OnAction,
 		})
+	elseif props.Price or props.Robux then
+		local both = props.Price ~= nil and props.Robux ~= nil
+		if props.Price then
+			buy = Button.new({
+				Name = "Buy",
+				Text = props.Price,
+				Icon = props.PriceIcon,
+				IconSize = 32,
+				Palette = props.PricePalette or "Slate",
+				TextSize = if #props.Price > 6 then 18 else 20,
+				Size = if both then UDim2.new(0.56, -PAD - 2, 0, BUTTON_H) else UDim2.new(1, -PAD * 2, 0, BUTTON_H),
+				Position = rowY,
+				AnchorPoint = Vector2.new(0, 1),
+				Shadow = false,
+				ZIndex = z + 1,
+				Parent = root,
+				OnClick = props.OnBuy,
+			})
+			if props.PriceEnabled == false then
+				buy:SetEnabled(false)
+			end
+		end
+		if props.Robux then
+			robux = Button.new({
+				Name = "Robux",
+				Text = tostring(props.Robux),
+				Icon = "robux",
+				IconSize = 32,
+				Palette = "Robux",
+				TextSize = 20,
+				Size = if both then UDim2.new(0.44, -PAD + 2 - 4, 0, BUTTON_H) else UDim2.new(1, -PAD * 2, 0, BUTTON_H),
+				Position = UDim2.new(1, -PAD, 1, -PAD),
+				AnchorPoint = Vector2.new(1, 1),
+				Shadow = false,
+				ZIndex = z + 1,
+				Parent = root,
+				OnClick = props.OnRobux,
+			})
+		end
 	end
 
 	if props.OnClick then
@@ -158,7 +279,7 @@ function Card.new(props: CardProps): CardHandle
 			Name = "Click",
 			Text = "",
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 1, if props.Price then -(44 + pad * 2) else 0),
+			Size = UDim2.new(1, 0, 1, -bottomH),
 			ZIndex = z + 2,
 			Parent = root,
 			Activated = function()
@@ -168,7 +289,7 @@ function Card.new(props: CardProps): CardHandle
 		})
 	end
 
-	local handle = { Root = root, Preview = preview, Title = title, Subtitle = subtitle, Buy = buy } :: any
+	local handle = { Root = root, Preview = preview, Title = title, Subtitle = subtitle, Buy = buy, RobuxButton = robux } :: any
 	function handle.SetPrice(_, text: string?, enabled: boolean?)
 		if buy then
 			buy:SetText(text or "")
@@ -177,11 +298,15 @@ function Card.new(props: CardProps): CardHandle
 		end
 	end
 	function handle.SetSubtitle(_, text: string)
-		subtitle.Text = text
+		if statLabel then
+			statLabel.Text = text
+		else
+			subtitle.Text = text
+		end
 	end
 	function handle.SetSelected(_, on: boolean)
-		outer.Color = if on then Theme.Palette.Sky.Bottom else Theme.Color.Ink
-		outer.Thickness = if on then 4 else Theme.Stroke.Panel
+		outer.Color = if on then Theme.Color.White else Theme.Color.Ink
+		outer.Thickness = if on then 4 else Theme.Stroke.Card
 	end
 	if props.Parent then
 		root.Parent = props.Parent

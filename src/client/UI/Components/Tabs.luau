@@ -1,5 +1,6 @@
 --!strict
--- Horizontal tab strip. Items = { { Id, Text, Icon? } }. The selected tab is Sky, the rest Bone.
+-- Horizontal tab strip. Items = { { Id, Text, Icon? } }. The selected tab is the warm Header gradient, the rest
+-- dark charcoal; all text is outlined display type.
 local Make = require(script.Parent.Parent:WaitForChild("Make"))
 local Theme = require(script.Parent.Parent:WaitForChild("Theme"))
 local Decor = require(script.Parent:WaitForChild("Decor"))
@@ -58,7 +59,7 @@ function Tabs.new(props: TabsProps): TabsHandle
 	local handle = { Root = root } :: any
 	local function paint()
 		for id, b in buttons do
-			b:SetPalette(if id == selected then "Sky" else "Bone")
+			b:SetPalette(if id == selected then "Header" else "Dark")
 		end
 	end
 	function handle.Select(_, id: string)
@@ -74,13 +75,13 @@ function Tabs.new(props: TabsProps): TabsHandle
 	end
 	for i, item in props.Items do
 		local text = item.Text
-		local width = if text then math.max(88, 24 + #text * 11 + (if item.Icon then 36 else 0)) else h
+		local width = if text then math.max(88, 28 + #text * 11 + (if item.Icon then 36 else 0)) else h
 		buttons[item.Id] = Button.new({
 			Name = "Tab_" .. item.Id,
 			Text = text,
 			Icon = item.Icon,
-			IconSize = 16,
-			Palette = "Bone",
+			IconSize = 32,
+			Palette = "Dark",
 			TextSize = Theme.Text.Body,
 			Size = UDim2.fromOffset(width, h),
 			LayoutOrder = i,

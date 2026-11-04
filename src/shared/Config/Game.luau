@@ -3,7 +3,7 @@
 local Game = {}
 
 Game.Name = "Throw a Ball for Dogs"
--- Public servers hold 6 players: one yard each, one shared throwing platform with a queue. Set Max
+-- Public servers hold 6 players: one yard each, one shared brown throw zone (no turns). Set Max
 -- Players = 6 in Game Settings > Places; the server assumes <= Layout.Yards.Count players.
 Game.MaxPlayers = 6
 
@@ -51,24 +51,28 @@ Game.Meter = {
 
 Game.Throw = {
 	MinChargeSeconds = 0.25,
-	MaxChargeSeconds = 6, -- server auto-releases after this
-	MinSecondsBetweenThrows = 2, -- hard floor measured release -> next ChargeBegin; also the gap after a turn ends
+	-- One tap: the meter sweeps from ChargeBegin (the client fires it the moment the bar appears, and again on a period
+	-- boundary to restart the sweep). No release within this many seconds of the (re)start = the charge is CANCELLED
+	-- silently (no auto-throw).
+	MaxChargeSeconds = 6,
+	MinRestartSeconds = 1, -- a ChargeBegin while charging restarts the sweep only this long after the last (re)start
+	MinSecondsBetweenThrows = 2, -- hard floor per player, measured release -> next ChargeBegin
 	Scatter = 0.02, -- distance * (1 + U(-Scatter, Scatter))
 	MinDistance = 5,
-	-- The ball leaves at the deck surface (Layout.ThrowLine.Y = Layout.HubY = 40) + this = 44, above the railing caps
-	-- (43.35), and lands on the field at Layout.GroundY: Util/BallFlight adds that 44-stud drop to the flight time.
+	-- The ball leaves the cliff edge in front of the thrower at the plateau surface (Layout.ThrowZone.Y = Layout.HubY
+	-- = 40) + this = 44, above the railing caps (43.35), and lands on the field at Layout.GroundY: Util/BallFlight adds
+	-- that 44-stud drop to the flight time.
 	LaunchHeight = 4,
-	LateralScatter = 40, -- landing X = 0.5 x platform X + 0.5 x U(-n, n), clamped to the middle half of the field (|x| <= 56)
+	LateralScatter = 40, -- landing X = 0.5 x thrower X + 0.5 x U(-n, n), clamped to the middle half of the field (|x| <= 56)
 }
 
--- The one shared throwing platform (Layout.Platform) and its FIFO queue (ThrowService).
--- On the platform = root inside the deck rectangle (Layout.Platform Center/Size) grown by EdgeMargin, and
--- Y >= Layout.ThrowLine.Y - YTolerance. The deck is flush with the plaza, so the rectangle (not a radius) decides.
-Game.Platform = {
+-- The brown throw zone (Layout.ThrowZone; Util/ThrowZone). In the zone = HumanoidRootPart XZ inside the rectangle
+-- grown by EdgeMargin, and Y >= Layout.ThrowZone.Y - YTolerance. Sampled for the "InThrowZone" attribute every
+-- SampleInterval; ChargeBegin / ChargeRelease check it live.
+Game.ThrowZone = {
 	SampleInterval = 0.25, -- presence sampling (~4x per second)
 	YTolerance = 4,
 	EdgeMargin = 1.5,
-	TurnStartSeconds = 15, -- the player at position 1 must ChargeBegin within this or goes to the back
 }
 
 -- Luck: every non-Common tier's odds are multiplied by (1 + Luck); Common absorbs the difference.

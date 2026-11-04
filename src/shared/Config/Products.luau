@@ -20,6 +20,31 @@ Products.DeveloperProducts = {
 		RandomInfluence = true },
 } :: { [string]: DevProduct }
 
+-- Robux packs of consumable balls (the purple button on each Shop ball card). One purchase grants `Throws` throws
+-- of that ball (PlayerState.Balls[id] += Throws, capped at Balls.MaxOwned). ProductId 0 = not configured yet: the
+-- client shows "Not available yet" instead of prompting. The server grants on ProcessReceipt (ShopService).
+export type BallProduct = { ProductId: number, Robux: number, Throws: number }
+
+Products.Balls = {
+	Rubber = { ProductId = 0, Robux = 5, Throws = 10 }, -- 0.5 R$ a throw: the cheap first Robux taste ($500 of cash)
+	FlyingDisc = { ProductId = 0, Robux = 15, Throws = 10 }, -- 1.5 R$ a throw ($5K of cash at the cash price)
+	Glow = { ProductId = 0, Robux = 35, Throws = 10 }, -- 3.5 R$ a throw ($100K of cash)
+	Golden = { ProductId = 0, Robux = 75, Throws = 10 }, -- 7.5 R$ a throw ($2.5M of cash): the late-game skip
+} :: { [string]: BallProduct }
+
+-- The ball key a Products.Balls ProductId belongs to (receipt handling), or nil.
+function Products.FindBallKey(productId: number): string?
+	if productId == 0 then
+		return nil
+	end
+	for key, p in Products.Balls do
+		if p.ProductId == productId then
+			return key
+		end
+	end
+	return nil
+end
+
 export type GamePass = { Id: number, Name: string, RandomInfluence: boolean?, IncomeMult: number?, Slots: number?,
 	GrowthSpeed: number?, BonesMult: number?, Luck: number? }
 

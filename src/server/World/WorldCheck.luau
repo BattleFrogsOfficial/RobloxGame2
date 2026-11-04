@@ -2,19 +2,23 @@
 -- Post-build sanity check for the world (runs in Studio from WorldBuilder, and headless from
 -- tools/worldcheck/run.luau). Returns a list of human-readable violations; empty = OK.
 --
--- Two levels: hub items (yards, street, plaza, shop, training, platform deck, spawns) stand on the plateau at
+-- Two levels: hub items (yards, street, plaza, shop, training, throw zone, spawns) stand on the plateau at
 -- Layout.HubY; field items (ZoneBand, DistanceMarker) stand on the field at Layout.GroundY.
 --   1. Every tagged part sits ON its surface: its bottom is not below the surface it stands on (HubY for hub
---      tags, the deck top = Layout.ThrowLine.Y for ThrowPad / QueueSpot, GroundY for field tags), it is on the
+--      tags incl. the throw zone floor ThrowZone / ThrowPad, GroundY for field tags), it is on the
 --      right side of the cliff edge (hub items at Z < ThrowLine.Z, field items at Z >= ThrowLine.Z), and the
 --      highest collidable ground under its centre is that surface (within 0.5 studs).
---      Ground slabs themselves (YardPlot, ZoneBand) and the deck (ThrowPad) must have their TOP on it.
+--      Ground slabs themselves (YardPlot, ZoneBand) and the throw zone floor (ThrowZone = ThrowPad) must have their
+--      TOP on it.
 --      Items that rest on something (spots, stands, spawns, waypoints) must have a collidable support
 --      directly under their centre whose top is at their bottom (within 0.6 studs).
 --   2. No tagged part is inside another part: it does not intersect any collidable part (touching faces are fine).
 --   3. No SpawnLocation's standing volume (its footprint, from its top surface to 6 studs above it)
 --      intersects another collidable part.
 --   4. Tag counts the services rely on.
+--   5. The throw zone: the ThrowZone floor matches Layout.ThrowZone (top at its Y, front edge on the throw line,
+--      inside the plaza), carries the ThrowPad tag too (PadIndex 1), nothing collidable stands on it (the invisible
+--      EdgeGuard at the cliff edge excepted) and no SpawnLocation is inside it.
 -- Uses only CFrame / Size / CanCollide / HasTag so it also runs under Lune's @lune/roblox.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -22,18 +26,18 @@ local Layout = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Co
 
 local WorldCheck = {}
 
-WorldCheck.Tags = { "YardPlot", "YardSign", "DogSpot", "KennelSign", "TrophySpot", "ThrowPad", "QueueSpot",
+WorldCheck.Tags = { "YardPlot", "YardSign", "DogSpot", "KennelSign", "TrophySpot", "ThrowZone", "ThrowPad",
 	"TrainingStation", "ShopStand", "PlazaSpawn", "RunawayArea", "SquirrelPath", "ZoneBand", "DistanceMarker" }
 
 -- tags on the field (Layout.GroundY); every other tag is a hub item on the plateau (Layout.HubY)
 WorldCheck.FieldTags = { ZoneBand = true, DistanceMarker = true }
 -- tags whose TOP is the walking surface
-local SURFACE_TAGS = { YardPlot = true, ZoneBand = true, ThrowPad = true }
+local SURFACE_TAGS = { YardPlot = true, ZoneBand = true, ThrowPad = true, ThrowZone = true }
 -- tags that must rest on a support part
 local RESTING_TAGS = { DogSpot = true, TrophySpot = true, ShopStand = true, TrainingStation = true, PlazaSpawn = true,
-	RunawayArea = true, QueueSpot = true, SquirrelPath = true }
--- tags that live on the platform deck
-local DECK_TAGS = { ThrowPad = true, QueueSpot = true }
+	RunawayArea = true, SquirrelPath = true }
+-- the throw zone floor
+local ZONE_TAGS = { ThrowPad = true, ThrowZone = true }
 
 local EPS = 0.02
 WorldCheck.SpawnClearance = 6
@@ -44,8 +48,8 @@ WorldCheck.GroundTolerance = 1.05 -- the ground under an item may sit this far b
 function WorldCheck.SurfaceY(tag: string): number
 	if WorldCheck.FieldTags[tag] then
 		return Layout.GroundY
-	elseif DECK_TAGS[tag] then
-		return Layout.ThrowLine.Y
+	elseif ZONE_TAGS[tag] then
+		return Layout.ThrowZone.Y
 	end
 	return Layout.HubY
 end
@@ -92,9 +96,10 @@ local function describe(p: Instance): string
 	return path
 end
 
-local function onDeckXZ(x: number, z: number): boolean
-	local c: Vector3, s: Vector3 = Layout.Platform.Center, Layout.Platform.Size
-	return math.abs(x - c.X) <= s.X / 2 + EPS and math.abs(z - c.Z) <= s.Z / 2 + EPS
+-- strictly inside the throw zone rectangle in XZ (touching its edges does not count)
+local function inZoneXZ(b: Box): boolean
+	local z = Layout.ThrowZone
+	return b.MinX < z.MaxX - EPS and b.MaxX > z.MinX + EPS and b.MinZ < z.MaxZ - EPS and b.MaxZ > z.MinZ + EPS
 end
 
 function WorldCheck.Check(mapRoot: Instance): { string }
@@ -141,9 +146,6 @@ function WorldCheck.Check(mapRoot: Instance): { string }
 				end
 			elseif b.MinY < surface - EPS then
 				add(("%s %s: bottom Y %s is below its surface Y %s"):format(tag, describe(p), fmt(b.MinY), fmt(surface)))
-			end
-			if tag == "QueueSpot" and not onDeckXZ(cx, cz) then
-				add(("QueueSpot %s at (%s, %s) is not on the platform deck"):format(describe(p), fmt(cx), fmt(cz)))
 			end
 			-- the ground under the item is its surface (not the field 40 studs below, not a roof)
 			local groundTop = -math.huge
@@ -206,7 +208,7 @@ function WorldCheck.Check(mapRoot: Instance): { string }
 	end
 
 	-- 4. contract counts the services rely on
-	local expect = { ThrowPad = 1, QueueSpot = 5, ShopStand = 1, TrainingStation = 1, YardPlot = Layout.Yards.Count,
+	local expect = { ThrowZone = 1, ThrowPad = 1, ShopStand = 1, TrainingStation = 1, YardPlot = Layout.Yards.Count,
 		YardSign = Layout.Yards.Count, KennelSign = Layout.Yards.Count, TrophySpot = Layout.Yards.Count,
 		DogSpot = Layout.Yards.Count * 12, RunawayArea = 1 }
 	for tag, n in expect do
@@ -219,6 +221,47 @@ function WorldCheck.Check(mapRoot: Instance): { string }
 	end
 	if (counts.SquirrelPath or 0) < 2 then
 		add("tag SquirrelPath: fewer than 2 waypoints")
+	end
+
+	-- 5. the throw zone
+	local Z = Layout.ThrowZone
+	local zoneFloor: BasePart? = nil
+	for _, p in parts do
+		if p:HasTag("ThrowZone") then
+			zoneFloor = p
+		end
+	end
+	if zoneFloor then
+		local b = WorldCheck.Bounds(zoneFloor)
+		if math.abs(b.MinX - Z.MinX) > EPS or math.abs(b.MaxX - Z.MaxX) > EPS or math.abs(b.MinZ - Z.MinZ) > EPS
+			or math.abs(b.MaxZ - Z.MaxZ) > EPS then
+			add(("ThrowZone floor %s does not match Layout.ThrowZone"):format(WorldCheck.BoxString(b)))
+		end
+		if math.abs(Z.MaxZ - Layout.ThrowLine.Z) > EPS then
+			add("Layout.ThrowZone.MaxZ must be the throw line Layout.ThrowLine.Z")
+		end
+		if math.abs(Z.Y - Layout.HubY) > EPS then
+			add("Layout.ThrowZone.Y must be Layout.HubY")
+		end
+		local P = Layout.Plaza
+		if Z.MinX < P.MinX or Z.MaxX > P.MaxX or Z.MinZ < P.MinZ or Z.MaxZ > P.MaxZ then
+			add("Layout.ThrowZone is not inside the plaza")
+		end
+		if not zoneFloor:HasTag("ThrowPad") or zoneFloor:GetAttribute("PadIndex") ~= 1 then
+			add("ThrowZone floor must also be tagged ThrowPad with PadIndex 1")
+		end
+		-- nothing collidable on the zone (from its surface up to well above head height)
+		local above: Box = { MinX = Z.MinX, MaxX = Z.MaxX, MinY = Z.Y, MaxY = Z.Y + 30, MinZ = Z.MinZ, MaxZ = Z.MaxZ }
+		for _, c in colliders do
+			if c.Part ~= zoneFloor and c.Part:GetAttribute("EdgeGuard") ~= true and WorldCheck.Overlaps(above, c.Box) then
+				add(("collidable %s (%s) stands in the throw zone"):format(describe(c.Part), WorldCheck.BoxString(c.Box)))
+			end
+		end
+		for _, p in parts do
+			if p:IsA("SpawnLocation") and inZoneXZ(WorldCheck.Bounds(p)) then
+				add(("SpawnLocation %s is inside the throw zone"):format(describe(p)))
+			end
+		end
 	end
 	return violations
 end

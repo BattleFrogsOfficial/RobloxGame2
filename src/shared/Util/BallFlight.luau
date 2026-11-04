@@ -1,11 +1,11 @@
 --!strict
--- Ball flight from the platform on the hub plateau down onto the field. Pure maths (only Vector3), shared by the
+-- Ball flight from the throw zone's edge on the hub plateau down onto the field. Pure maths (only Vector3), shared by the
 -- server (FlightTime in ThrowService's ThrowResult) and every client (src/client/BallFlight.client.luau and the
 -- cutscene solve the SAME arc with ForThrow(LaunchPos, LandPos), so its Duration is exactly ThrowResult.FlightTime).
 --
 -- The horizontal landing distance is decided by the throw maths (PlayerStats.ThrowDistance, measured from
--- Layout.ThrowLine.Z) and is NOT changed by the height of the plateau: the arc starts at hand height on the deck
--- (Layout.ThrowLine.Y + Game.Throw.LaunchHeight = 44) and ends on the field (Layout.GroundY = 0) at that same
+-- Layout.ThrowLine.Z) and is NOT changed by the height of the plateau: the arc starts at hand height over the throw
+-- line in front of the thrower (Layout.ThrowZone.Y + Game.Throw.LaunchHeight = 44) and ends on the field (Layout.GroundY = 0) at that same
 -- horizontal point. ForThrow keeps the throw itself as it was on flat ground (the same launch speed upward and the
 -- same gravity as a hand-height throw over flat ground, BallFlight.ReferenceDrop, with the old pacing
 -- DefaultFlightTime / DefaultApex) and ADDS THE DROP: the ball keeps falling past the hand height down the cliff,
@@ -23,8 +23,9 @@
 --       neither                  -> BallFlight.DefaultFlightTime(d) + BallFlight.DefaultApex(d), d = horizontal distance
 --   BallFlight.ForThrow(launchPos, landPos) -> Arc            what the game uses (see FlatGravity: reference throw +
 --                                                              the extra drop; Duration > DefaultFlightTime when dropping)
---   BallFlight.Endpoints(throwSpot, launchY, throwLineZ, groundY, distance, landX) -> (launchPos, landPos)
---     (the game passes launchY = Layout.ThrowLine.Y + Game.Throw.LaunchHeight = 44, groundY = Layout.GroundY = 0)
+--   BallFlight.Endpoints(throwerPos, launchY, throwLineZ, groundY, distance, landX) -> (launchPos, landPos)
+--     launch = (throwerPos.X, launchY, throwLineZ): the cliff edge in front of the thrower
+--     (the game passes launchY = Layout.ThrowZone.Y + Game.Throw.LaunchHeight = 44, groundY = Layout.GroundY = 0)
 --   Arc = { Launch, Land, Duration, Gravity, Velocity (initial), ApexHeight (above launch), Apex (Vector3),
 --           Position: (t) -> Vector3, VelocityAt: (t) -> Vector3 }   (t is clamped to [0, Duration])
 local BallFlight = {}
@@ -60,7 +61,7 @@ function BallFlight.Solve(launchPos: Vector3, landPos: Vector3, params: Params?)
 	local p: Params = params or {}
 	local dx, dz = landPos.X - launchPos.X, landPos.Z - launchPos.Z
 	local horiz = math.sqrt(dx * dx + dz * dz)
-	local drop = launchPos.Y - landPos.Y -- 40 for the deck -> field
+	local drop = launchPos.Y - landPos.Y -- 44 for the plateau edge -> field
 	local apexH = p.ApexHeight
 	local T = p.FlightTime
 	local g = p.Gravity or BallFlight.DefaultGravity
@@ -140,11 +141,12 @@ function BallFlight.ForThrow(launchPos: Vector3, landPos: Vector3): Arc
 	})
 end
 
--- Launch = the thrower's spot at launchY (hand height on the deck); land = (landX, groundY, throwLineZ + distance). The distance is
--- horizontal and measured from the throw line, exactly as before the platform was raised.
-function BallFlight.Endpoints(throwSpot: Vector3, launchY: number, throwLineZ: number, groundY: number,
+-- Launch = the cliff edge in front of the thrower: (throwerPos.X, launchY, throwLineZ) (hand height over the throw
+-- line; the server passes the root X already clamped into Layout.ThrowZone); land = (landX, groundY, throwLineZ +
+-- distance). The distance is horizontal and measured from the throw line, so it is unchanged for the same meter result.
+function BallFlight.Endpoints(throwerPos: Vector3, launchY: number, throwLineZ: number, groundY: number,
 	distance: number, landX: number): (Vector3, Vector3)
-	return Vector3.new(throwSpot.X, launchY, throwSpot.Z), Vector3.new(landX, groundY, throwLineZ + distance)
+	return Vector3.new(throwerPos.X, launchY, throwLineZ), Vector3.new(landX, groundY, throwLineZ + distance)
 end
 
 return BallFlight

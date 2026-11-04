@@ -2,6 +2,10 @@
 -- Purchases: consumable balls (each purchase = Balls.ById[id].Uses throws; Tennis is free), training upgrades, yard slots, timed boosts (Sticky Ball, Lucky Biscuit),
 -- consumables (Golden Whistle, Treat Pocket), cosmetics (Bones), EquipBall, plus Robux developer
 -- products (idempotent ProcessReceipt) and gamepasses. Ids live in Config/Products.luau (0 = disabled).
+-- Robux balls: Products.Balls = { [ballId] = { ProductId, Robux, Throws } } (one Robux buy button per consumable ball).
+-- ShopPurchase("RobuxBall:<ballId>") prompts it (the client may also prompt the ProductId itself); a receipt for one
+-- of those ProductIds grants Throws throws of that ball (capped at Balls.MaxOwned) and equips it, idempotently by
+-- PurchaseId like every other receipt.
 -- Paid products that influence random outcomes are refused where PolicyService restricts them.
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
@@ -26,6 +30,38 @@ local DogService = require(script.Parent:WaitForChild("DogService"))
 local BroadcastService = require(script.Parent:WaitForChild("BroadcastService"))
 
 local ShopService = {}
+
+-- Products.Balls is added by the UI side; absent = no Robux balls yet.
+local function ballProducts(): { [string]: any }
+	local t = (Products :: any).Balls
+	return if type(t) == "table" then t else {}
+end
+
+-- ballId for a Robux ball ProductId (0 = not configured, never matches)
+function ShopService.FindBallProduct(productId: any): string?
+	if type(productId) ~= "number" or productId == 0 then
+		return nil
+	end
+	for ballId, def in ballProducts() do
+		if type(def) == "table" and def.ProductId == productId and Balls.ById[ballId] then
+			return ballId
+		end
+	end
+	return nil
+end
+
+-- Grant one Robux ball pack: Throws throws of that ball (capped at Balls.MaxOwned), equipped. Returns the new count.
+function ShopService.GrantBallPack(state: any, ballId: string): number
+	local ball = Balls.ById[ballId]
+	local def = ballProducts()[ballId]
+	local throws = math.max(1, math.floor(tonumber(def and def.Throws) or ball.Uses or 1))
+	local left = math.min(Balls.MaxOwned, PlayerStats.BallCount(state, ballId) + throws)
+	if ball.Consumable then
+		state.Balls[ballId] = left
+	end
+	state.EquippedBall = ballId
+	return left
+end
 
 local restricted: { [Player]: boolean } = {} -- PolicyService ArePaidRandomItemsRestricted
 local pendingGrow: { [Player]: string } = {} -- InstantGrow target uid chosen before the prompt
@@ -170,6 +206,27 @@ handlers.Product = function(player, state, arg)
 	return true, "Prompted"
 end
 
+-- "RobuxBall:<ballId>": prompt the Robux pack of a consumable ball (Products.Balls[ballId].ProductId).
+handlers.RobuxBall = function(player, state, ballId)
+	local ball = ballId and Balls.ById[ballId]
+	local def = ballId and ballProducts()[ballId]
+	if not ball or not ball.Consumable or type(def) ~= "table" then
+		return false, "Unknown ball"
+	end
+	if (def.ProductId or 0) == 0 then
+		return false, "Not available yet"
+	end
+	local influences = if def.RandomInfluence ~= nil then def.RandomInfluence == true else (ball.Luck or 0) > 0
+	if influences and restricted[player] then
+		return false, "Not available in your region"
+	end
+	if PlayerStats.BallCount(state, ball.Id) >= Balls.MaxOwned then
+		return false, "You can't carry more"
+	end
+	MarketplaceService:PromptProductPurchase(player, def.ProductId)
+	return true, "Prompted"
+end
+
 handlers.Pass = function(player, _state, passKey)
 	local pass = passKey and Products.GamePasses[passKey]
 	if not pass then
@@ -257,11 +314,19 @@ local function processReceipt(info: any): Enum.ProductPurchaseDecision
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
 	local key = Products.FindProductKey(info.ProductId)
-	if not key then
+	local ballId = if key then nil else ShopService.FindBallProduct(info.ProductId)
+	if not key and not ballId then
 		warn("[ShopService] receipt for unknown product id " .. tostring(info.ProductId))
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
-	local ok, err = pcall(grantProduct, player, state, key)
+	local ok, err = pcall(function()
+		if key then
+			grantProduct(player, state, key)
+		else
+			local left = ShopService.GrantBallPack(state, ballId :: string)
+			BroadcastService.Notify(player, ("Thanks! %s x%d"):format(Balls.ById[ballId :: string].Name, left), "Purchase")
+		end
+	end)
 	if not ok then
 		warn("[ShopService] grant failed: " .. tostring(err))
 		return Enum.ProductPurchaseDecision.NotProcessedYet

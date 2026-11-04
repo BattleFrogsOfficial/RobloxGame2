@@ -3,10 +3,15 @@
 -- (call Remotes.Init() once from the server). Clients call Remotes.Get(name), which WaitForChild's it.
 -- All payloads are plain tables. Every client->server remote is rate-limited and validated on the server.
 --
--- ChargeBegin        RemoteEvent    C->S ()                       first click: starts the meter; server timestamps it. Only valid
---                                                                  for the player at ThrowQueuePos 1 who is OnPlatform (one throw per turn)
--- ChargeRelease      RemoteEvent    C->S ()                       second click: release; server derives meter position from elapsed
---                                                                  time (auto-release after Game.Throw.MaxChargeSeconds)
+-- ChargeBegin        RemoteEvent    C->S ()                       ONE TAP throwing, no turns. Fired the moment the meter bar appears
+--                                   (entering the throw zone, or when your finished throw unlocks while you are still in it): the
+--                                   server timestamps the sweep start. Fired again while charging to RESTART the sweep (the client
+--                                   restarts on a period boundary before MaxChargeSeconds runs out): the timestamp resets, accepted
+--                                   once Game.Throw.MinRestartSeconds have passed since the last (re)start. Requires InThrowZone,
+--                                   no throw of yours in flight, and MinSecondsBetweenThrows since your last release.
+-- ChargeRelease      RemoteEvent    C->S ()                       the tap: server derives the meter position from now - (re)start.
+--                                   Requires InThrowZone (outside it the charge is dropped). No release within
+--                                   Game.Throw.MaxChargeSeconds of the (re)start: the charge is CANCELLED silently (no auto-throw)
 -- ThrowResult        RemoteEvent    S->All (ThrowResult)          one per throw, sent to every client (thrower + spectators)
 -- CutsceneFinished   RemoteEvent    C->S (throwId: string)        thrower's cutscene ended (server also times out on its own)
 -- UseWhistle         RemoteFunction C->S (throwId) -> (ok, msg)   only valid for a missed throw, within the whistle window
@@ -27,10 +32,11 @@
 -- Broadcast          RemoteEvent    S->C ({Kind, Text, Rarity?, Variant?, Global: boolean})
 -- EventState         RemoteEvent    S->All ({Kind: "Squirrel"|"RunawayDog"|"DailyWalk", Active, EndsAt, Data})
 --
--- type ThrowResult = { ThrowId, ThrowerUserId, PadIndex (always 1: the one platform), Distance, ZoneId, DogId,
+-- type ThrowResult = { ThrowId, ThrowerUserId, PadIndex (always 1: the one throw zone), Distance, ZoneId, DogId,
 --   Rarity, Variant: string?, Caught, CatchChance, Boosts: {string}, LuckyStreakTriggered, TreatPocketUsed,
 --   WhistleOwned, WhistleCount, IsTutorial, BallId, BallsLeft: number? (consumable throws left after this one),
---   LaunchPos: Vector3 (ThrowSpot on the deck at Layout.HubY + (0, Game.Throw.LaunchHeight, 0): Y = 44),
+--   LaunchPos: Vector3 (the cliff edge in front of the thrower: (root X clamped into Layout.ThrowZone,
+--              Layout.HubY + Game.Throw.LaunchHeight = 44, Layout.ThrowLine.Z)),
 --   LandPos: Vector3 (on the field: Y = Layout.GroundY = 0, Z = ThrowLine.Z + Distance),
 --   FlightTime: number (= Util/BallFlight.ForThrow(LaunchPos, LandPos).Duration: includes the 44-stud drop), ... }
 --   Fired to all clients the moment the throw is released, before any toast, StateUpdate or world display.
@@ -44,7 +50,10 @@
 --   Computed = PlayerStats.Compute(...) incl. BallCounts, BallId (ball the next throw uses), Prices["Ball:<id>"] }
 -- Player attributes set by the server: Cash, Bones, ThrowPower, IncomePerSec, PadIndex (yard index),
 --   DevTools (true for players the dev tools allow; absent otherwise),
---   OnPlatform (boolean), ThrowQueuePos (0 = not queued, 1 = your turn, 2+ = waiting: your place in line).
+--   InThrowZone (boolean, ~4x/s: HumanoidRootPart XZ inside Layout.ThrowZone + Game.ThrowZone.EdgeMargin and
+--     Y >= HubY - Game.ThrowZone.YTolerance; everyone in the zone can throw at once),
+--   DEPRECATED (kept for one release, remove after): OnPlatform (= InThrowZone), ThrowQueuePos (1 in the zone, 0 otherwise;
+--     there is no queue any more).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 

@@ -1,13 +1,14 @@
 --!strict
 -- The plaza between the street and the cliff edge, on the hub plateau (Layout.HubY). Deliberately simple:
 -- ONE ball shop (west), ONE training area (east), two spawn pads, and the runaway lawn (with the squirrel loop
--- around it). The throwing deck (Platform.luau) is set flush into the paving at the cliff edge, so the paving
--- is laid around it (three slabs) instead of under it.
+-- around it). The brown throw zone (ThrowZone.luau, Layout.ThrowZone) is set flush into the paving at the cliff
+-- edge, so the paving is laid around it (three slabs) instead of under it.
 --
 --   x: -60 ..................................... 60
 --      z -24  spawn 1                   spawn 2
---      z  -4  BALL SHOP              TRAINING (z -2..22)
---      z 18..56 runaway lawn | deck (x -18..18, z 34..60) |
+--      z  -4  BALL SHOP              TRAINING (z -10..15)
+--      z 18..36 runaway lawn (x -56..-24)
+--      z 40..60  #### THROW ZONE (x -50..50) ####
 --      z 60   ===== throw line / cliff edge (ThrowLine.luau) =====
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -23,7 +24,8 @@ local Y = Layout.HubY -- on the hub plateau
 local T = WorldTheme.Plaza
 local P = Layout.Plaza
 
-Plaza.Lawn = { MinX = P.MinX + 4, MaxX = -24, MinZ = 18, MaxZ = P.MaxZ - 4 } -- -56..-24 x 18..56
+-- -56..-24 x 18..36: ends (with its edge and the squirrel loop around it) before the throw zone at Layout.ThrowZone.MinZ
+Plaza.Lawn = { MinX = P.MinX + 4, MaxX = -24, MinZ = 18, MaxZ = Layout.ThrowZone.MinZ - 4 }
 Plaza.Spawns = { Vector3.new(-20, Y, P.MinZ + 10), Vector3.new(20, Y, P.MinZ + 10) }
 Plaza.SpawnSize = 10
 Plaza.Shop = { Width = 22, Depth = 12, CounterDepth = 3 } -- counter front faces -Z (the street / spawns)
@@ -189,12 +191,11 @@ end
 
 function Plaza.Build(parent: Instance)
 	local folder = Props.Folder(parent, "Plaza")
-	-- paving around the flush deck (Layout.Platform rectangle), never under it
-	local c: Vector3, s: Vector3 = Layout.Platform.Center, Layout.Platform.Size
-	local dx0, dx1, dz0 = c.X - s.X / 2, c.X + s.X / 2, c.Z - s.Z / 2
-	Props.Slab(folder, "PlazaFloor", P.MinX, dx0, P.MinZ, P.MaxZ, Y, 1, T.Paving)
-	Props.Slab(folder, "PlazaFloor", dx1, P.MaxX, P.MinZ, P.MaxZ, Y, 1, T.Paving)
-	Props.Slab(folder, "PlazaFloor", dx0, dx1, P.MinZ, dz0, Y, 1, T.Paving)
+	-- paving around the flush throw zone (Layout.ThrowZone rectangle), never under it
+	local tz = Layout.ThrowZone
+	Props.Slab(folder, "PlazaFloor", P.MinX, tz.MinX, P.MinZ, P.MaxZ, Y, 1, T.Paving)
+	Props.Slab(folder, "PlazaFloor", tz.MaxX, P.MaxX, P.MinZ, P.MaxZ, Y, 1, T.Paving)
+	Props.Slab(folder, "PlazaFloor", tz.MinX, tz.MaxX, P.MinZ, tz.MinZ, Y, 1, T.Paving)
 	buildLawn(folder)
 	buildSquirrelPath(folder)
 	buildSpawns(folder)
