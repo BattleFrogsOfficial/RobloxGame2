@@ -240,11 +240,12 @@ local function load(player: Player)
 	return defaultData(), false
 end
 
-function Data.save(player: Player)
+-- Returns true only if the data was actually written.
+function Data.save(player: Player): boolean
 	local d = profiles[player]
 	local s = sessions[player]
 	if not d or not s or not s.canSave or not store then
-		return
+		return false
 	end
 	d.lastOnline = os.time()
 	inFlight += 1
@@ -255,6 +256,7 @@ function Data.save(player: Player)
 	if not ok then
 		warn("[Data] save failed for", player.Name, err)
 	end
+	return ok
 end
 
 local function onPlayerAdded(player: Player)

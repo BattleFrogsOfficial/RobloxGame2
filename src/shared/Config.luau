@@ -171,7 +171,7 @@ Config.Ocean = {
 	CloseSpeed = 8, -- studs/s the sea rolls back toward the shore
 	MaxLength = 214, -- can almost reach the far shore
 	GrabRadius = 6,
-	SweepGrace = 1.5, -- studs of forgiveness at the closing wall
+	SweepGrace = 3, -- studs of forgiveness at the closing wall (covers network delay)
 }
 
 ----------------------------------------------------------------------------

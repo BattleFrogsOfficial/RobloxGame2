@@ -44,6 +44,8 @@ local CRESTS = 5
 
 local folder: Folder
 local parts: { [string]: BasePart } = {}
+local baseTransparency: { [BasePart]: number } = {}
+local solid: { [BasePart]: boolean } = {} -- collide (for us) whenever visible
 local wallSegs = { L = {}, R = {} } -- [side][i] = { wall, cap }
 local eggModels: { [number]: any } = {}
 local chargeStart = 0
@@ -74,7 +76,7 @@ local function newPart(name: string, color: Color3, transparency: number): BaseP
 	p.BottomSurface = Enum.SurfaceType.Smooth
 	p.Size = Vector3.new(1, 1, 1)
 	p.Parent = folder
-	p:SetAttribute("BaseTransparency", transparency)
+	baseTransparency[p] = transparency
 	parts[name] = p
 	return p
 end
@@ -82,6 +84,10 @@ end
 local function hide(p: BasePart)
 	if p.Transparency ~= 1 then
 		p.Transparency = 1
+		if solid[p] then
+			p.CanCollide = false
+			p.CanQuery = false
+		end
 	end
 end
 
@@ -91,9 +97,13 @@ local function setBox(p: BasePart, x0: number, x1: number, y0: number, y1: numbe
 		hide(p)
 		return
 	end
-	local base = p:GetAttribute("BaseTransparency") :: number
+	local base = baseTransparency[p]
 	if p.Transparency ~= base then
 		p.Transparency = base
+		if solid[p] then
+			p.CanCollide = true
+			p.CanQuery = true
+		end
 	end
 	p.Size = Vector3.new(x1 - x0, y1 - y0, z1 - z0)
 	p.CFrame = CFrame.new((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)
@@ -134,12 +144,17 @@ local function build()
 		for i = 1, MAX_SEGS do
 			local wall = newPart("Wall" .. side .. i, i % 2 == 0 and WALL or WALL_DARK, 0.12)
 			local cap = newPart("Cap" .. side .. i, FOAM, 0.1)
+			-- Solid and queryable: you bump into the wall, and the default
+			-- camera zooms in instead of ending up behind a sheet of water.
+			solid[wall] = true
 			wallSegs[side][i] = { wall = wall, cap = cap }
 		end
 	end
-	addSpray(newPart("WallEnd", WALL, 0.06), 60)
-	newPart("CapEnd", FOAM, 0.05)
-	newPart("Curl", FOAM, 0.2) -- foam lip leaning over the corridor as the sea closes
+	-- The far wall chases you with the camera trailing behind it, so it stays
+	-- see-through enough to keep your character visible.
+	addSpray(newPart("WallEnd", WALL, 0.45), 60)
+	newPart("CapEnd", FOAM, 0.3)
+	newPart("Curl", FOAM, 0.5) -- foam lip leaning over the corridor as the sea closes
 
 	-- Wet sand along the corridor floor.
 	local wet = newPart("WetSand", Color3.fromRGB(172, 148, 104), 0)
@@ -232,10 +247,12 @@ local function layout(sp, L: number, rise: number, t: number)
 	local shoreZ = s * Z
 	local farZ = s * (Z - L)
 	hide(parts.Main)
-	setBox(parts.Left, -H, xl, y0, y1, -Z, Z)
-	setBox(parts.Right, xr, H, y0, y1, -Z, Z)
-	local fa, fb = zSpan(farZ, -shoreZ)
-	setBox(parts.Far, xl, xr, y0, y1, fa, fb)
+	-- The flat sea stops where the walls begin, so no two water faces share a
+	-- plane (coplanar translucent faces shimmer).
+	setBox(parts.Left, -H, xl - 4, y0, y1, -Z, Z)
+	setBox(parts.Right, xr + 4, H, y0, y1, -Z, Z)
+	local fa, fb = zSpan(farZ - s * 5, -shoreZ)
+	setBox(parts.Far, xl - 4, xr + 4, y0, y1, fa, fb)
 
 	-- Walls of water rise along the corridor; each segment's top rolls.
 	local eased = 1 - (1 - rise) ^ 3
@@ -382,13 +399,15 @@ local function spawnEggs(sp)
 		local pos = Vector3.new(sp.cx + e.x, Formulas.groundY(e.d), sp.side * (O.ShoreZ - e.d))
 		local yaw = rng:NextNumber(0, math.pi * 2)
 		model:PivotTo(CFrame.new(pos) * CFrame.Angles(0, yaw, 0))
-		eggLabel(model.PrimaryPart, e.egg, e.variant)
 		-- A light beam in the rarity color so eggs can be spotted from the shore.
 		local def = Config.EggById[e.egg]
 		local w = 0.25 + def.tier * 0.12
 		local beam = Voxel.addPart(model, Vector3.new(w, 30, w), CFrame.new(pos + Vector3.new(0, 19, 0)), Config.Rarities[def.tier].color, Enum.Material.Neon)
 		beam.Transparency = 0.55
 		beam.CastShadow = false
+		-- Weld everything to the root so bobbing moves one part, not forty.
+		Voxel.weld(model, true)
+		eggLabel(model.PrimaryPart, e.egg, e.variant)
 		eggModels[e.id] = { model = model, data = e, pos = pos, yaw = yaw, shown = false }
 	end
 end
@@ -513,6 +532,7 @@ local function sourceOf(input: InputObject): any
 	end
 	return nil
 end
+Ocean.sourceOf = sourceOf
 
 ----------------------------------------------------------------------------
 -- Per-frame update
@@ -576,7 +596,7 @@ local function update()
 		for id, e in eggModels do
 			if e.data.d <= L + 0.5 then
 				local bob = math.sin(t * 2 + id) * 0.25 + 0.25
-				e.model:PivotTo(CFrame.new(e.pos + Vector3.new(0, bob, 0)) * CFrame.Angles(0, e.yaw + t * 0.6, 0))
+				e.model.PrimaryPart.CFrame = CFrame.new(e.pos + Vector3.new(0, bob, 0)) * CFrame.Angles(0, e.yaw + t * 0.6, 0)
 				if not e.shown then
 					e.shown = true
 					e.model.Parent = folder
@@ -648,6 +668,11 @@ function Ocean.init()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		local source = sourceOf(input)
 		if processed or source == nil then
+			return
+		end
+		-- On touch screens a drag on the world moves the camera, so charging
+		-- only starts from the on-screen HOLD button.
+		if input.UserInputType == Enum.UserInputType.Touch then
 			return
 		end
 		Ocean.beginCharge(source)

@@ -395,7 +395,7 @@ local function buildTrain()
 		Text = "TRAIN 💪",
 		Color = C.Orange,
 		Size = UDim2.fromOffset(300, 70),
-		Position = UDim2.new(0.5, 0, 1, -110),
+		Position = UDim2.new(0.5, 0, 1, -170), -- above the backpack hotbar
 		AnchorPoint = Vector2.new(0.5, 0),
 		Radius = 4,
 		Visible = false,
@@ -411,7 +411,7 @@ local function buildTrain()
 	refs.trainHint = Ui.text({
 		Text = "Click / tap anywhere to lift faster!",
 		Size = UDim2.fromOffset(420, 26),
-		Position = UDim2.new(0.5, 0, 1, -140),
+		Position = UDim2.new(0.5, 0, 1, -200),
 		AnchorPoint = Vector2.new(0.5, 0),
 		TextColor3 = Color3.fromRGB(255, 240, 160),
 		Visible = false,
@@ -449,17 +449,16 @@ local function buildHoldButton()
 		Size = UDim2.fromOffset(190, 190),
 		Position = UDim2.new(1, -250, 1, -330),
 		Radius = 95,
+		NoShine = true,
 		Visible = false,
 		Parent = gui,
 	})
+	-- The press starts here; the release is caught globally (Ocean listens to
+	-- UserInputService.InputEnded), so sliding off the button still releases.
 	btn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			Ocean.beginCharge("button")
-		end
-	end)
-	btn.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			Ocean.releaseCharge("button")
+		local source = Ocean.sourceOf(input)
+		if source ~= nil then
+			Ocean.beginCharge(source)
 		end
 	end)
 	refs.holdBtn = btn
@@ -676,21 +675,21 @@ function Hud.init()
 	end)
 
 	-- Hide prompts (hatch, upgrades) that belong to other players' bases.
+	-- Done with the activation distance, not Enabled: the server toggles
+	-- Enabled itself, and a local override there could stick forever.
+	local promptRange: { [Instance]: number } = {}
 	local function filterPrompt(p: Instance)
 		if p:IsA("ProximityPrompt") then
+			promptRange[p] = p.MaxActivationDistance
 			local function apply()
 				local owner = p:GetAttribute("OwnerId")
-				if owner ~= nil and owner ~= player.UserId then
-					p.Enabled = false
-				end
+				local mine = owner == nil or owner == player.UserId
+				p.MaxActivationDistance = mine and promptRange[p] or 0
 			end
 			apply()
 			p:GetAttributeChangedSignal("OwnerId"):Connect(apply)
-			p:GetPropertyChangedSignal("Enabled"):Connect(function()
-				local owner = p:GetAttribute("OwnerId")
-				if p.Enabled and owner ~= nil and owner ~= player.UserId then
-					p.Enabled = false
-				end
+			p.Destroying:Connect(function()
+				promptRange[p] = nil
 			end)
 		end
 	end

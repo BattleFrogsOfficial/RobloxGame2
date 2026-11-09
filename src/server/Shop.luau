@@ -108,6 +108,8 @@ local function grantProduct(player: Player, key: string): boolean
 	return true
 end
 
+-- A receipt is only acknowledged once the reward is safely saved. Until
+-- then Roblox keeps retrying (and refunds if it never succeeds).
 local function processReceipt(info)
 	local player = Players:GetPlayerByUserId(info.PlayerId)
 	local product = productById[info.ProductId]
@@ -115,24 +117,27 @@ local function processReceipt(info)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	local d = Data.get(player)
-	if not d then
+	local session = Data.session(player)
+	if not d or not session or not session.canSave then
+		-- This session can't save, so the purchase would vanish on leave.
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	local rid = tostring(info.PurchaseId)
-	for _, r in d.receipts do
-		if r == rid then
-			return Enum.ProductPurchaseDecision.PurchaseGranted
+	local alreadyGranted = table.find(d.receipts, rid) ~= nil
+	if not alreadyGranted then
+		if not grantProduct(player, product.key) then
+			return Enum.ProductPurchaseDecision.NotProcessedYet
+		end
+		table.insert(d.receipts, rid)
+		while #d.receipts > 50 do
+			table.remove(d.receipts, 1)
 		end
 	end
-	if not grantProduct(player, product.key) then
-		return Enum.ProductPurchaseDecision.NotProcessedYet
+	if Data.save(player) then
+		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
-	table.insert(d.receipts, rid)
-	while #d.receipts > 50 do
-		table.remove(d.receipts, 1)
-	end
-	Data.save(player)
-	return Enum.ProductPurchaseDecision.PurchaseGranted
+	-- Granted in memory but not saved yet: the retry will only re-save.
+	return Enum.ProductPurchaseDecision.NotProcessedYet
 end
 
 -- Called by the client when an item has no real ID yet (Studio testing only).

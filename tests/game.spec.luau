@@ -303,6 +303,13 @@ check("income shown on the pen sign", Pens.get(player).ownerLabels[2].Text ~= ""
 check("leaderboard cash updates", player.leaderstats.Cash.Value ~= "0", player.leaderstats.Cash.Value)
 noErrors(h, "income")
 
+-- The server publishes walks; the client animates them.
+local animalModel = Pens.get(player).slotModels["1"].model
+check("animal is marked for client animation", animalModel:GetAttribute("Animal") == true)
+h:advance(8, 0.1)
+check("server published a walk", animalModel:GetAttribute("WalkStart") ~= nil and animalModel:GetAttribute("WalkDuration") > 0)
+noErrors(h, "animal wandering")
+
 local okIndex = act("ClaimIndex", firstAnimal)
 check("index reward claimed", okIndex == true and d.index[firstAnimal] == 2)
 check("index reward can't be claimed twice", act("ClaimIndex", firstAnimal) == false)
@@ -424,6 +431,17 @@ check("bad sell target refused", act("SellAnimal", "elsewhere", 1) == false)
 check("bad argument types refused", act("PlaceEgg", "one") == false)
 check("unknown action refused", act("GiveMeEverything") == false)
 openEveryWindow("(established player)")
+
+-- Prompts in someone else's base are unreachable for us; ours work.
+local ownPrompt = pen.upPrompt
+check("own prompt keeps its range", ownPrompt.MaxActivationDistance > 0)
+
+-- Jumping over the water is still "in the ocean".
+h:moveTo(player, Vector3.new(0, 9, O.ShoreZ - 6))
+h:advance(0.3)
+check("jumping over closed water still pushes you back", h:positionOf(player).Z >= O.ShoreZ)
+sawEffect("pushed")
+h:advance(2)
 
 -- With Double Carry, two eggs can be carried.
 startSplit(0, 1)

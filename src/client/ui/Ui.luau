@@ -113,6 +113,7 @@ function Ui.button(props: { [string]: any }): TextButton
 	local grad = Ui.gradient(btn, color)
 	-- A soft shine stripe across the top half.
 	local shine = Ui.new("Frame", {
+		Visible = not props.NoShine,
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BackgroundTransparency = 0.82,
 		Size = UDim2.new(1, -8, 0.42, 0),

@@ -77,6 +77,7 @@ src/client/      StarterPlayerScripts.Client
   State.luau       client copy of player state + server actions
   Ocean.luau       draws the ocean, the parted corridor, your eggs; hold-to-charge input
   Guide.luau       new-player objective text and the trail of arrows on the ground
+  PenAnimals.luau  hops the animals along the walks the server publishes
   ui/              HUD and windows (Pets, Eggs, Sell, Buy, Index, Shop, Gifts, Daily, hatch cutscene)
 tests/
   formulas.spec.luau  tests for the balance math and number formatting

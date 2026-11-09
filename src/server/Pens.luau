@@ -2,7 +2,6 @@
 -- animals wandering and earning, hatching, inventory moves, income.
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -121,8 +120,7 @@ local function fenceLine(parent: Instance, cf: CFrame, a: Vector3, b: Vector3)
 	end
 	for _, h in { 1.6, 3.3 } do
 		local mid = (a + b) / 2 + Vector3.new(0, h, 0)
-		local rail = part(parent, Vector3.new(0.5, 0.6, len), cf * CFrame.lookAt(mid, b + Vector3.new(0, h, 0)), FENCE_RAIL)
-		rail.CanCollide = false
+		part(parent, Vector3.new(0.5, 0.6, len), cf * CFrame.lookAt(mid, b + Vector3.new(0, h, 0)), FENCE_RAIL)
 	end
 end
 
@@ -289,11 +287,15 @@ local function setPromptOwner(prompt: ProximityPrompt, player: Player?)
 	prompt:SetAttribute("OwnerId", player and player.UserId or 0)
 end
 
--- Animals hop around their pen: turn toward a random spot, then bounce to it.
+-- Animals wander their pen. The server only decides where and when: it
+-- publishes each walk as attributes and snaps the root to the destination at
+-- the end. Clients animate the hops in between (client/PenAnimals.luau), so
+-- movement is smooth and costs one replicated CFrame per walk.
+local WALK_SPEED = 9 -- studs per second
+
 local function wander(model: Model, pen)
 	local root = model.PrimaryPart
-	local HOP = 3.2 -- studs per hop
-	local HOP_TIME = 0.34
+	model:SetAttribute("Animal", true)
 	task.spawn(function()
 		task.wait(rng:NextNumber(0, 2))
 		while model.Parent do
@@ -302,30 +304,16 @@ local function wander(model: Model, pen)
 			local flat = Vector3.new(from.X, 0, from.Z)
 			local dist = (target - flat).Magnitude
 			if dist > 1 then
-				local dir = (target - flat).Unit
-				local facing = CFrame.lookAt(Vector3.zero, dir)
+				local duration = dist / WALK_SPEED
+				model:SetAttribute("WalkFrom", pen.cf:PointToWorldSpace(flat))
+				model:SetAttribute("WalkTo", pen.cf:PointToWorldSpace(target))
+				model:SetAttribute("WalkDuration", duration)
+				model:SetAttribute("WalkStart", workspace:GetServerTimeNow())
+				task.wait(duration)
 				if not model.Parent then
 					return
 				end
-				TweenService:Create(root, TweenInfo.new(0.3), { CFrame = pen.cf * (facing + flat) }):Play()
-				task.wait(0.3)
-				local hops = math.max(1, math.floor(dist / HOP + 0.5))
-				for i = 1, hops do
-					if not model.Parent then
-						return
-					end
-					local a = flat + dir * (dist * (i - 0.5) / hops)
-					local b = flat + dir * (dist * i / hops)
-					local up = TweenInfo.new(HOP_TIME / 2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-					local down = TweenInfo.new(HOP_TIME / 2, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-					TweenService:Create(root, up, { CFrame = pen.cf * (facing + a + Vector3.new(0, 1.1, 0)) }):Play()
-					task.wait(HOP_TIME / 2)
-					if not model.Parent then
-						return
-					end
-					TweenService:Create(root, down, { CFrame = pen.cf * (facing + b) }):Play()
-					task.wait(HOP_TIME / 2)
-				end
+				root.CFrame = pen.cf * (CFrame.lookAt(Vector3.zero, (target - flat).Unit) + target)
 			end
 			task.wait(rng:NextNumber(1.5, 5))
 		end

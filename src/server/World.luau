@@ -347,7 +347,8 @@ end
 
 -- Geometry helpers shared with the split logic.
 function World.inOcean(pos: Vector3): boolean
-	return math.abs(pos.X) < O.HalfX and math.abs(pos.Z) < O.ShoreZ and pos.Y < 4
+	-- No height test: jumping over the water must not count as dry land.
+	return math.abs(pos.X) < O.HalfX and math.abs(pos.Z) < O.ShoreZ
 end
 
 function World.inSplitZone(pos: Vector3): boolean
