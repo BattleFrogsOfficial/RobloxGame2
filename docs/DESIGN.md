@@ -3,18 +3,24 @@
 ## The world
 
 One shore. The beach and five bases sit in a row on the land side, enclosed by 70-stud walls behind and on both sides.
-In front of them the ocean runs to the horizon, framed by two rocky headlands and a lighthouse. Three leaderboards stand
-against the back wall. A server holds 5 players, one base each.
+Sheer rock walls continue straight out from those side walls at the same height, so the ocean is one long channel that
+runs to the horizon with nothing visible past its sides. A lighthouse stands on the east cliff, and three leaderboards
+stand against the back wall. A server holds 5 players, one base each.
 
 ## Core loop
 
-1. **Walk to the shore.** The light sand strip along the shoreline is the **Split Zone**. Stepping onto it pulls out
-   your Sea Staff.
+1. **Walk to the shore.** The light sand strip along the shoreline is where you can part the sea. Stepping onto it pulls
+   out your Sea Staff.
 2. **Charge and release.** Hold click (or the HOLD button on touch) to fill the charge bar, then let go. A tap gives 45%
    of the distance; a full bar gives full distance and 4 more seconds before the sea shuts.
-3. **The sea parts.** A cutscene plays: a close shot as the staff goes up, then the camera cranes up and back while the
-   corridor rips open down its whole length, with letterbox bars, a flash and a title showing the depth and the number
-   of eggs revealed. You can't move until it ends (2.6 seconds).
+3. **The sea parts.** A 3.6-second cutscene plays, and you can't move until it ends:
+   - Your character winds the staff back, thrusts it overhead and holds it there, trembling, while the camera arcs
+     around in front of them.
+   - The camera swings behind and rises as the sea peels open from the shore outward. Each stretch of water surges
+     well above its resting height as it tears, a fountain of spray rides the tear, and chunks of water are flung up
+     and out to both sides.
+   - Letterbox bars, a flash and a title show the depth and the number of eggs revealed.
+   - The camera then glides back to exactly where your own camera was, so control returns without a cut.
    - **Depth** grows with Strength: `length = (30 + 13.2 · log2(1 + Strength/5)) × chargeFactor`, up to 300 studs, which
      takes about 7M Strength.
    - **Width** starts at 26 studs and grows to 44 with Strength.
@@ -36,8 +42,9 @@ against the back wall. A server holds 5 players, one base each.
    Ready* in the Eggs menu). The hatch cutscene plays first; the animal appears in your base, and any "new Index entry"
    news is announced, only after it ends.
 8. **Grow.**
-   - **Strength:** step onto the pink pad in your base. Reps start on their own: the barbell goes up and down, and each
-     finished rep adds Strength. Step off to stop. The staff is put away while you train.
+   - **Strength:** step onto the pink pad in your base. Reps start on their own: your character presses the barbell from
+     the chest to overhead and back, bending at the knees, and each finished rep adds Strength. Step off to stop. The
+     staff is put away while you train.
    - **Heavier weights:** buy them on the yellow pad for more Strength per rep.
    - **Luck:** buy it in the **Buy** menu.
    - **Base size:** upgrade it at the sign by the gate.
@@ -102,6 +109,15 @@ what it can afford). Across several seeds it finds its first Kelp egg in 2 to 12
 Income keeps flowing while you're away: 50% of your $/s for up to 4 hours. Eggs keep incubating offline too, because
 their timers use `os.time()`. If you leave while carrying an egg you had already brought to land, it goes into storage.
 
+## Character animation
+
+The staff cast and the barbell reps are animated in code, with no uploaded animation assets. The server publishes only
+timing, as player attributes (`CastStart`, `Training`, `RepStart`, `WeightTier`). `client/Poses.luau` turns that into
+joint rotations every frame on every client, applied through `Motor6D.Transform` after the default animations have run,
+so the moves override them cleanly. It handles both R15 (elbows and knees bend) and R6 (straight limbs) avatars, and
+everyone sees everyone's cast and workout. The barbell is placed at the midpoint of the two hands each frame, so it is
+always in the character's grip.
+
 ## Feedback while you play
 
 - **Guide:** until a new player has planted an egg, hatched one and trained once, a line of text says what to do next
@@ -151,7 +167,8 @@ checkered tiles on the ground, seabed and base floors.
 - **Models:** pixel eggs stacked layer by layer on twig nests; blocky animals from a few templates (crab, bird, fish,
   quadruped, seal, octopus, turtle, frog, serpent); voxel palms, umbrellas, barbells and a lighthouse. Gold and Rainbow
   variants recolor the model.
-- **Ocean:** foam crests drifting in from the horizon; rolling wave-topped walls that grow taller as they close, foam
-  churning at their feet, and wet sand along the corridor floor.
+- **Ocean:** foam crests drifting in from the horizon. The corridor walls are stepped (a wide base, a narrower upper
+  tier set back from it, a foam crest) with rolling tops; they grow taller as they close, with foam churning at their
+  feet and wet sand along the corridor floor.
 - **UI:** chunky gradient buttons with thick black outlines and Fredoka One, model icons, and labels over eggs and
   animals sized in studs so they shrink with distance.

@@ -12,6 +12,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -34,15 +35,14 @@ local WALL = Color3.fromRGB(60, 160, 245)
 local WALL_DARK = Color3.fromRGB(45, 140, 235)
 local FOAM = Color3.fromRGB(235, 250, 255)
 
--- The near sea (re-shaped every frame while parted) covers this box; the
--- rest of the ocean, out to the horizon, is static.
-local NEAR_X = O.HalfX + 45
+-- The sea is one long channel between the rock walls. The near part is
+-- re-shaped every frame while parted; the rest, out to the horizon, is static.
+local NEAR_X = O.HalfX
 local NEAR_Z = SHORE - O.Reach - 60
-local FAR_X = 3072
 local FAR_Z = SHORE - 4096
 local MAX_PART = 2048 -- Roblox's largest part size
 
-local SEG = 10 -- studs per wall segment
+local SEG = 15 -- studs per wall segment
 local MAX_SEGS = math.ceil(O.Reach / SEG)
 local WALL_THICK = 5
 local CRESTS = 7
@@ -61,7 +61,7 @@ local folder: Folder
 local parts: { [string]: BasePart } = {}
 local baseTransparency: { [BasePart]: number } = {}
 local solid: { [BasePart]: boolean } = {} -- collide (for us) whenever visible
-local wallSegs = { L = {}, R = {} } -- [side][i] = { wall, cap }
+local wallSegs = { L = {}, R = {} } -- [side][i] = { base, upper, cap }
 local eggModels: { [number]: any } = {}
 local chargeStart = 0
 local chargeSource: any = nil -- "mouse" or a touch InputObject
@@ -71,6 +71,7 @@ local lastFullWarn = 0
 local wasInZone = false
 local lastTick = -1
 local scene: any = nil -- cutscene bookkeeping
+local lastBurst = 0
 
 ----------------------------------------------------------------------------
 -- Water parts
@@ -165,9 +166,7 @@ local function build()
 	folder.Name = "LocalOcean"
 	folder.Parent = workspace
 
-	-- The endless sea around the near box.
-	fillStatic(-FAR_X, -NEAR_X, FAR_Z, SHORE)
-	fillStatic(NEAR_X, FAR_X, FAR_Z, SHORE)
+	-- The sea beyond the near box, out to the horizon.
 	fillStatic(-NEAR_X, NEAR_X, FAR_Z, NEAR_Z)
 
 	newPart("Main", WATER, 0.25)
@@ -175,21 +174,33 @@ local function build()
 	newPart("Right", WATER, 0.25)
 	newPart("Far", WATER, 0.25)
 
-	-- Corridor walls are rows of segments so their tops can roll like waves.
+	-- Corridor walls are rows of segments, each a wide base with a narrower
+	-- upper tier set back from it and a foam crest, so the wall steps back
+	-- like a standing wave instead of being one flat slab.
 	for _, side in { "L", "R" } do
 		for i = 1, MAX_SEGS do
-			local wall = newPart("Wall" .. side .. i, i % 2 == 0 and WALL or WALL_DARK, 0.12)
+			local base = newPart("Wall" .. side .. i, i % 2 == 0 and WALL or WALL_DARK, 0.12)
+			local upper = newPart("Upper" .. side .. i, i % 2 == 0 and WALL_DARK or WALL, 0.18)
 			local cap = newPart("Cap" .. side .. i, FOAM, 0.1)
 			-- Solid and queryable: you bump into the wall, and the default
 			-- camera zooms in instead of ending up behind a sheet of water.
-			solid[wall] = true
-			wallSegs[side][i] = { wall = wall, cap = cap }
+			solid[base] = true
+			wallSegs[side][i] = { base = base, upper = upper, cap = cap }
 		end
 		-- Foam churning along the foot of each wall as it advances.
 		addSpray(newPart("Churn" .. side, FOAM, 0.4), 45)
 	end
 	newPart("WallEnd", WALL, 0.2)
 	newPart("CapEnd", FOAM, 0.15)
+
+	-- A fountain of spray that rides the tear as the sea rips open.
+	local front = newPart("RipFront", FOAM, 1)
+	local burst = addSpray(front, 260)
+	burst.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2.6), NumberSequenceKeypoint.new(1, 0) })
+	burst.Speed = NumberRange.new(45, 85)
+	burst.SpreadAngle = Vector2.new(38, 38)
+	burst.Lifetime = NumberRange.new(1, 1.8)
+	burst.Acceleration = Vector3.new(0, -70, 0)
 
 	-- Wet sand along the corridor floor.
 	local wet = newPart("WetSand", Color3.fromRGB(172, 148, 104), 0)
@@ -214,29 +225,32 @@ local function hideCorridor()
 	end
 	for _, side in { "L", "R" } do
 		for _, seg in wallSegs[side] do
-			hide(seg.wall)
+			hide(seg.base)
+			hide(seg.upper)
 			hide(seg.cap)
 		end
 		parts["Churn" .. side].ParticleEmitter.Enabled = false
 	end
+	parts.RipFront.ParticleEmitter.Enabled = false
 	parts.BarrierL.CanCollide = false
 	parts.BarrierR.CanCollide = false
 end
 
 -- Lines of foam drifting toward the shore; they split around the corridor so
 -- they never float across the gap.
-local function layoutCrests(sp, half: number, length: number, t: number)
+local function layoutCrests(sp, t: number)
 	local y1 = O.WaterTopY
 	for i = 1, CRESTS do
 		local phase = (t * 0.02 + i / CRESTS) % 1
 		local z = SHORE - 620 + phase * 610
 		local fade = math.sin(phase * math.pi)
 		local a, b = parts["CrestA" .. i], parts["CrestB" .. i]
-		if sp and half > 0.05 and z + 1 >= SHORE - length - WALL_THICK then
-			setBox(a, -1024, sp.cx - half - WALL_THICK, y1, y1 + 0.12, z - 0.8, z + 0.8)
-			setBox(b, sp.cx + half + WALL_THICK, 1024, y1, y1 + 0.12, z - 0.8, z + 0.8)
+		if sp and z + 1 >= SHORE - sp.length - WALL_THICK then
+			local reach = sp.width / 2 + WALL_THICK
+			setBox(a, -NEAR_X, sp.cx - reach, y1, y1 + 0.12, z - 0.8, z + 0.8)
+			setBox(b, sp.cx + reach, NEAR_X, y1, y1 + 0.12, z - 0.8, z + 0.8)
 		else
-			setBox(a, -1024, 1024, y1, y1 + 0.12, z - 0.8, z + 0.8)
+			setBox(a, -NEAR_X, NEAR_X, y1, y1 + 0.12, z - 0.8, z + 0.8)
 			hide(b)
 		end
 		for _, p in { a, b } do
@@ -247,14 +261,39 @@ local function layoutCrests(sp, half: number, length: number, t: number)
 	end
 end
 
+-- Chunks of water flung up and out of the tear as the sea rips open.
+local function flingWater(sp, frontD: number)
+	local z = SHORE - frontD
+	for _, sx in { -1, 1 } do
+		for _ = 1, 2 do
+			local size = 1.4 + math.random() * 2.6
+			local chunk = Instance.new("Part")
+			chunk.Name = "Splash"
+			chunk.Size = Vector3.new(size, size, size)
+			chunk.Color = math.random() < 0.35 and FOAM or WALL
+			chunk.Material = Enum.Material.SmoothPlastic
+			chunk.Transparency = 0.2
+			chunk.CanCollide = false
+			chunk.CanQuery = false
+			chunk.CanTouch = false
+			chunk.CastShadow = false
+			chunk.CFrame = CFrame.new(sp.cx + sx * (1 + math.random() * 3), O.WaterTopY + 1, z + (math.random() - 0.5) * 8)
+				* CFrame.Angles(math.random() * 6, math.random() * 6, math.random() * 6)
+			chunk.Parent = folder
+			chunk.AssemblyLinearVelocity = Vector3.new(sx * (18 + math.random() * 42), 70 + math.random() * 60, (math.random() - 0.5) * 36)
+			chunk.AssemblyAngularVelocity = Vector3.new(math.random() * 10 - 5, math.random() * 10 - 5, math.random() * 10 - 5)
+			Debris:AddItem(chunk, 2.8)
+		end
+	end
+end
+
 -- Lay out every near-sea part for the current split (or the closed sea).
--- `half` is the corridor's half-width right now, `length` how far it reaches.
-local function layout(sp, half: number, length: number, rise: number, t: number)
+local function layout(sp, elapsed: number, t: number)
 	local y0, y1 = O.SeabedY, O.WaterTopY
 	local waterline = SHORE - 2.5 -- where the water surface meets the ramp
-	layoutCrests(sp, half, length, t)
+	layoutCrests(sp, t)
 
-	if not sp or half <= 0.05 or length <= 0.05 then
+	if not sp then
 		setBox(parts.Main, -NEAR_X, NEAR_X, y0, y1, NEAR_Z, SHORE)
 		hideCorridor()
 		setBox(parts.FoamA, -NEAR_X, NEAR_X, y1 - 0.05, y1 + 0.15, waterline - 1, waterline + 1)
@@ -262,53 +301,105 @@ local function layout(sp, half: number, length: number, rise: number, t: number)
 		return
 	end
 
-	local xl, xr = sp.cx - half, sp.cx + half
+	local full = sp.width / 2
+	local length = sp.length
 	local farZ = SHORE - length
+	local opening = elapsed < O.OpenAnim
+	local half = Formulas.halfWidth(sp, elapsed) -- at the shore; everywhere once open
+	-- The flat sea stops at fixed edges either side of the corridor; the
+	-- walls fill from those edges in to wherever the gap currently is, so no
+	-- two water faces ever share a plane.
+	local edgeL, edgeR = sp.cx - full - WALL_THICK, sp.cx + full + WALL_THICK
 	hide(parts.Main)
-	-- The flat sea stops where the walls begin, so no two water faces share
-	-- a plane (coplanar translucent faces shimmer).
-	setBox(parts.Left, -NEAR_X, xl - WALL_THICK, y0, y1, NEAR_Z, SHORE)
-	setBox(parts.Right, xr + WALL_THICK, NEAR_X, y0, y1, NEAR_Z, SHORE)
-	setBox(parts.Far, xl - WALL_THICK, xr + WALL_THICK, y0, y1, NEAR_Z, farZ - WALL_THICK)
+	setBox(parts.Left, -NEAR_X, edgeL, y0, y1, NEAR_Z, SHORE)
+	setBox(parts.Right, edgeR, NEAR_X, y0, y1, NEAR_Z, SHORE)
+	setBox(parts.Far, edgeL, edgeR, y0, y1, NEAR_Z, farZ - WALL_THICK)
 
-	-- Walls of water: they rise during the cutscene, their tops roll, and
-	-- they lean taller the closer they are to slamming shut.
-	local eased = 1 - (1 - rise) ^ 3
-	local squeeze = 1 - math.clamp(half / (sp.width / 2), 0, 1)
-	local baseTop = y1 + (O.WallTopY + squeeze * 10 - y1) * eased
+	-- Once open, the walls lean taller the closer they are to slamming shut.
+	local squeeze = opening and 0 or 1 - math.clamp(half / full, 0, 1)
+	local peak = O.WallTopY + squeeze * 10
 	for i = 1, MAX_SEGS do
 		local d0 = (i - 1) * SEG
 		local d1 = math.min(i * SEG, length)
-		local segL, segR = wallSegs.L[i], wallSegs.R[i]
-		if d1 - d0 < 0.05 then
-			hide(segL.wall)
-			hide(segL.cap)
-			hide(segR.wall)
-			hide(segR.cap)
-		else
-			local za, zb = SHORE - d1, SHORE - d0
-			local topL = baseTop + math.sin(t * 2.1 + i * 0.9) * 1.4 * eased
-			local topR = baseTop + math.sin(t * 2.1 + i * 0.9 + 2) * 1.4 * eased
-			setBox(segL.wall, xl - WALL_THICK, xl, y0, topL, za, zb)
-			setBox(segL.cap, xl - WALL_THICK - 0.3, xl + 0.5, topL, topL + 0.9, za, zb)
-			setBox(segR.wall, xr, xr + WALL_THICK, y0, topR, za, zb)
-			setBox(segR.cap, xr - 0.5, xr + WALL_THICK + 0.3, topR, topR + 0.9, za, zb)
+		for _, side in { "L", "R" } do
+			local seg = wallSegs[side][i]
+			if d1 - d0 < 0.05 then
+				hide(seg.base)
+				hide(seg.upper)
+				hide(seg.cap)
+			else
+				local za, zb = SHORE - d1, SHORE - d0
+				-- This stretch of sea peels open later the farther out it is.
+				local hw = Formulas.halfWidthAt(sp, (d0 + d1) / 2, elapsed)
+				local openK = math.clamp(hw / full, 0, 1)
+				-- While tearing open, the water surges well above its
+				-- resting height before settling.
+				local riseK = opening and (openK + math.sin(math.pi * openK) * 0.6) or 1
+				local wave = math.sin(t * 2.1 + i * 0.9 + (side == "R" and 2 or 0)) * 1.4 * math.min(1, openK * 3)
+				local top = y1 + (peak - y1) * riseK + wave
+				local inner = side == "L" and sp.cx - hw or sp.cx + hw
+				if openK < 0.02 or top - y1 < 0.3 then
+					-- Not torn open here yet: still flat sea.
+					if side == "L" then
+						setBox(seg.base, edgeL, sp.cx, y0, y1, za, zb)
+					else
+						setBox(seg.base, sp.cx, edgeR, y0, y1, za, zb)
+					end
+					hide(seg.upper)
+					hide(seg.cap)
+				else
+					local step = y0 + (top - y0) * 0.6
+					local back = math.min(2.4, (full + WALL_THICK - hw) * 0.5) -- upper tier sits back from the base
+					if side == "L" then
+						setBox(seg.base, edgeL, inner, y0, step, za, zb)
+						setBox(seg.upper, edgeL, inner - back, step, top, za, zb)
+						setBox(seg.cap, edgeL - 0.3, inner - back + 0.6, top, top + 0.9, za, zb)
+					else
+						setBox(seg.base, inner, edgeR, y0, step, za, zb)
+						setBox(seg.upper, inner + back, edgeR, step, top, za, zb)
+						setBox(seg.cap, inner + back - 0.6, edgeR + 0.3, top, top + 0.9, za, zb)
+					end
+				end
+			end
 		end
 	end
-	local endTop = baseTop + 1.5 + math.sin(t * 3) * 0.8 * eased
-	setBox(parts.WallEnd, xl - WALL_THICK, xr + WALL_THICK, y0, endTop, farZ - WALL_THICK, farZ)
-	setBox(parts.CapEnd, xl - WALL_THICK - 0.3, xr + WALL_THICK + 0.3, endTop, endTop + 1, farZ - WALL_THICK - 0.3, farZ + 0.3)
 
-	-- Foam churn at the foot of each closing wall.
-	local closing = rise > 0.05 -- spray as the sea tears open, churn as it closes
+	-- The far wall rises once the tear reaches it.
+	local endK = math.clamp(Formulas.halfWidthAt(sp, length, elapsed) / full, 0, 1)
+	if endK > 0.02 then
+		local endTop = y1 + (peak + 1.5 - y1) * math.min(1, endK * 1.5) + math.sin(t * 3) * 0.8
+		setBox(parts.WallEnd, edgeL, edgeR, y0, endTop, farZ - WALL_THICK, farZ)
+		setBox(parts.CapEnd, edgeL - 0.3, edgeR + 0.3, endTop, endTop + 1, farZ - WALL_THICK - 0.3, farZ + 0.3)
+	else
+		hide(parts.WallEnd)
+		hide(parts.CapEnd)
+	end
+
+	-- Spray: a fountain riding the tear while it opens, plus flung chunks of
+	-- water; then foam churning at the foot of each wall as they close.
+	local xl, xr = sp.cx - half, sp.cx + half
+	local frontK = elapsed / (O.OpenAnim * 0.45)
+	local ripping = opening and frontK > 0 and frontK < 1.15
+	if ripping then
+		local frontD = math.min(frontK, 1) * length
+		setBox(parts.RipFront, sp.cx - 3, sp.cx + 3, y1, y1 + 1, SHORE - frontD - 2, SHORE - frontD + 2)
+		parts.RipFront.Transparency = 1
+		if frontK < 1 and t - lastBurst > 0.07 then
+			lastBurst = t
+			flingWater(sp, frontD)
+		end
+	end
+	parts.RipFront.ParticleEmitter.Enabled = ripping
 	setBox(parts.ChurnL, xl, xl + 1.2, y0, y0 + 0.5, farZ, SHORE - O.RampLength)
 	setBox(parts.ChurnR, xr - 1.2, xr, y0, y0 + 0.5, farZ, SHORE - O.RampLength)
-	parts.ChurnL.ParticleEmitter.Enabled = closing
-	parts.ChurnR.ParticleEmitter.Enabled = closing
+	parts.ChurnL.ParticleEmitter.Enabled = half > 0.5
+	parts.ChurnR.ParticleEmitter.Enabled = half > 0.5
 
-	-- Wet sand on the flat seabed part of the corridor.
-	if length > O.RampLength then
-		setBox(parts.WetSand, xl, xr, y0, y0 + 0.08, farZ, SHORE - O.RampLength)
+	-- Wet sand on the flat seabed part of the corridor, as wide as the
+	-- narrowest point of the gap.
+	local floorHalf = Formulas.halfWidthAt(sp, length, elapsed)
+	if length > O.RampLength and floorHalf > 0.3 then
+		setBox(parts.WetSand, sp.cx - floorHalf, sp.cx + floorHalf, y0, y0 + 0.08, farZ, SHORE - O.RampLength)
 	else
 		hide(parts.WetSand)
 	end
@@ -322,8 +413,8 @@ local function layout(sp, half: number, length: number, rise: number, t: number)
 	end
 
 	-- Shore foam, with a gap at the corridor mouth.
-	setBox(parts.FoamA, -NEAR_X, xl - WALL_THICK, y1 - 0.05, y1 + 0.15, waterline - 1, waterline + 1)
-	setBox(parts.FoamB, xr + WALL_THICK, NEAR_X, y1 - 0.05, y1 + 0.15, waterline - 1, waterline + 1)
+	setBox(parts.FoamA, -NEAR_X, edgeL, y1 - 0.05, y1 + 0.15, waterline - 1, waterline + 1)
+	setBox(parts.FoamB, edgeR, NEAR_X, y1 - 0.05, y1 + 0.15, waterline - 1, waterline + 1)
 end
 
 ----------------------------------------------------------------------------
@@ -410,8 +501,9 @@ local function spawnEggs(sp)
 end
 
 ----------------------------------------------------------------------------
--- The parting cutscene: a hero shot of the staff going up, then the camera
--- cranes up and back while the sea rips open down its whole length.
+-- The parting cutscene: the camera circles the player as the staff goes up,
+-- swings behind them to watch the sea tear open into the distance, then
+-- glides back to exactly where the player's own camera was.
 ----------------------------------------------------------------------------
 local function character()
 	local char = player.Character
@@ -429,6 +521,7 @@ local function beginCutscene(sp)
 	scene = {
 		camera = camera,
 		cameraType = camera.CameraType,
+		home = camera.CFrame, -- where the player's own camera is; we end here
 		fov = camera.FieldOfView,
 		origin = Vector3.new(sp.cx, root.Position.Y, root.Position.Z),
 		humanoid = hum,
@@ -436,14 +529,6 @@ local function beginCutscene(sp)
 	}
 	if hum then
 		hum.WalkSpeed = 0 -- hold still while the sea opens
-	end
-	-- Thrust the staff arm up (local only; nobody else sees the cutscene).
-	local arm = char:FindFirstChild("RightUpperArm")
-	local shoulder = arm and arm:FindFirstChild("RightShoulder")
-	if shoulder and shoulder:IsA("Motor6D") then
-		scene.shoulder = shoulder
-		scene.shoulderC0 = shoulder.C0
-		shoulder.C0 = shoulder.C0 * CFrame.Angles(math.rad(165), 0, 0)
 	end
 	camera.CameraType = Enum.CameraType.Scriptable
 	Ocean.cutscene = true
@@ -456,14 +541,32 @@ local function endCutscene()
 	local s = scene
 	scene = nil
 	Ocean.cutscene = false
+	-- The camera is already sitting at its old position, so handing control
+	-- back is seamless.
+	s.camera.CFrame = s.home
 	s.camera.CameraType = s.cameraType
 	s.camera.FieldOfView = s.fov
 	if s.humanoid and s.humanoid.Parent then
 		s.humanoid.WalkSpeed = s.walkSpeed
 	end
-	if s.shoulder and s.shoulder.Parent then
-		s.shoulder.C0 = s.shoulderC0
-	end
+end
+
+local function smoothstep(k: number): number
+	k = math.clamp(k, 0, 1)
+	return k * k * (3 - 2 * k)
+end
+
+-- Shot 1: a low arc in front of the player while they wind up and thrust.
+local function heroShot(p: Vector3, u: number): CFrame
+	local angle = math.rad(40 - 55 * u)
+	local pos = p + Vector3.new(math.sin(angle) * 10, 2 + u * 1.8, -math.cos(angle) * 10)
+	return CFrame.lookAt(pos, p + Vector3.new(0, 2.8, 0))
+end
+
+-- Shot 2: behind and above, rising as the tear races away from the shore.
+local function seaShot(p: Vector3, v: number, length: number): CFrame
+	local pos = (p + Vector3.new(0, 8, 13)):Lerp(p + Vector3.new(0, 32 + length * 0.07, 30), v)
+	return CFrame.lookAt(pos, p + Vector3.new(0, -5, -(18 + length * 0.6 * v)))
 end
 
 local function updateCutscene(sp, elapsed: number)
@@ -476,23 +579,23 @@ local function updateCutscene(sp, elapsed: number)
 		return
 	end
 	local p = scene.origin
-	local camPos, lookAt
-	if k < 0.28 then
-		-- Hero shot from out over the water, looking back at the player.
-		local u = k / 0.28
-		camPos = p + Vector3.new(7 - 5 * u, 2.5 + u, -12 + 2 * u)
-		lookAt = p + Vector3.new(0, 2.2, 0)
+	local cf
+	if k < 0.22 then
+		cf = heroShot(p, k / 0.22)
+	elseif k < 0.3 then
+		-- Whip around from the hero shot to the view down the sea.
+		cf = heroShot(p, 1):Lerp(seaShot(p, 0, sp.length), smoothstep((k - 0.22) / 0.08))
+	elseif k < 0.82 then
+		local v = smoothstep((k - 0.3) / 0.52)
+		cf = seaShot(p, v, sp.length)
+		local shake = (1 - v) * 0.8
+		cf *= CFrame.new((math.random() - 0.5) * shake, (math.random() - 0.5) * shake, 0)
 	else
-		-- Crane up and back as the corridor tears open into the distance.
-		local v = (k - 0.28) / 0.72
-		v = v * v * (3 - 2 * v)
-		camPos = (p + Vector3.new(0, 7, 12)):Lerp(p + Vector3.new(0, 38 + sp.length * 0.08, 34), v)
-		lookAt = p + Vector3.new(0, -6, -(24 + sp.length * 0.55 * v))
-		local shake = (1 - v) * 0.7
-		camPos += Vector3.new(math.random() - 0.5, math.random() - 0.5, 0) * shake
+		-- Glide back to the player's own camera.
+		cf = seaShot(p, 1, sp.length):Lerp(scene.home, smoothstep((k - 0.82) / 0.18))
 	end
-	scene.camera.CFrame = CFrame.lookAt(camPos, lookAt)
-	scene.camera.FieldOfView = scene.fov + 16 * math.sin(math.pi * math.clamp(k, 0, 1))
+	scene.camera.CFrame = cf
+	scene.camera.FieldOfView = scene.fov + 14 * math.sin(math.pi * math.clamp(k / 0.82, 0, 1))
 end
 
 ----------------------------------------------------------------------------
@@ -640,7 +743,7 @@ local function update()
 	end
 
 	-- Water + corridor.
-	local half, length, rise, elapsed = 0, 0, 0, 0
+	local elapsed = 0
 	if sp then
 		elapsed = State.serverNow() - sp.t0
 		if not Formulas.isOpen(sp, elapsed) then
@@ -650,13 +753,10 @@ local function update()
 			Ocean.finish()
 			sp = nil
 		else
-			half = Formulas.halfWidth(sp, elapsed)
-			length = Formulas.openLength(sp, elapsed)
-			rise = math.clamp(elapsed / (O.OpenAnim * 0.6), 0, 1)
 			updateCutscene(sp, elapsed)
 		end
 	end
-	layout(sp, half, length, rise, t)
+	layout(sp, elapsed, t)
 
 	if sp then
 		-- Tick down the last five seconds before the walls meet.
@@ -673,7 +773,7 @@ local function update()
 			if Formulas.eggCovered(sp, e.data, elapsed) then
 				e.model:Destroy()
 				eggModels[id] = nil
-			elseif e.data.d <= length + 0.5 then
+			elseif Formulas.halfWidthAt(sp, e.data.d, elapsed) > math.abs(e.data.x) + 1 then
 				local bob = math.sin(t * 2 + id) * 0.25 + 0.25
 				e.model.PrimaryPart.CFrame = CFrame.new(e.pos + Vector3.new(0, bob, 0)) * CFrame.Angles(0, e.yaw + t * 0.6, 0)
 				if not e.shown then

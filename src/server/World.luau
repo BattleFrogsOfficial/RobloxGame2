@@ -70,24 +70,6 @@ local function tiles(name: string, minV: Vector3, maxV: Vector3, colorA: Color3,
 	end
 end
 
-local function surfaceText(part: BasePart, text: string, face: Enum.NormalId, color: Color3)
-	local gui = Instance.new("SurfaceGui")
-	gui.Face = face
-	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 20
-	gui.LightInfluence = 0
-	gui.Parent = part
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Text = text
-	label.TextScaled = true
-	label.Font = Enum.Font.FredokaOne
-	label.TextColor3 = color
-	label.TextStrokeTransparency = 0.2
-	label.Parent = gui
-end
-
 local function buildLand()
 	local H = O.HalfX
 	tiles("Beach", Vector3.new(-H, -30, SHORE), Vector3.new(H, 0, BEACH_END), SAND, SAND_DARK, 20)
@@ -99,19 +81,6 @@ local function buildLand()
 	strip.CanQuery = false
 	-- Coral-red lip on the shore edge, like a warning stripe.
 	block("ShoreLip", Vector3.new(-H, 0, SHORE), Vector3.new(H, 0.3, SHORE + 1.5), Color3.fromRGB(235, 90, 75))
-	for x = -150, 150, 75 do
-		local label = Instance.new("Part")
-		label.Name = "SplitLabel"
-		label.Anchored = true
-		label.CanCollide = false
-		label.CanQuery = false
-		label.Transparency = 1
-		label.Size = Vector3.new(36, 0.1, 7)
-		label.CFrame = CFrame.new(x, 0.1, SHORE + O.SplitZoneDepth / 2 + 1)
-		label.Parent = map
-		surfaceText(label, "SPLIT ZONE", Enum.NormalId.Top, Color3.fromRGB(40, 120, 220))
-	end
-
 	-- Tall walls on the three land sides. The ocean side stays open.
 	local top = W.WallHeight
 	local blue, rim = Color3.fromRGB(45, 125, 235), Color3.fromRGB(120, 215, 60)
@@ -132,13 +101,11 @@ local function buildSea()
 	-- water has something under it all the way to the horizon.
 	tiles("Seabed", Vector3.new(-H, -30, SEABED_END), Vector3.new(H, O.SeabedY, SHORE), Color3.fromRGB(205, 180, 130), Color3.fromRGB(194, 168, 118), 20)
 	local deep = Color3.fromRGB(20, 60, 120)
-	for ix = -1, 1 do
-		for iz = 0, 1 do
-			local x0, z1 = ix * 2048 - 1024, SHORE - iz * 2048
-			local floor = block("DeepFloor", Vector3.new(x0, O.SeabedY - 5, z1 - 2048), Vector3.new(x0 + 2048, O.SeabedY - 1, z1), deep)
-			floor.CanQuery = false
-			floor.CastShadow = false
-		end
+	for iz = 0, 1 do
+		local z1 = SEABED_END - iz * 2040
+		local floor = block("DeepFloor", Vector3.new(-H, O.SeabedY - 5, z1 - 2040), Vector3.new(H, O.SeabedY - 0.5, z1), deep)
+		floor.CanQuery = false
+		floor.CastShadow = false
 	end
 
 	-- Ramp from the shore down to the seabed (a thin tilted slab).
@@ -156,16 +123,20 @@ local function buildSea()
 	ramp.TopSurface = Enum.SurfaceType.Smooth
 	ramp.Parent = map
 
-	-- Rocky headlands on both sides of the bay, stepping down as they run out.
+	-- Sheer rock walls run straight out from both sides of the land, as tall
+	-- as the land walls the whole way, so the sea is one long channel and
+	-- nothing can be seen past its sides. They start exactly where the blue
+	-- walls end (no overlap) and their inner faces are flush with them.
 	local rng = Random.new(11)
+	local segment = 68
 	for _, sx in { 1, -1 } do
-		for i = 0, 6 do
-			local z1 = SHORE + WALL_T - i * 30
-			local z0 = z1 - 30
-			local height = 58 - i * 8 + rng:NextNumber(-3, 3)
-			local depth = 46 - i * 4
+		for i = 0, 59 do
+			local z1 = SHORE - i * segment
+			local z0 = z1 - segment
+			local height = W.WallHeight + 3 + rng:NextNumber(-2, 6)
+			local depth = WALL_T + 30 + rng:NextNumber(0, 14)
 			local x0, x1 = sx * H, sx * (H + depth)
-			block("Headland", Vector3.new(math.min(x0, x1), -30, z0), Vector3.new(math.max(x0, x1), height, z1), ROCK:Lerp(Color3.new(0, 0, 0), rng:NextNumber(0, 0.25)), Enum.Material.Slate)
+			block("Cliff", Vector3.new(math.min(x0, x1), -30, z0), Vector3.new(math.max(x0, x1), height, z1), ROCK:Lerp(Color3.new(0, 0, 0), rng:NextNumber(0, 0.22)), Enum.Material.Slate)
 		end
 	end
 end
@@ -208,11 +179,11 @@ local function buildDecor()
 		m.Parent = decor
 	end
 
-	-- A lighthouse on the east headland.
+	-- A lighthouse on top of the east cliff.
 	do
 		local m = Instance.new("Model")
 		m.Name = "Lighthouse"
-		local base = CFrame.new(H + 22, 58, SHORE - 6)
+		local base = CFrame.new(H + 20, W.WallHeight + 1, SHORE - 34)
 		local y = 0
 		for i = 1, 7 do
 			local w = 13 - i

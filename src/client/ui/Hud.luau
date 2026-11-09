@@ -237,10 +237,10 @@ local function playCutsceneOverlay(sp)
 		table.insert(bars, bar)
 	end
 	gui.Enabled = false
-	task.delay(seconds * 0.28, function()
+	task.delay(seconds * 0.24, function()
 		Hud.flash(Color3.new(1, 1, 1), 0.85, 0.6)
 		local eggs = #sp.eggs
-		Hud.banner("THE SEA PARTS!", string.format("%d studs deep   -   %d egg%s revealed", math.floor(sp.length), eggs, eggs == 1 and "" or "s"), SEA_BLUE, seconds * 0.6)
+		Hud.banner("THE SEA PARTS!", string.format("%d studs deep   -   %d egg%s revealed", math.floor(sp.length), eggs, eggs == 1 and "" or "s"), SEA_BLUE, seconds * 0.5)
 	end)
 	task.delay(seconds - 0.3, function()
 		for _, bar in bars do

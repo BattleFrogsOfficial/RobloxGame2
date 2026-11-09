@@ -78,6 +78,7 @@ src/client/      StarterPlayerScripts.Client
   State.luau       client copy of player state + server actions
   Ocean.luau       draws the ocean, the parting cutscene, the closing corridor, your eggs; charging
   Ragdoll.luau     goes limp and flies back to shore when the sea catches you
+  Poses.luau       limb animation for the staff cast and barbell reps (R6 and R15)
   Guide.luau       new-player objective text and the trail of arrows on the ground
   PenAnimals.luau  hops the animals along the walks the server publishes
   ui/              HUD and windows (Pets, Eggs, Sell, Buy, Index, Shop, Gifts, Daily, hatch cutscene)

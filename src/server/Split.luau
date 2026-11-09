@@ -218,6 +218,8 @@ local function onRequestSplit(player: Player, charge: any)
 		sp.eggs[e.id] = e
 	end
 	splits[player] = sp
+	-- Every client plays the staff-raising animation from this timestamp.
+	player:SetAttribute("CastStart", sp.t0)
 	d.stats.splits += 1
 	Data.markDirty(player)
 

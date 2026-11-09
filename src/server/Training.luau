@@ -1,18 +1,17 @@
 -- Strength training on the pink pad in your base, plus buying heavier weights.
 --
 -- Training starts as soon as you step onto your pad and stops when you step
--- off. Each rep pushes the barbell from the chest to overhead and back down;
--- Strength is awarded when the rep completes. The staff is put away while
--- you train.
+-- off. The server only keeps time: it marks the player as training, says
+-- when the current run of reps began and awards Strength as each rep ends.
+-- Every client plays the lifting animation from those attributes (see
+-- client/Poses.luau), so it works on any avatar and everyone can see it.
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Format = require(Shared.Format)
-local Voxel = require(Shared.Voxel)
 
 local Data = require(script.Parent.Data)
 local Pens = require(script.Parent.Pens)
@@ -20,13 +19,6 @@ local Pens = require(script.Parent.Pens)
 local Training = {}
 
 local T = Config.Training
-
--- Barbell position relative to the torso, and arm joint angles (degrees),
--- at the bottom and top of a rep.
-local BAR_DOWN = CFrame.new(0, 1.1, -1.1)
-local BAR_UP = CFrame.new(0, 3.4, -0.3)
-local SHOULDER_DOWN, SHOULDER_UP = 75, 172
-local ELBOW_DOWN, ELBOW_UP = 95, 0
 
 local training: { [Player]: any } = {}
 
@@ -44,82 +36,6 @@ local function onPad(player: Player): boolean
 	local padPos = (pen.cf * CFrame.new(Pens.PadLocal)).Position
 	local flat = Vector3.new(root.Position.X - padPos.X, 0, root.Position.Z - padPos.Z)
 	return flat.Magnitude <= T.PadRadius and math.abs(root.Position.Y - padPos.Y) < 8
-end
-
-local function joint(char: Model, partName: string, jointName: string): Motor6D?
-	local part = char:FindFirstChild(partName)
-	local j = part and part:FindFirstChild(jointName)
-	if j and j:IsA("Motor6D") then
-		return j
-	end
-	return nil
-end
-
--- Attach the barbell and remember the arm joints (R15; other rigs just get
--- the moving barbell).
-local function setUp(player: Player, state)
-	local char = player.Character
-	if not char then
-		return
-	end
-	local torso = (char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")) :: BasePart?
-	if not torso then
-		return
-	end
-	local d = Data.get(player)
-	local bar = Voxel.barbell(d and d.weightTier or 1)
-	Voxel.weld(bar, false)
-	bar.Name = "TrainingBarbell"
-	bar:PivotTo(torso.CFrame * BAR_DOWN)
-	local weld = Instance.new("Weld")
-	weld.Name = "BarbellWeld"
-	weld.Part0 = torso
-	weld.Part1 = bar.PrimaryPart
-	weld.C0 = BAR_DOWN
-	weld.Parent = bar.PrimaryPart
-	bar.Parent = char
-	state.barbell = bar
-	state.weld = weld
-
-	state.joints = {}
-	for _, side in { "Right", "Left" } do
-		local shoulder = joint(char, side .. "UpperArm", side .. "Shoulder")
-		local elbow = joint(char, side .. "LowerArm", side .. "Elbow")
-		if shoulder then
-			table.insert(state.joints, { motor = shoulder, base = shoulder.C0, down = SHOULDER_DOWN, up = SHOULDER_UP })
-		end
-		if elbow then
-			table.insert(state.joints, { motor = elbow, base = elbow.C0, down = ELBOW_DOWN, up = ELBOW_UP })
-		end
-	end
-	for _, j in state.joints do
-		j.motor.C0 = j.base * CFrame.Angles(math.rad(j.down), 0, 0)
-	end
-end
-
-local function tearDown(state)
-	for _, j in state.joints or {} do
-		if j.motor.Parent then
-			j.motor.C0 = j.base
-		end
-	end
-	if state.barbell then
-		state.barbell:Destroy()
-	end
-end
-
--- Move the bar and arms to the top or bottom of the rep.
-local function pose(state, up: boolean, seconds: number)
-	local info = TweenInfo.new(seconds, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-	if state.weld and state.weld.Parent then
-		TweenService:Create(state.weld, info, { C0 = up and BAR_UP or BAR_DOWN }):Play()
-	end
-	for _, j in state.joints or {} do
-		if j.motor.Parent then
-			local angle = up and j.up or j.down
-			TweenService:Create(j.motor, info, { C0 = j.base * CFrame.Angles(math.rad(angle), 0, 0) }):Play()
-		end
-	end
 end
 
 local function putStaffAway(player: Player)
@@ -145,40 +61,34 @@ local function awardRep(player: Player)
 end
 
 function Training.stop(player: Player)
-	local state = training[player]
-	if not state then
+	if not training[player] then
 		return
 	end
 	training[player] = nil
-	tearDown(state)
 	player:SetAttribute("Training", false)
 end
 
 function Training.start(player: Player)
-	if training[player] or not Data.get(player) then
+	local d = Data.get(player)
+	if training[player] or not d then
 		return
 	end
 	local state = {}
 	training[player] = state
 	putStaffAway(player)
-	setUp(player, state)
+	-- Clients animate the reps from these: which barbell, and when rep 1 began.
+	player:SetAttribute("WeightTier", d.weightTier)
+	player:SetAttribute("RepStart", workspace:GetServerTimeNow())
 	player:SetAttribute("Training", true)
 
-	-- Rep loop: up, down, then the Strength for that rep.
+	-- One rep = up and back down; the Strength lands as the bar comes down.
 	task.spawn(function()
-		local half = T.RepTime / 2
 		while training[player] == state do
+			task.wait(T.RepTime)
+			if training[player] ~= state then
+				break
+			end
 			putStaffAway(player)
-			pose(state, true, half)
-			task.wait(half)
-			if training[player] ~= state then
-				break
-			end
-			pose(state, false, half)
-			task.wait(half)
-			if training[player] ~= state then
-				break
-			end
 			awardRep(player)
 		end
 	end)

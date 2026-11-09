@@ -218,6 +218,8 @@ local function waitOutCutscene()
 end
 
 check("no split before charging", Ocean.active == nil)
+camera.CFrame = roblox.CFrame.new(10, 12, SHORE + 26) -- the player's own view
+local cameraHome = camera.CFrame
 h:moveTo(player, Vector3.new(10, 3, SHORE + 6))
 h:advance(0.3)
 check("in the split zone", Ocean.inZone)
@@ -239,16 +241,38 @@ check("split has eggs", sp and #sp.eggs >= 2, sp and #sp.eggs)
 eq("server counted the split", d.stats.splits, 1)
 
 -- The cutscene owns the camera and holds the player still.
+local Poses = w.clientModule("Poses")
 check("cutscene is playing", Ocean.cutscene)
+check("server published the cast for everyone to animate", player:GetAttribute("CastStart") ~= nil)
 check("cutscene takes the camera", camera.CameraType == roblox.Enum.CameraType.Scriptable)
 eq("player held still during the cutscene", player.Character.Humanoid.WalkSpeed, 0)
 check("split-start effect fired", sawEffect("splitStart"))
-h:advance(O.OpenAnim * 0.5)
+-- Early on, the sea has torn open near the shore but not yet far out.
+h:advance(O.OpenAnim * 0.25)
+local seaParts = ws:FindFirstChild("LocalOcean")
+check("near wall has risen out of the sea", seaParts.UpperL1.Transparency < 1 and seaParts.UpperL1.Size.Y > 3, seaParts.UpperL1.Size.Y)
+check("far end has not torn open yet", seaParts.UpperL2.Transparency == 1)
+local splashes = 0
+for _, c in seaParts:GetChildren() do
+	if c.Name == "Splash" then
+		splashes += 1
+	end
+end
+check("water is flung into the air as the sea tears", splashes > 4, splashes)
+check("spray fountain rides the tear", seaParts.RipFront.ParticleEmitter.Enabled)
+-- The staff arm is driven by joint transforms (limbs actually move).
+local shoulder = player.Character.RightUpperArm.RightShoulder
+local t1 = shoulder.Transform
+h:advance(O.OpenAnim * 0.1)
+check("the staff arm moves during the cast", shoulder.Transform ~= t1)
+check("the other arm moves too", player.Character.LeftUpperArm.LeftShoulder.Transform ~= roblox.CFrame.new())
+h:advance(O.OpenAnim * 0.15)
 check("HUD hidden during the cutscene", player.PlayerGui.Hud.Enabled == false)
 check("cutscene banner shown", player.PlayerGui.Overlay:FindFirstChild("Banner") ~= nil)
 waitOutCutscene()
 check("cutscene ended", not Ocean.cutscene)
 check("camera handed back", camera.CameraType ~= roblox.Enum.CameraType.Scriptable)
+check("camera glides back to exactly where it was", (camera.CFrame.Position - cameraHome.Position).Magnitude < 0.01)
 eq("player can walk again", player.Character.Humanoid.WalkSpeed, 16)
 check("HUD back after the cutscene", player.PlayerGui.Hud.Enabled == true)
 noErrors(h, "parting cutscene")
@@ -258,7 +282,9 @@ check("closed sea hidden while parted", ocean.Main.Transparency == 1)
 check("corridor walls are visible", ocean.WallL1.Transparency < 1 and ocean.WallR1.Transparency < 1)
 check("walls are solid for the camera and the player", ocean.WallL1.CanCollide and ocean.WallL1.CanQuery)
 check("far wall is visible", ocean.WallEnd.Transparency < 1)
-check("wall segments past the corridor end stay hidden", ocean.WallL30.Transparency == 1)
+check("walls have a set-back upper tier and foam crest", ocean.UpperL1.Transparency < 1 and ocean.CapL1.Transparency < 1 and ocean.UpperL1.Size.X < ocean.WallL1.Size.X)
+check("wall segments past the corridor end stay hidden", ocean.WallL20.Transparency == 1)
+check("spray fountain off once open", not ocean.RipFront.ParticleEmitter.Enabled)
 check("wet sand shows on the corridor floor", ocean.WetSand.Transparency < 1)
 check("the sea reaches the horizon", ocean:FindFirstChild("Sea1") ~= nil and ocean.Sea1.Size.Z > 1000)
 local eggSpots = Ocean.eggPositions()
@@ -277,9 +303,9 @@ for _, m in ocean:GetChildren() do
 end
 
 -- The walls close in the whole time.
-local gapBefore = ocean.WallR1.CFrame.Position.X - ocean.WallL1.CFrame.Position.X
+local gapBefore = ocean.WetSand.Size.X
 h:advance(1)
-local gapAfter = ocean.WallR1.CFrame.Position.X - ocean.WallL1.CFrame.Position.X
+local gapAfter = ocean.WetSand.Size.X
 check("walls keep closing from both sides", gapAfter < gapBefore - 0.5, gapBefore .. " -> " .. gapAfter)
 local phase, left, room = Ocean.timing()
 check("HUD timing reports closing", phase == "closing" and left > 0 and room < 1 and room > 0)
@@ -477,11 +503,19 @@ check("holding the staff before training", player.Character:FindFirstChild("Sea 
 h:moveTo(player, padPos + Vector3.new(0, 3, 0))
 h:advance(0.4)
 check("training starts by stepping on the pad", player:GetAttribute("Training") == true)
-check("barbell appears", player.Character:FindFirstChild("TrainingBarbell") ~= nil)
+h:advance(0.1)
+local bar = ws.Poses:FindFirstChild("TrainingBarbell")
+check("barbell appears", bar ~= nil)
+local hands = (player.Character.RightHand.CFrame.Position + player.Character.LeftHand.CFrame.Position) / 2
+check("barbell is held in the hands", bar ~= nil and (bar.PrimaryPart.CFrame.Position - hands).Magnitude < 0.01)
+local elbow = player.Character.RightLowerArm.RightElbow
+local e1, s1 = elbow.Transform, player.Character.RightUpperArm.RightShoulder.Transform
+h:advance(Config.Training.RepTime * 0.3)
+check("arms bend and straighten through the rep", elbow.Transform ~= e1 and player.Character.RightUpperArm.RightShoulder.Transform ~= s1)
 check("staff is put away while training", player.Character:FindFirstChild("Sea Staff") == nil and player.Backpack:FindFirstChild("Sea Staff") ~= nil)
 check("you can still walk off the pad", player.Character.Humanoid.WalkSpeed > 0)
 eq("no strength before the first rep finishes", d.strength, 0)
-h:advance(Config.Training.RepTime * 3 + 0.3)
+h:advance(Config.Training.RepTime * 2.7 + 0.3)
 local gain = Config.Weights[1].gain
 check("strength comes one rep at a time", d.strength >= gain * 2 and d.strength <= gain * 4, d.strength)
 check("lift effect per rep", sawEffect("lift"))
@@ -489,7 +523,15 @@ check("training banner shown", player.PlayerGui.Hud.Train.Visible == true)
 h:moveTo(player, Vector3.new(home.X, 3, home.Z + 10))
 h:advance(0.4)
 check("stepping off stops training", player:GetAttribute("Training") == false)
-check("barbell removed", player.Character:FindFirstChild("TrainingBarbell") == nil)
+check("barbell removed", ws.Poses:FindFirstChild("TrainingBarbell") == nil)
+
+-- The same moves work on an R6 avatar (no elbows, sideways shoulder joints).
+local repR15, repR6 = Poses.rep(0.5, false), Poses.rep(0.5, true)
+check("R15 rep bends the elbows", repR15.rElbow ~= nil and repR15.rElbow > 30)
+check("R6 rep swings straight arms", repR6.rElbow == nil and repR6.rShoulder > 100)
+local castMid = Poses.cast(0.5, 0)
+check("cast holds the staff arm overhead", castMid.rShoulder > 160)
+check("cast starts with a wind-up behind the body", Poses.cast(0.14, 0).rShoulder < 0)
 local frozen = d.strength
 h:advance(3)
 eq("no more strength once off the pad", d.strength, frozen)

@@ -194,8 +194,21 @@ check("open during the cutscene", Formulas.isOpen(sp, anim * 0.5))
 check("open while there's room", Formulas.isOpen(sp, anim + 10))
 check("closed once the gap is too small to stand in", not Formulas.isOpen(sp, anim + 19.5))
 eq("total duration", Formulas.totalDuration(sp), anim + 20)
-eq("corridor fully torn open by the end of the cutscene", Formulas.openLength(sp, anim), 100)
-check("corridor tears open progressively", Formulas.openLength(sp, anim * 0.2) < 100)
+
+-- During the cutscene the sea peels open from the shore outward.
+check("the shore opens before the far end", Formulas.halfWidthAt(sp, 0, anim * 0.3) > Formulas.halfWidthAt(sp, 100, anim * 0.3))
+eq("the far end is still shut early on", Formulas.halfWidthAt(sp, 100, anim * 0.3), 0)
+eq("the whole corridor is open when the cutscene ends", Formulas.halfWidthAt(sp, 100, anim), 15)
+eq("near the end of the cutscene the far end is fully open too", Formulas.halfWidthAt(sp, 100, anim * 0.96), 15)
+for d = 0, 100, 20 do
+	local lastHw = 0
+	for t = 0, anim, anim / 20 do
+		local hw = Formulas.halfWidthAt(sp, d, t)
+		check("opening never reverses (d=" .. d .. ")", hw >= lastHw - 1e-9)
+		lastHw = hw
+	end
+end
+eq("after the cutscene every point closes together", Formulas.halfWidthAt(sp, 60, anim + 10), Formulas.halfWidth(sp, anim + 10))
 
 -- Eggs are covered from the outside in.
 local edgeEgg, centerEgg = { x = 12 }, { x = 1 }

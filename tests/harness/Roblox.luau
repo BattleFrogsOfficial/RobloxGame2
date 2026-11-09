@@ -861,14 +861,24 @@ function Harness:spawnCharacter(player, position)
 	end
 	local root = part("HumanoidRootPart", roblox.Vector3.new(2, 2, 1), roblox.Vector3.new(0, 0, 0))
 	part("Head", roblox.Vector3.new(1.2, 1.2, 1.2), roblox.Vector3.new(0, 1.6, 0))
+	part("UpperTorso", roblox.Vector3.new(2, 1.6, 1), roblox.Vector3.new(0, 0.4, 0))
 	for _, side in { "Right", "Left" } do
-		local arm = part(side .. "UpperArm", roblox.Vector3.new(1, 1.2, 1), roblox.Vector3.new(side == "Right" and 1.5 or -1.5, 0.4, 0))
-		local joint = I.new("Motor6D")
-		joint.Name = side .. "Shoulder"
-		joint.Parent = arm
+		local x = side == "Right" and 1.5 or -1.5
+		local pieces = {
+			{ "UpperArm", "Shoulder", roblox.Vector3.new(x, 0.4, 0) },
+			{ "LowerArm", "Elbow", roblox.Vector3.new(x, -0.6, 0) },
+			{ "Hand", "Wrist", roblox.Vector3.new(x, -1.3, 0) },
+		}
+		for _, piece in pieces do
+			local limb = part(side .. piece[1], roblox.Vector3.new(1, 1, 1), piece[3])
+			local joint = I.new("Motor6D")
+			joint.Name = side .. piece[2]
+			joint.Parent = limb
+		end
 	end
 	local humanoid = I.new("Humanoid")
 	humanoid.CameraOffset = roblox.Vector3.new(0, 0, 0)
+	humanoid.RigType = roblox.Enum.HumanoidRigType.R15
 	humanoid.WalkSpeed = 16
 	humanoid.JumpPower = 50
 	humanoid.JumpHeight = 7.2

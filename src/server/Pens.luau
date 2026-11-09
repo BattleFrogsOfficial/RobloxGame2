@@ -180,10 +180,10 @@ local function buildPen(index: number, info)
 
 	-- Training pad (pink disk) with a resting barbell.
 	local padCf = cf * CFrame.new(Pens.PadLocal)
-	local pad = part(model, Vector3.new(0.4, 13, 13), padCf * CFrame.new(0, 0.3, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(240, 160, 230), Enum.Material.SmoothPlastic)
+	local pad = part(model, Vector3.new(0.7, 13, 13), padCf * CFrame.new(0, 0.55, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(240, 160, 230), Enum.Material.SmoothPlastic)
 	pad.Shape = Enum.PartType.Cylinder
 	pad.Name = "TrainPad"
-	local ring = part(model, Vector3.new(0.3, 14, 14), padCf * CFrame.new(0, 0.2, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(150, 60, 230), Enum.Material.Neon)
+	local ring = part(model, Vector3.new(0.5, 14.5, 14.5), padCf * CFrame.new(0, 0.45, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(150, 60, 230), Enum.Material.Neon)
 	ring.Shape = Enum.PartType.Cylinder
 	local barbell = Voxel.barbell(1)
 	barbell:PivotTo(padCf * CFrame.new(0, 1.6, 2))
@@ -193,7 +193,7 @@ local function buildPen(index: number, info)
 
 	-- Weight upgrade pad (yellow).
 	local upCf = cf * CFrame.new(UPGRADE_PAD_LOCAL)
-	local upPad = part(model, Vector3.new(0.4, 7, 7), upCf * CFrame.new(0, 0.3, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(255, 220, 60), Enum.Material.SmoothPlastic)
+	local upPad = part(model, Vector3.new(0.7, 7, 7), upCf * CFrame.new(0, 0.55, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(255, 220, 60), Enum.Material.SmoothPlastic)
 	upPad.Shape = Enum.PartType.Cylinder
 	upPad.Name = "UpgradePad"
 	local _, upLabels = billboard(upPad, 2.5, {
