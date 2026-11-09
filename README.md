@@ -75,6 +75,7 @@ src/client/      StarterPlayerScripts.Client
 tests/
   formulas.spec.luau  tests for the balance math and number formatting
   game.spec.luau      a full playthrough of the real server + client code
+  pacing.sim.luau     a bot that plays the economy and reports how long each tier takes
   harness/Roblox.luau the fake Roblox engine the playthrough runs on
 ```
 
@@ -90,6 +91,13 @@ lune run tests/formulas.spec.luau
 ```bash
 lune run tests/game.spec.luau
 ```
+
+```bash
+lune run tests/pacing.sim.luau
+```
+
+`pacing.sim.luau` is not a pass/fail test: a simple bot plays the economy and prints how long each egg tier took to
+reach and how Strength, depth, Luck and income grow over 8 hours.
 
 `game.spec.luau` boots the real server and client scripts on a small fake engine. Lune supplies real Roblox Instances,
 so a wrong property name, a wrong value type or an enum item that doesn't exist fails the test the same way it would

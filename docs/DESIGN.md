@@ -8,11 +8,11 @@
    only 45% of the distance. A full bar gives full distance plus up to +4s of open time.
 3. **The sea parts.** A corridor opens straight out from where you stand. Walls of water rise on both sides and at the
    far end.
-   - **Depth** grows with Strength (`length = (34 + 18 · log2(1 + Strength/5)) × chargeFactor`, up to 214 studs, which is
-     nearly the opposite shore).
+   - **Depth** grows with Strength (`length = (30 + 9 · log2(1 + Strength/5)) × chargeFactor`, up to 214 studs, which is
+     nearly the opposite shore and takes about 7M Strength).
    - **Open time** is `5 + 1.4 · log2(1 + Strength/5) + 4 · charge` seconds.
 4. **Grab eggs.** Your eggs sit on the seabed, and only you can see them.
-   - **Count:** `2 + depth/34 + log2(Luck)`, up to 16.
+   - **Count:** `2 + length/34 + log2(Luck)`, up to 16.
    - **Rarity:** deeper eggs can be rarer. Near the shore only Common and Uncommon can appear, and the Secret tier only
      shows up near the far side. Luck and depth both shift the odds toward rare eggs.
    - **Variants:** Gold (×2.5) and Rainbow (×6) chances scale with √Luck.
@@ -74,6 +74,11 @@ The server is authoritative for everything that matters:
   within reach.
 
 ## Progression
+
+Depth gates rarity: Kelp eggs start about 41 studs out, Pearl at 82, Treasure at 122, Abyss at 163 and Leviathan at 204.
+`tests/pacing.sim.luau` plays the economy with a simple bot (run, train for 25 seconds, buy what it can afford). Across
+several seeds it finds its first Kelp egg in about a minute, Pearl in 5 to 10 minutes, Treasure in 20 to 35, Abyss in
+1 to 2 hours, and Leviathan after 5 hours or more. Re-run it after changing costs or curves.
 
 | Egg | Rarity | Hatch | Animals (income $/s) |
 |---|---|---|---|

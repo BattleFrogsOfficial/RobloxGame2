@@ -178,8 +178,8 @@ Config.Ocean = {
 -- Splitting. Strength drives distance + open time. Charge adds to both.
 ----------------------------------------------------------------------------
 Config.Split = {
-	BaseLength = 34,
-	LengthPerDoubling = 18, -- extra studs every time (1 + strength/5) doubles
+	BaseLength = 30,
+	LengthPerDoubling = 9, -- extra studs every time (1 + strength/5) doubles; full depth needs ~7M strength
 	MinChargeFactor = 0.45, -- a tap gives 45% of the distance
 	BaseOpenTime = 5,
 	OpenTimePerDoubling = 1.4,
@@ -194,7 +194,10 @@ Config.Split = {
 }
 
 -- Base hatch weights per rarity tier; luck and depth push toward the right.
-Config.RarityWeights = { 1000, 330, 110, 36, 11, 3, 0.7 }
+Config.RarityWeights = { 1000, 360, 160, 50, 14, 3, 0.4 }
+-- Each tier's weight is multiplied by luck^(LuckPower * (tier-1)) and
+-- (1 + DepthBoost * depth)^(DepthPower * (tier-1)), depth being 0..1 across the ocean.
+Config.Odds = { LuckPower = 0.35, DepthPower = 0.6, DepthBoost = 2.5 }
 
 ----------------------------------------------------------------------------
 -- Progression
@@ -211,7 +214,7 @@ Config.Weights = {
 }
 
 Config.Luck = { BaseCost = 120, Growth = 1.45, PerLevel = 0.12, MaxLevel = 150 }
-Config.Base = { StartSlots = 4, SlotsPerLevel = 2, MaxSlots = 20, BaseCost = 500, Growth = 2.4 }
+Config.Base = { StartSlots = 4, SlotsPerLevel = 2, MaxSlots = 20, BaseCost = 500, Growth = 2.9 }
 
 Config.Training = { AutoLiftInterval = 1.1, MinClickInterval = 0.18, PadRadius = 7 }
 

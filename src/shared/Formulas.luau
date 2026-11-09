@@ -96,8 +96,8 @@ function Formulas.tierOdds(depth: number, luck: number): { number }
 	for tier = 1, maxTier do
 		local w = Config.RarityWeights[tier]
 		-- Luck and depth each push weight toward rarer tiers.
-		w *= luck ^ ((tier - 1) * 0.55)
-		w *= (1 + depth * 2.5) ^ ((tier - 1) * 0.9)
+		w *= luck ^ ((tier - 1) * Config.Odds.LuckPower)
+		w *= (1 + depth * Config.Odds.DepthBoost) ^ ((tier - 1) * Config.Odds.DepthPower)
 		weights[tier] = w
 		total += w
 	end
@@ -133,8 +133,8 @@ function Formulas.rollEggs(rng: Random, sp, luck: number)
 	local count = S.BaseEggs + math.floor(sp.length / S.EggsPerStuds) + math.floor(log2(math.max(1, luck)))
 	count = math.clamp(count, 1, S.MaxEggs)
 	local eggs = {}
-	local nearest = 14
-	local span = math.max(1, sp.length - 6 - nearest)
+	local nearest = math.min(14, sp.length * 0.45)
+	local span = math.max(1, sp.length - 4 - nearest)
 	for i = 1, count do
 		-- Spread along the corridor with jitter so they don't bunch up.
 		local slot = (i - 0.5) / count
