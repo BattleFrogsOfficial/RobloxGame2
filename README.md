@@ -27,6 +27,12 @@ To build a place file instead:
 rojo build -o SplitTheOcean.rbxl
 ```
 
+Or, without Rojo, with [Lune](https://lune-org.github.io/docs):
+
+```bash
+lune run tools/build-place.luau SplitTheOceanForEggs.rbxl
+```
+
 ### Server size
 
 There are 8 pens per server, so set **Game Settings → Places → Max Players** to **8** before publishing. A 9th player
