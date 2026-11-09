@@ -113,12 +113,20 @@ their timers use `os.time()`. If you leave while carrying an egg you had already
 
 The staff cast and the barbell reps are animated in code, with no uploaded animation assets. The server publishes only
 timing, as player attributes (`CastStart`, `Training`, `RepStart`, `WeightTier`). `client/Poses.luau` turns that into
-joint rotations every frame on every client. It rotates each joint's `C0` (its resting offset) from the value it had
-when the move began and restores it when the move ends. The engine's Animator never writes `C0`, so nothing overrides
-the pose, and whatever default animation is playing layers on top. It handles both R15 (elbows and knees bend) and R6
-(straight limbs) avatars, and everyone sees everyone's cast and workout. The barbell is placed at the midpoint of the
-two hands each frame, so it is always in the character's grip. Each move prints one `[Poses]` line to the Output
-window with the avatar type and the number of joints found.
+joint rotations every frame on every client. It rotates each joint's resting offset from the value it had when the move
+began and restores it when the move ends. The engine's Animator never writes that offset, so nothing overrides the
+pose, and whatever default animation is playing layers on top.
+
+- **Joint types:** characters come with either classic `Motor6D` joints (offset = `C0`) or, on rigs with Roblox's avatar
+  joint upgrade, `AnimationConstraint` joints (offset = the `CFrame` of its `Attachment0`). Both are handled, here and
+  in the ragdoll.
+- **Rigs:** R15 (elbows and knees bend) and R6 (straight limbs).
+- **Barbell:** placed at the midpoint of the two hands each frame, so it is always in the character's grip.
+- **Diagnostics:** each move prints one `[Poses]` line (avatar type, number and type of joints found) to the Output
+  window and, for your own character, on screen. Errors are shown the same way.
+
+The build number (`Config.Build`) is shown in small print at the top of the screen and is part of the place file's
+name, so it is always clear which build is running.
 
 ## Feedback while you play
 

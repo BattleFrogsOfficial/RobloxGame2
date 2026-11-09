@@ -13,6 +13,7 @@ local Layout = {}
 -- touch:  overrides for phones/tablets (their corners hold the thumbstick
 --         and jump button instead of the player list)
 Layout.Elements = {
+	Build = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 0 }, size = { 200, 10 } },
 	TopBar = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 10 }, size = { 546, 56 } },
 	Status = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 74 }, size = { 480, 84 } },
 	Objective = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 164 }, size = { 680, 30 }, touch = { size = { 560, 30 } } },

@@ -6,11 +6,16 @@
 -- joint rotations here, so the motion works on both R6 and R15 avatars and
 -- is seen by everyone.
 --
--- Joints are posed by rotating each Motor6D's C0 (its resting offset) from
--- the value it had when the move began, and putting that value back when the
--- move ends. The engine's Animator never writes C0 (it writes Transform), so
+-- Joints are posed by rotating each joint's resting offset from the value it
+-- had when the move began, and putting that value back when the move ends.
+-- The engine's Animator never writes that offset (it writes Transform), so
 -- nothing overrides the pose; whatever default animation is playing (idle,
 -- holding a tool) simply layers on top.
+--
+-- Characters come with one of two joint types, and both are handled:
+--   Motor6D             (classic)  resting offset = Motor6D.C0
+--   AnimationConstraint (newer "avatar joint upgrade" rigs)
+--                                  resting offset = its Attachment0.CFrame
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -19,6 +24,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Voxel = require(Shared.Voxel)
+
+local State = require(script.Parent.State)
 
 local Poses = {}
 
@@ -53,17 +60,42 @@ local function isR6(char: Model): boolean
 	return char:FindFirstChild("Torso") ~= nil and char:FindFirstChild("UpperTorso") == nil
 end
 
-local function motor(char: Model, r6: boolean, key: string): Motor6D?
+-- The joint for a pose key: a Motor6D or an AnimationConstraint, wherever in
+-- the character it lives.
+local function joint(char: Model, r6: boolean, key: string): Instance?
 	local def = (r6 and R6_JOINTS or R15_JOINTS)[key]
 	if not def then
 		return nil
 	end
 	local part = char:FindFirstChild(def[1])
-	local m = part and part:FindFirstChild(def[2])
-	if m and m:IsA("Motor6D") then
-		return m
+	local j = part and part:FindFirstChild(def[2])
+	if not j then
+		j = char:FindFirstChild(def[2], true)
+	end
+	if j and (j:IsA("Motor6D") or j:IsA("AnimationConstraint")) then
+		return j
 	end
 	return nil
+end
+
+-- Read / write a joint's resting offset, whichever type it is.
+local function getOffset(j: Instance): CFrame?
+	if j:IsA("Motor6D") then
+		return j.C0
+	end
+	local att = (j :: any).Attachment0
+	return att and att.CFrame
+end
+
+local function setOffset(j: Instance, cf: CFrame)
+	if j:IsA("Motor6D") then
+		j.C0 = cf
+	else
+		local att = (j :: any).Attachment0
+		if att then
+			att.CFrame = cf
+		end
+	end
 end
 
 -- Rotation that swings a limb forward/up by `degrees` from hanging straight
@@ -77,8 +109,8 @@ local function swing(r6: boolean, left: boolean, degrees: number): CFrame
 end
 
 -- What we are currently posing: per player, the character and each posed
--- motor's original C0.
-local posed: { [Player]: { char: Model, move: string, base: { [Motor6D]: CFrame } } } = {}
+-- joint's original resting offset.
+local posed: { [Player]: { char: Model, move: string, base: { [Instance]: CFrame } } } = {}
 
 local function release(player: Player)
 	local state = posed[player]
@@ -86,9 +118,9 @@ local function release(player: Player)
 		return
 	end
 	posed[player] = nil
-	for m, c0 in state.base do
-		if m.Parent then
-			m.C0 = c0
+	for j, offset in state.base do
+		if j.Parent then
+			setOffset(j, offset)
 		end
 	end
 end
@@ -104,23 +136,37 @@ local function apply(player: Player, char: Model, move: string, pose: { [string]
 	if not state then
 		state = { char = char, move = move, base = {} }
 		posed[player] = state
-		-- One line in the Output window per move, to make problems visible.
-		local found = 0
+		-- One line per move, to make problems visible.
+		local found, kind = 0, "no"
 		for key in pose do
-			if motor(char, r6, key) then
+			local j = joint(char, r6, key)
+			if j then
 				found += 1
+				kind = j.ClassName
 			end
 		end
-		print(string.format("[Poses] %s: %s on a %s rig, %d joints", player.Name, move, r6 and "R6" or "R15", found))
+		local report = string.format("[Poses] %s: %s on a %s rig, %d %s joints", player.Name, move, r6 and "R6" or "R15", found, kind)
+		print(report)
+		-- While this system is being verified, also say it on screen for
+		-- your own character (no need to open the Output window).
+		if player == Players.LocalPlayer then
+			State.toast:Fire(report, Color3.fromRGB(190, 190, 200))
+		end
 	end
 	for key, value in pose do
-		local m = motor(char, r6, key)
-		if m then
-			if not state.base[m] then
-				state.base[m] = m.C0
+		local j = joint(char, r6, key)
+		if j then
+			if not state.base[j] then
+				local current = getOffset(j)
+				if current then
+					state.base[j] = current
+				end
 			end
-			local offset = if typeof(value) == "CFrame" then value else swing(r6, string.sub(key, 1, 1) == "l", value)
-			m.C0 = state.base[m] * offset
+			local base = state.base[j]
+			if base then
+				local offset = if typeof(value) == "CFrame" then value else swing(r6, string.sub(key, 1, 1) == "l", value)
+				setOffset(j, base * offset)
+			end
 		end
 	end
 end
@@ -298,9 +344,18 @@ function Poses.init()
 	folder = Instance.new("Folder")
 	folder.Name = "Poses"
 	folder.Parent = workspace
+	local reported = false
 	RunService.RenderStepped:Connect(function()
-		poseAll()
-		carryBarbells()
+		local ok, err = pcall(function()
+			poseAll()
+			carryBarbells()
+		end)
+		if not ok and not reported then
+			-- Surface the first failure on screen instead of failing silently.
+			reported = true
+			warn("[Poses] error: " .. tostring(err))
+			State.toast:Fire("[Poses] error: " .. tostring(err), Color3.fromRGB(255, 120, 100))
+		end
 	end)
 	Players.PlayerRemoving:Connect(function(player)
 		release(player)

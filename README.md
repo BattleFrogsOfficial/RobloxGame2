@@ -30,8 +30,11 @@ rojo build -o SplitTheOcean.rbxl
 Or, without Rojo, with [Lune](https://lune-org.github.io/docs):
 
 ```bash
-lune run tools/build-place.luau SplitTheOceanForEggs.rbxl
+lune run tools/build-place.luau
 ```
+
+That writes `SplitTheOceanForEggs_build<N>.rbxl`, where N is `Config.Build` in `src/shared/Config.luau`. The same
+number is shown in small print at the top of the screen in game. Bump it whenever you hand someone a new file.
 
 ### Server size
 

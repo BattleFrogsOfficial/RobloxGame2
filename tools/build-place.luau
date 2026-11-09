@@ -9,7 +9,10 @@ local roblox = require("@lune/roblox")
 local process = require("@lune/process")
 
 local Instance = roblox.Instance
-local output = process.args[1] or "SplitTheOceanForEggs.rbxl"
+-- The default file name carries the build number from Config, so each build
+-- is its own file and an old download is never opened by mistake.
+local build = string.match(fs.readFile("src/shared/Config.luau"), "Config%.Build = (%d+)") or "0"
+local output = process.args[1] or ("SplitTheOceanForEggs_build" .. build .. ".rbxl")
 
 -- Mirror a folder the way Rojo does: init.server.luau / init.client.luau /
 -- init.luau turn the folder itself into a script; other .luau files become

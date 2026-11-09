@@ -17,14 +17,19 @@ local KEEP = { Root = true, RootJoint = true, Neck = true }
 
 local flying = false
 
--- Swap the limb motors for ball sockets so arms and legs flop.
+-- Let the limbs flop. Classic rigs: swap each limb Motor6D for a ball
+-- socket. Newer rigs (avatar joint upgrade) already have ball sockets under
+-- their AnimationConstraints, so switching the constraint off is enough.
 local function goLimp(char: Model)
 	local undo = {}
-	for _, motor in char:GetDescendants() do
-		if motor:IsA("Motor6D") and not KEEP[motor.Name] and motor.Part0 and motor.Part1 then
-			local name = motor.Name .. "RigAttachment"
-			local a0 = motor.Part0:FindFirstChild(name)
-			local a1 = motor.Part1:FindFirstChild(name)
+	for _, j in char:GetDescendants() do
+		if KEEP[j.Name] then
+			continue
+		end
+		if j:IsA("Motor6D") and j.Part0 and j.Part1 then
+			local name = j.Name .. "RigAttachment"
+			local a0 = j.Part0:FindFirstChild(name)
+			local a1 = j.Part1:FindFirstChild(name)
 			if a0 and a1 and a0:IsA("Attachment") and a1:IsA("Attachment") then
 				local socket = Instance.new("BallSocketConstraint")
 				socket.Name = "RagdollSocket"
@@ -35,10 +40,13 @@ local function goLimp(char: Model)
 				socket.TwistLimitsEnabled = true
 				socket.TwistLowerAngle = -40
 				socket.TwistUpperAngle = 40
-				socket.Parent = motor.Part0
-				motor.Enabled = false
-				table.insert(undo, { motor = motor, socket = socket })
+				socket.Parent = j.Part0
+				j.Enabled = false
+				table.insert(undo, { joint = j, socket = socket })
 			end
+		elseif j:IsA("AnimationConstraint") then
+			j.Enabled = false
+			table.insert(undo, { joint = j })
 		end
 	end
 	return undo
@@ -46,10 +54,12 @@ end
 
 local function recover(undo, humanoid: Humanoid)
 	for _, item in undo do
-		if item.motor.Parent then
-			item.motor.Enabled = true
+		if item.joint.Parent then
+			item.joint.Enabled = true
 		end
-		item.socket:Destroy()
+		if item.socket then
+			item.socket:Destroy()
+		end
 	end
 	if humanoid.Parent then
 		humanoid.PlatformStand = false

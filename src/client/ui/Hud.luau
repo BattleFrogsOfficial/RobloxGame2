@@ -259,6 +259,17 @@ end
 -- Build
 ----------------------------------------------------------------------------
 local function buildTopBar()
+	-- Which build this is, in small print above the top bar.
+	Ui.new("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Enum.Font.SourceSansBold,
+		TextSize = 10,
+		TextColor3 = Color3.new(1, 1, 1),
+		TextTransparency = 0.35,
+		Text = "build " .. Config.Build,
+		Parent = slot("Build"),
+	})
 	local bar = slot("TopBar")
 	Ui.new("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,

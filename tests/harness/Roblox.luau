@@ -871,9 +871,26 @@ function Harness:spawnCharacter(player, position)
 		}
 		for _, piece in pieces do
 			local limb = part(side .. piece[1], roblox.Vector3.new(1, 1, 1), piece[3])
-			local joint = I.new("Motor6D")
-			joint.Name = side .. piece[2]
-			joint.Parent = limb
+			if side == "Right" then
+				-- Classic joint.
+				local joint = I.new("Motor6D")
+				joint.Name = side .. piece[2]
+				joint.Parent = limb
+			else
+				-- Newer "avatar joint upgrade" joint: an AnimationConstraint
+				-- between two attachments.
+				local a0 = I.new("Attachment")
+				a0.Name = side .. piece[2] .. "RigAttachment"
+				a0.Parent = char:FindFirstChild("UpperTorso")
+				local a1 = I.new("Attachment")
+				a1.Name = side .. piece[2] .. "RigAttachment"
+				a1.Parent = limb
+				local joint = I.new("AnimationConstraint")
+				joint.Name = side .. piece[2]
+				joint.Attachment0 = a0
+				joint.Attachment1 = a1
+				joint.Parent = limb
+			end
 		end
 	end
 	local humanoid = I.new("Humanoid")
