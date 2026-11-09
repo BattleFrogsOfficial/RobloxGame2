@@ -327,7 +327,9 @@ function Split.init()
 			carryModels[player] = {}
 			carrying[player] = {}
 			immuneUntil[player] = os.clock() + 2
+			task.defer(Split.ensureStaff, player)
 		end)
+		Split.ensureStaff(player)
 	end
 	Players.PlayerAdded:Connect(hook)
 	for _, p in Players:GetPlayers() do
@@ -343,6 +345,23 @@ function Split.init()
 end
 
 Split.STAFF_NAME = STAFF_NAME
+
+-- StarterPack only reaches characters that spawn after the staff exists, so
+-- anyone who spawned earlier (common in Studio) is handed one directly.
+function Split.ensureStaff(player: Player)
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	local char = player.Character
+	if not backpack or not char then
+		return
+	end
+	if backpack:FindFirstChild(STAFF_NAME) or char:FindFirstChild(STAFF_NAME) then
+		return
+	end
+	local template = game:GetService("StarterPack"):FindFirstChild(STAFF_NAME)
+	if template then
+		template:Clone().Parent = backpack
+	end
+end
 
 -- Gives the Sea Staff tool to everyone (and every respawn) via StarterPack.
 function Split.makeStaff()

@@ -461,6 +461,17 @@ Ocean.close()
 h:advance(0.3)
 noErrors(h, "double carry run")
 
+-- A player whose backpack has no staff (spawned before it existed) gets one.
+player.Backpack:ClearAllChildren()
+local held = player.Character:FindFirstChild("Sea Staff")
+if held then
+	held:Destroy()
+end
+w.serverModule("Split").ensureStaff(player)
+check("missing staff is handed out", player.Backpack:FindFirstChild("Sea Staff") ~= nil)
+w.serverModule("Split").ensureStaff(player)
+eq("staff is never duplicated", #player.Backpack:GetChildren(), 1)
+
 ----------------------------------------------------------------------------
 -- 9. More players
 ----------------------------------------------------------------------------
