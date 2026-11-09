@@ -262,16 +262,17 @@ check("water is flung into the air as the sea tears", splashes > 4, splashes)
 check("spray fountain rides the tear", seaParts.RipFront.ParticleEmitter.Enabled)
 -- The staff arm is driven by joint transforms (limbs actually move).
 local shoulder = player.Character.RightUpperArm.RightShoulder
-local t1 = shoulder.Transform
+local t1 = shoulder.C0
 h:advance(O.OpenAnim * 0.1)
-check("the staff arm moves during the cast", shoulder.Transform ~= t1)
-check("the other arm moves too", player.Character.LeftUpperArm.LeftShoulder.Transform ~= roblox.CFrame.new())
+check("the staff arm moves during the cast", shoulder.C0 ~= t1)
+check("the other arm moves too", player.Character.LeftUpperArm.LeftShoulder.C0 ~= roblox.CFrame.new())
 h:advance(O.OpenAnim * 0.15)
 check("HUD hidden during the cutscene", player.PlayerGui.Hud.Enabled == false)
 check("cutscene banner shown", player.PlayerGui.Overlay:FindFirstChild("Banner") ~= nil)
 waitOutCutscene()
 check("cutscene ended", not Ocean.cutscene)
 check("camera handed back", camera.CameraType ~= roblox.Enum.CameraType.Scriptable)
+check("joints return to rest after the cast", player.Character.RightUpperArm.RightShoulder.C0 == roblox.CFrame.new() and player.Character.LeftUpperArm.LeftShoulder.C0 == roblox.CFrame.new())
 check("camera glides back to exactly where it was", (camera.CFrame.Position - cameraHome.Position).Magnitude < 0.01)
 eq("player can walk again", player.Character.Humanoid.WalkSpeed, 16)
 check("HUD back after the cutscene", player.PlayerGui.Hud.Enabled == true)
@@ -509,9 +510,9 @@ check("barbell appears", bar ~= nil)
 local hands = (player.Character.RightHand.CFrame.Position + player.Character.LeftHand.CFrame.Position) / 2
 check("barbell is held in the hands", bar ~= nil and (bar.PrimaryPart.CFrame.Position - hands).Magnitude < 0.01)
 local elbow = player.Character.RightLowerArm.RightElbow
-local e1, s1 = elbow.Transform, player.Character.RightUpperArm.RightShoulder.Transform
+local e1, s1 = elbow.C0, player.Character.RightUpperArm.RightShoulder.C0
 h:advance(Config.Training.RepTime * 0.3)
-check("arms bend and straighten through the rep", elbow.Transform ~= e1 and player.Character.RightUpperArm.RightShoulder.Transform ~= s1)
+check("arms bend and straighten through the rep", elbow.C0 ~= e1 and player.Character.RightUpperArm.RightShoulder.C0 ~= s1)
 check("staff is put away while training", player.Character:FindFirstChild("Sea Staff") == nil and player.Backpack:FindFirstChild("Sea Staff") ~= nil)
 check("you can still walk off the pad", player.Character.Humanoid.WalkSpeed > 0)
 eq("no strength before the first rep finishes", d.strength, 0)
@@ -524,14 +525,15 @@ h:moveTo(player, Vector3.new(home.X, 3, home.Z + 10))
 h:advance(0.4)
 check("stepping off stops training", player:GetAttribute("Training") == false)
 check("barbell removed", ws.Poses:FindFirstChild("TrainingBarbell") == nil)
+check("joints return to rest after training", elbow.C0 == roblox.CFrame.new() and player.Character.RightUpperArm.RightShoulder.C0 == roblox.CFrame.new())
 
 -- The same moves work on an R6 avatar (no elbows, sideways shoulder joints).
 local repR15, repR6 = Poses.rep(0.5, false), Poses.rep(0.5, true)
 check("R15 rep bends the elbows", repR15.rElbow ~= nil and repR15.rElbow > 30)
 check("R6 rep swings straight arms", repR6.rElbow == nil and repR6.rShoulder > 100)
 local castMid = Poses.cast(0.5, 0)
-check("cast holds the staff arm overhead", castMid.rShoulder > 160)
-check("cast starts with a wind-up behind the body", Poses.cast(0.14, 0).rShoulder < 0)
+check("cast lifts the staff arm from the tool pose to overhead", castMid.rShoulder > 75)
+check("cast starts with a wind-up behind the body", Poses.cast(0.14, 0).rShoulder < -90)
 local frozen = d.strength
 h:advance(3)
 eq("no more strength once off the pad", d.strength, frozen)

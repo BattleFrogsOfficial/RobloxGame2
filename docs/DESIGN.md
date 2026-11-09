@@ -113,10 +113,12 @@ their timers use `os.time()`. If you leave while carrying an egg you had already
 
 The staff cast and the barbell reps are animated in code, with no uploaded animation assets. The server publishes only
 timing, as player attributes (`CastStart`, `Training`, `RepStart`, `WeightTier`). `client/Poses.luau` turns that into
-joint rotations every frame on every client, applied through `Motor6D.Transform` after the default animations have run,
-so the moves override them cleanly. It handles both R15 (elbows and knees bend) and R6 (straight limbs) avatars, and
-everyone sees everyone's cast and workout. The barbell is placed at the midpoint of the two hands each frame, so it is
-always in the character's grip.
+joint rotations every frame on every client. It rotates each joint's `C0` (its resting offset) from the value it had
+when the move began and restores it when the move ends. The engine's Animator never writes `C0`, so nothing overrides
+the pose, and whatever default animation is playing layers on top. It handles both R15 (elbows and knees bend) and R6
+(straight limbs) avatars, and everyone sees everyone's cast and workout. The barbell is placed at the midpoint of the
+two hands each frame, so it is always in the character's grip. Each move prints one `[Poses]` line to the Output
+window with the avatar type and the number of joints found.
 
 ## Feedback while you play
 

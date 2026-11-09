@@ -4,9 +4,13 @@
 -- training pad. The server only publishes timing as player attributes
 -- (CastStart, Training, RepStart, WeightTier); each client turns that into
 -- joint rotations here, so the motion works on both R6 and R15 avatars and
--- is seen by everyone. Joints are driven through Motor6D.Transform after the
--- default animations have run each frame, which overrides them cleanly and
--- needs no cleanup when the move ends.
+-- is seen by everyone.
+--
+-- Joints are posed by rotating each Motor6D's C0 (its resting offset) from
+-- the value it had when the move began, and putting that value back when the
+-- move ends. The engine's Animator never writes C0 (it writes Transform), so
+-- nothing overrides the pose; whatever default animation is playing (idle,
+-- holding a tool) simply layers on top.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -72,17 +76,51 @@ local function swing(r6: boolean, left: boolean, degrees: number): CFrame
 	return CFrame.Angles(rad(degrees), 0, 0)
 end
 
+-- What we are currently posing: per player, the character and each posed
+-- motor's original C0.
+local posed: { [Player]: { char: Model, move: string, base: { [Motor6D]: CFrame } } } = {}
+
+local function release(player: Player)
+	local state = posed[player]
+	if not state then
+		return
+	end
+	posed[player] = nil
+	for m, c0 in state.base do
+		if m.Parent then
+			m.C0 = c0
+		end
+	end
+end
+
 -- Apply a pose: joint key -> degrees (limbs) or CFrame (root / waist).
-local function apply(char: Model, pose: { [string]: any })
+local function apply(player: Player, char: Model, move: string, pose: { [string]: any })
+	local state = posed[player]
+	if state and (state.char ~= char or state.move ~= move) then
+		release(player)
+		state = nil
+	end
 	local r6 = isR6(char)
+	if not state then
+		state = { char = char, move = move, base = {} }
+		posed[player] = state
+		-- One line in the Output window per move, to make problems visible.
+		local found = 0
+		for key in pose do
+			if motor(char, r6, key) then
+				found += 1
+			end
+		end
+		print(string.format("[Poses] %s: %s on a %s rig, %d joints", player.Name, move, r6 and "R6" or "R15", found))
+	end
 	for key, value in pose do
 		local m = motor(char, r6, key)
 		if m then
-			if typeof(value) == "CFrame" then
-				m.Transform = value
-			else
-				m.Transform = swing(r6, string.sub(key, 1, 1) == "l", value)
+			if not state.base[m] then
+				state.base[m] = m.C0
 			end
+			local offset = if typeof(value) == "CFrame" then value else swing(r6, string.sub(key, 1, 1) == "l", value)
+			m.C0 = state.base[m] * offset
 		end
 	end
 end
@@ -110,13 +148,15 @@ end
 ----------------------------------------------------------------------------
 
 -- Parting the sea: wind the staff back, thrust it overhead, hold it there
--- trembling while the sea tears open, then lower it.
+-- trembling while the sea tears open, then lower it. Angles are added on
+-- top of the default tool-holding pose, which already has the staff arm
+-- raised about 90 degrees in front of the body.
 function Poses.cast(k: number, clock: number): { [string]: any }
 	local tremble = (k > 0.3 and k < 0.86) and math.sin(clock * 38) * 3 or 0
 	local crouch = track(k, { { 0, 0 }, { 0.14, 22 }, { 0.26, 6 }, { 0.86, 10 }, { 1, 0 } })
 	return {
-		rShoulder = track(k, { { 0, 80 }, { 0.14, -45 }, { 0.26, 176 }, { 0.86, 172 }, { 1, 80 } }) + tremble,
-		rElbow = track(k, { { 0, 10 }, { 0.14, 55 }, { 0.26, 0 }, { 0.86, 0 }, { 1, 10 } }),
+		rShoulder = track(k, { { 0, 0 }, { 0.14, -120 }, { 0.26, 88 }, { 0.86, 84 }, { 1, 0 } }) + tremble,
+		rElbow = track(k, { { 0, 0 }, { 0.14, 50 }, { 0.26, 0 }, { 0.86, 0 }, { 1, 0 } }),
 		lShoulder = track(k, { { 0, 0 }, { 0.14, 30 }, { 0.26, 95 }, { 0.86, 85 }, { 1, 0 } }) - tremble,
 		lElbow = track(k, { { 0, 0 }, { 0.14, 40 }, { 0.26, 10 }, { 0.86, 15 }, { 1, 0 } }),
 		rHip = crouch,
@@ -209,24 +249,30 @@ local function liftPhase(player: Player, now: number): number
 	return 0.5 - 0.5 * math.cos(phase * math.pi * 2)
 end
 
--- After the default animations, before physics: pose the joints.
+-- Every frame: pose whoever is casting or training, release everyone else.
 local function poseAll()
 	local now = workspace:GetServerTimeNow()
 	local clock = os.clock()
 	for _, player in Players:GetPlayers() do
 		local char = player.Character
+		local active = false
 		if char and char:FindFirstChild("HumanoidRootPart") then
 			if player:GetAttribute("Training") then
-				apply(char, Poses.rep(liftPhase(player, now), isR6(char)))
+				apply(player, char, "workout", Poses.rep(liftPhase(player, now), isR6(char)))
+				active = true
 			else
 				local castStart = player:GetAttribute("CastStart")
 				if castStart then
 					local k = (now - castStart) / Config.Ocean.OpenAnim
 					if k >= 0 and k < 1 then
-						apply(char, Poses.cast(k, clock))
+						apply(player, char, "cast", Poses.cast(k, clock))
+						active = true
 					end
 				end
 			end
+		end
+		if not active and posed[player] then
+			release(player)
 		end
 	end
 end
@@ -252,9 +298,14 @@ function Poses.init()
 	folder = Instance.new("Folder")
 	folder.Name = "Poses"
 	folder.Parent = workspace
-	RunService.Stepped:Connect(poseAll)
-	RunService.RenderStepped:Connect(carryBarbells)
-	Players.PlayerRemoving:Connect(dropBarbell)
+	RunService.RenderStepped:Connect(function()
+		poseAll()
+		carryBarbells()
+	end)
+	Players.PlayerRemoving:Connect(function(player)
+		release(player)
+		dropBarbell(player)
+	end)
 end
 
 return Poses
