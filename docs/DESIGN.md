@@ -34,7 +34,8 @@ stand against the back wall. A server holds 5 players, one base each.
    - **Rarity:** deeper eggs can be rarer. Luck and depth both shift the odds toward rare eggs.
    - **Placement:** every egg is placed where a sprint from the shore reaches it before the water does.
    - **Variants:** Gold (×2.5) and Rainbow (×6) chances scale with √Luck.
-   - Walk over an egg to pick it up. You can carry 1 egg (2 with the Double Carry pass).
+   - Walk up to an egg and hold **E** for a third of a second to pick it up (a tap-and-hold prompt on touch, the
+     prompt button on gamepad). Walking over it does nothing. You can carry 1 egg (2 with the Double Carry pass).
 6. **Carry it home.** The egg stays on your head, and an "Eggs 1/1" counter stays on screen, until you walk into your
    own base. Reaching the beach makes it safe, but it is only planted when you step inside your fence. With full hands
    you can't grab another egg or part the sea again.
@@ -174,9 +175,12 @@ that way.
 Everything is built from blocks in code. Roblox no longer draws the old stud texture, so the toy-box look comes from
 checkered tiles on the ground, seabed and base floors.
 
-- **Models:** pixel eggs stacked layer by layer on twig nests; blocky animals from a few templates (crab, bird, fish,
+- **Models:** pixel eggs stacked layer by layer on twig nests; animals from a few templates (crab, bird, fish,
   quadruped, seal, octopus, turtle, frog, serpent); voxel palms, umbrellas, barbells and a lighthouse. Gold and Rainbow
   variants recolor the model.
+- **Resolution:** a Common animal's pixel is 0.16 studs and an egg's is 0.21. Bodies, heads and shells are rounded
+  lumps stacked from one-pixel layers with clipped corners; details are single pixels (eyes with highlights, toes,
+  feather tips, fins, teeth, shell plates, speckles). Animals are 32 to 73 parts each and eggs 70 with their nest.
 - **Ocean:** foam crests drifting in from the horizon. The corridor walls are stepped (a wide base, a narrower upper
   tier set back from it, a foam crest) with rolling tops; they grow taller as they close, with foam churning at their
   feet and wet sand along the corridor floor.

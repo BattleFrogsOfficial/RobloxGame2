@@ -496,7 +496,27 @@ local function spawnEggs(sp)
 		-- Weld everything to the root so bobbing moves one part, not forty.
 		Voxel.weld(model, true)
 		eggLabel(model.PrimaryPart, e.egg, e.variant)
-		eggModels[e.id] = { model = model, data = e, pos = pos, yaw = yaw, shown = false }
+
+		-- Picking an egg up takes a short hold of E (or the on-screen /
+		-- gamepad equivalent), not just walking over it.
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = "Grab"
+		prompt.ObjectText = Config.EggById[e.egg].name
+		prompt.KeyboardKeyCode = Enum.KeyCode.E
+		prompt.HoldDuration = Config.Split.GrabHold
+		prompt.MaxActivationDistance = O.GrabRadius + 2
+		prompt.RequiresLineOfSight = false
+		prompt.Enabled = false
+		prompt.Parent = model.PrimaryPart
+		local id = e.id
+		prompt.Triggered:Connect(function()
+			if Ocean.active == sp and not pendingGrab and not Ocean.handsFull then
+				pendingGrab = id
+				pendingAt = os.clock()
+				Remotes.get("GrabEgg"):FireServer(id)
+			end
+		end)
+		eggModels[e.id] = { model = model, data = e, pos = pos, yaw = yaw, shown = false, prompt = prompt }
 	end
 end
 
@@ -783,25 +803,24 @@ local function update()
 			end
 		end
 
-		-- Grab the nearest egg in reach.
+		-- Egg prompts are live once the cutscene is over and a hand is free.
 		if pendingGrab and t - pendingAt > 1.2 then
 			pendingGrab = nil
 		end
-		if root and not pendingGrab and not Ocean.cutscene then
-			for id, e in eggModels do
+		local canGrab = not Ocean.cutscene and not Ocean.handsFull
+		for _, e in eggModels do
+			if e.shown and e.prompt.Enabled ~= canGrab then
+				e.prompt.Enabled = canGrab
+			end
+		end
+		-- With full hands, standing at an egg explains why there's no prompt.
+		if root and Ocean.handsFull and t - lastFullWarn > 2.5 then
+			for _, e in eggModels do
 				if e.shown then
 					local dx, dz = root.Position.X - e.pos.X, root.Position.Z - e.pos.Z
 					if dx * dx + dz * dz <= O.GrabRadius * O.GrabRadius then
-						if Ocean.handsFull then
-							if t - lastFullWarn > 2.5 then
-								lastFullWarn = t
-								State.toast:Fire("Hands full! Carry your egg back to your base.", Color3.fromRGB(255, 200, 90))
-							end
-						else
-							pendingGrab = id
-							pendingAt = t
-							Remotes.get("GrabEgg"):FireServer(id)
-						end
+						lastFullWarn = t
+						State.toast:Fire("Hands full! Carry your egg back to your base.", Color3.fromRGB(255, 200, 90))
 						break
 					end
 				end

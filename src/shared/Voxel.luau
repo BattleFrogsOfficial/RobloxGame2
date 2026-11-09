@@ -52,97 +52,175 @@ local function pixelBuilder(model: Model, P: number)
 	end
 end
 
-local function eye(b, x, y, z)
-	local e = b(1, 1, 1, x, y, z, BLACK)
-	e:SetAttribute("Keep", true)
-	return e
+local function shade(c: Color3, amount: number?): Color3
+	return c:Lerp(Color3.new(0, 0, 0), amount or 0.25)
+end
+
+-- A rounded lump (body, head, shell) sx x sy x sz pixels, centered at
+-- (cx, cy, cz). It is stacked from one-pixel layers whose width follows a
+-- rounded profile, each layer a plus-shaped pair of boxes so the corners are
+-- clipped too. Layers of equal size are merged into one taller box.
+-- `power` sets the shape: 2 is a ball, higher is boxier.
+local function blob(b, sx: number, sy: number, sz: number, cx: number, cy: number, cz: number, color: Color3, power: number?)
+	local n = power or 3
+	local function flush(y0: number, y1: number, w: number, d: number)
+		local h = y1 - y0
+		local y = cy - sy / 2 + y0 + h / 2
+		if w >= 4 and d >= 4 then
+			b(w, h, d - 2, cx, y, cz, color)
+			b(w - 2, h, d, cx, y, cz, color)
+		else
+			b(w, h, d, cx, y, cz, color)
+		end
+	end
+	local start, lastW, lastD = 0, nil, nil
+	for i = 0, sy - 1 do
+		local t = math.abs(((i + 0.5) / sy) * 2 - 1)
+		local k = (1 - t ^ n) ^ (1 / n)
+		-- Even sizes keep every layer centered on the pixel grid.
+		local w = math.max(2, math.floor(sx * k / 2 + 0.5) * 2)
+		local d = math.max(2, math.floor(sz * k / 2 + 0.5) * 2)
+		if lastW and (w ~= lastW or d ~= lastD) then
+			flush(start, i, lastW, lastD)
+			start = i
+		end
+		lastW, lastD = w, d
+	end
+	flush(start, sy, lastW :: number, lastD :: number)
+end
+
+local function keep(part: BasePart): BasePart
+	part:SetAttribute("Keep", true) -- eyes etc. keep their color in Gold / Rainbow variants
+	return part
+end
+
+-- A 2x2 black eye with a white highlight pixel, on a face pointing along
+-- (dx, dz) (one of them is -1 or 1, the other 0).
+local function eye(b, x: number, y: number, z: number, dx: number, dz: number)
+	keep(b(2, 2, 2, x, y, z, BLACK))
+	local sideways = dz ~= 0
+	keep(b(1, 1, 1, x + dx * 0.7 + (sideways and 0.5 or 0), y + 0.5, z + dz * 0.7 + (sideways and 0 or -0.5), WHITE))
 end
 
 ----------------------------------------------------------------------------
 -- Animal templates. pal = { p = primary, s = secondary, a = accent }
+-- Coordinates are in pixels; models stand on y = 0 and face -Z.
 ----------------------------------------------------------------------------
 local Templates = {}
 
 function Templates.crab(b, pal)
-	b(8, 3, 6, 0, 3.5, 0, pal.p)
-	b(6, 1, 4, 0, 5.5, 0, pal.s)
+	blob(b, 18, 7, 13, 0, 7.5, 0, pal.p)
+	blob(b, 12, 3, 8, 0, 11.5, 0, pal.s, 2)
+	b(2, 1, 2, -3, 13.1, -1, pal.a)
+	b(2, 1, 2, 3, 13.1, 1, pal.a)
+	b(2, 1, 2, 0, 13.1, -2.5, pal.a)
+	keep(b(4, 1, 1, 0, 6, -6.6, BLACK))
 	for _, sx in { -1, 1 } do
-		b(1, 2, 1, sx * 1.5, 7, -2, pal.p)
-		eye(b, sx * 1.5, 8.5, -2)
-		b(2, 1, 2, sx * 4.5, 4, -3, pal.p)
-		b(3, 3, 2, sx * 5, 4.5, -5, pal.p)
-		b(1, 2, 1, sx * 6, 4.5, -6.5, pal.a)
-		for _, z in { -1, 1, 3 } do
-			b(2, 1, 1, sx * 5, 2.5, z, pal.s)
-			b(1, 2, 1, sx * 6.5, 1, z, pal.s)
+		b(2, 4, 2, sx * 4, 13, -5, pal.p)
+		keep(b(3, 3, 3, sx * 4, 16.5, -5, WHITE))
+		keep(b(2, 2, 1, sx * 4, 16.5, -6.6, BLACK))
+		b(2, 2, 1, sx * 5.5, 8, -6.6, pal.a)
+		b(4, 3, 4, sx * 10, 8, -6, pal.p)
+		blob(b, 7, 7, 5, sx * 12, 9.5, -10, pal.p, 2)
+		b(2, 2, 4, sx * 13.5, 11.5, -13.5, pal.a)
+		b(2, 2, 4, sx * 10.5, 8, -13.5, pal.a)
+		for _, z in { -2, 2, 6 } do
+			b(5, 2, 2, sx * 11, 5.5, z, pal.s)
+			b(2, 5, 2, sx * 14, 2.5, z, pal.s)
+			b(3, 1, 2, sx * 14.5, 0.5, z, shade(pal.s))
 		end
 	end
-	b(2, 1, 1, 0, 3, -3.1, BLACK)
 end
 
 function Templates.bird(b, pal, o)
-	local L = o.legs or (o.upright and 1 or 3)
+	local L = 2 * (o.legs or (o.upright and 1 or 3))
+	local dark = shade(pal.s)
 	for _, sx in { -1, 1 } do
-		b(1, L, 1, sx * 1, L / 2, 0, pal.a)
-		b(1, 1, 2, sx * 1, 0.5, -0.5, pal.a)
-		b(1, 4, 5, sx * 3, L + 3, 0.5, pal.s)
+		b(2, L, 2, sx * 2.5, L / 2, 0, pal.a)
+		b(4, 1, 5, sx * 2.5, 0.5, -1.5, pal.a)
+		b(1, 1, 2, sx * 2.5 - 1.5, 0.5, -4.5, pal.a)
+		b(1, 1, 2, sx * 2.5 + 1.5, 0.5, -4.5, pal.a)
+		-- wing with darker feather tips
+		b(2, 8, 9, sx * 6, L + 6.5, 0.5, pal.s)
+		b(2, 5, 3, sx * 6, L + 5, 6, pal.s)
+		b(2, 3, 2, sx * 6, L + 4, 8.5, dark)
+		b(1, 1, 7, sx * 6.6, L + 8, 0.5, dark)
 	end
-	b(5, 5, 6, 0, L + 2.5, 0, pal.p)
-	b(4, o.upright and 4 or 3, 1, 0, L + 2.5, -3, pal.s)
-	b(3, 1, 3, 0, L + 3.5, 4, pal.s)
+	blob(b, 11, 11, 13, 0, L + 5.5, 0, pal.p)
+	b(8, o.upright and 9 or 7, 2, 0, L + 5, -6, pal.s)
+	b(6, o.upright and 7 or 5, 1, 0, L + 5, -7, pal.s)
+	for _, x in { -2.5, 0, 2.5 } do
+		b(2, 2, 6, x, L + 7, 8.5, pal.s)
+		b(2, 1, 2, x, L + 7, 12, dark)
+	end
 	local hy, hz
 	if o.upright then
-		hy, hz = L + 7, -0.5
+		hy, hz = L + 14.5, -1
 	else
-		hy, hz = L + 6.5, -2.5
+		hy, hz = L + 13.5, -5
 	end
-	b(4, 4, 4, 0, hy, hz, pal.p)
-	eye(b, -1.5, hy + 0.5, hz - 2)
-	eye(b, 1.5, hy + 0.5, hz - 2)
+	blob(b, 9, 9, 9, 0, hy, hz, pal.p)
+	eye(b, -2.5, hy + 1, hz - 4, 0, -1)
+	eye(b, 2.5, hy + 1, hz - 4, 0, -1)
 	if o.bigBeak then
-		b(2, 1, 5, 0, hy - 0.5, hz - 4, pal.a)
-		b(2, 1, 3, 0, hy - 1.5, hz - 3.5, pal.a)
+		b(4, 2, 10, 0, hy - 1, hz - 9, pal.a)
+		blob(b, 4, 4, 8, 0, hy - 3.5, hz - 8, pal.a:Lerp(Color3.new(1, 1, 1), 0.25), 2)
 	else
-		b(2, 1, 2, 0, hy - 0.5, hz - 3, pal.a)
+		b(4, 2, 4, 0, hy - 0.5, hz - 6.5, pal.a)
+		b(2, 1, 2, 0, hy - 0.5, hz - 9, pal.a)
+		b(3, 1, 3, 0, hy - 2, hz - 6, shade(pal.a))
 	end
 	if o.crest then
-		b(1, 3, 2, 0, hy + 3, hz + 0.5, pal.a)
-		b(1, 2, 1, 0, hy + 3.5, hz + 2, pal.s)
+		b(2, 5, 2, 0, hy + 6, hz + 1, pal.a)
+		b(2, 4, 2, 0, hy + 5.5, hz + 3, pal.s)
+		b(2, 3, 2, 0, hy + 5, hz - 1, pal.a)
 	end
 end
 
 function Templates.fish(b, pal, o)
-	local w, h, len = 4, 5, 8
+	local w, h, len = 8, 10, 16
 	if o.long then
-		len = 12
+		len = 24
 	end
 	if o.round then
-		w, h, len = 6, 6, 6
+		w, h, len = 12, 12, 12
 	end
-	local hy = h / 2 + 2
-	b(w, h, len, 0, hy, 0, pal.p)
-	b(w + 0.2, 2, len - 2, 0, hy - h / 2 + 1, 0, pal.s)
-	b(1, h, 3, 0, hy, len / 2 + 1.5, pal.s)
-	b(1, 2, 1, 0, hy + h / 2 + 0.5, len / 2 + 2.5, pal.s)
-	b(1, 3, 3, 0, hy + h / 2 + 1.5, 0.5, pal.s)
+	local hy = h / 2 + 4
+	local dark = shade(pal.p)
+	blob(b, w, h, len, 0, hy, 0, pal.p)
+	b(w - 2, 2, len - 6, 0, hy - h / 2 + 1, 0, pal.s)
+	b(w + 0.3, 1, len - 10, 0, hy, 0, pal.s)
+	-- forked tail
+	b(2, 6, 3, 0, hy, len / 2 + 1, pal.s)
+	b(2, 4, 3, 0, hy + 3.5, len / 2 + 3.5, pal.s)
+	b(2, 4, 3, 0, hy - 3.5, len / 2 + 3.5, pal.s)
+	-- dorsal fin
+	b(2, 3, 7, 0, hy + h / 2 + 1, 1, pal.s)
+	b(2, 2, 4, 0, hy + h / 2 + 3, 2, pal.s)
 	for _, sx in { -1, 1 } do
-		b(2, 1, 2, sx * (w / 2 + 1), hy - 1, -1, pal.s)
-		eye(b, sx * (w / 2), hy + 1, -len / 2 + 1.5)
+		b(3, 1, 4, sx * (w / 2 + 1), hy - 2, -2, pal.s)
+		b(2, 1, 2, sx * (w / 2 + 2.5), hy - 2, -0.5, pal.s)
+		eye(b, sx * (w / 2 - 0.6), hy + 1.5, -len / 2 + 4, sx, 0)
+		b(1, 3, 1, sx * (w / 2 - 0.3), hy, -len / 2 + 7, dark)
 	end
 	if o.teeth then
-		b(w - 1, 1, 1, 0, hy - 1, -len / 2 - 0.1, BLACK)
-		b(w - 1, 0.5, 0.5, 0, hy - 0.6, -len / 2 - 0.4, WHITE)
+		keep(b(w - 2, 1, 1, 0, hy - 2, -len / 2 + 0.4, BLACK))
+		for _, x in { -2, 0, 2 } do
+			keep(b(1, 1, 1, x, hy - 1.4, -len / 2, WHITE))
+		end
 	end
 	if o.horn then
-		b(1, 1, 7, 0, hy + 1, -len / 2 - 3.5, pal.a)
+		b(2, 2, 6, 0, hy + 2, -len / 2 - 3, pal.a)
+		b(1, 1, 6, 0, hy + 2, -len / 2 - 8, pal.a)
 	end
 	if o.lure then
-		b(1, 4, 1, 0, hy + h / 2 + 2, -len / 2 + 1, pal.s)
-		b(1.5, 1.5, 1.5, 0, hy + h / 2 + 4.5, -len / 2 - 0.5, pal.a, Enum.Material.Neon)
+		b(1, 6, 1, 0, hy + h / 2 + 3, -len / 2 + 3, pal.s)
+		b(1, 1, 3, 0, hy + h / 2 + 6, -len / 2 + 1.5, pal.s)
+		b(3, 3, 3, 0, hy + h / 2 + 5, -len / 2 - 1, pal.a, Enum.Material.Neon)
 	end
 	if o.round then
-		for _, s in { { 3, 1, 0 }, { -3, 1, 0 }, { 0, 3, 1 }, { 3, -1, 1.5 }, { -3, -1, 1.5 }, { 0, 3, -1.5 }, { 2, 0, -3 }, { -2, 0, -3 } } do
-			b(1, 1, 1, s[1], hy + s[2], s[3], pal.a)
+		for _, sp in { { 6.4, 2, 0 }, { -6.4, 2, 0 }, { 6.4, -2, 2 }, { -6.4, -2, 2 }, { 0, 6.4, 2 }, { 0, 6.4, -2 }, { 3, 5.4, 0 }, { -3, 5.4, 0 }, { 4, 0, -5.4 }, { -4, 0, -5.4 }, { 4, 0, 5.4 }, { -4, 0, 5.4 } } do
+			b(1, 1, 1, sp[1], hy + sp[2], sp[3], pal.a)
 		end
 	end
 end
@@ -150,55 +228,68 @@ end
 function Templates.quad(b, pal)
 	for _, sx in { -1, 1 } do
 		for _, sz in { -1, 1 } do
-			b(2, 3, 2, sx * 2, 1.5, sz * 2.5, pal.s)
+			b(3, 5, 3, sx * 3.5, 2.5, sz * 5, pal.s)
+			b(4, 1, 4, sx * 3.5, 0.5, sz * 5 - 0.5, shade(pal.s))
 		end
-		eye(b, sx * 1.5, 8.5, -7.5)
-		b(1, 1, 1, sx * 2, 10.5, -5, pal.s)
+		eye(b, sx * 3, 16.5, -14.2, 0, -1)
+		b(2, 2, 2, sx * 4, 20.5, -9, pal.s)
+		b(1, 1, 1, sx * 4, 20.5, -10.1, pal.a)
+		keep(b(1, 1, 1, sx * 2, 12.5, -17.1, BLACK))
 	end
-	b(6, 4, 8, 0, 5, 0, pal.p)
-	b(4, 1, 6, 0, 3, 0, pal.a)
-	b(5, 5, 4, 0, 7.5, -5.5, pal.p)
-	b(3, 2, 2, 0, 6.5, -8, pal.a)
-	b(1, 1, 1, 0, 7.5, -9, BLACK)
-	b(2, 2, 5, 0, 4.5, 6.5, pal.s)
+	blob(b, 12, 9, 17, 0, 9.5, 0, pal.p)
+	b(8, 2, 12, 0, 5.4, 0, pal.a)
+	blob(b, 10, 10, 9, 0, 15, -10, pal.p)
+	blob(b, 6, 4, 4, 0, 13, -15, pal.a, 2)
+	keep(b(2, 1, 1, 0, 14.5, -17, BLACK))
+	blob(b, 4, 4, 10, 0, 9, 13, pal.s, 2)
 end
 
 function Templates.seal(b, pal, o)
-	b(6, 4, 10, 0, 2, 1, pal.p)
-	b(5, 5, 5, 0, 4.5, -5.5, pal.p)
-	b(3, 2, 2, 0, 3.5, -8.5, pal.s)
-	b(1, 1, 1, 0, 4.5, -9.5, BLACK)
+	blob(b, 12, 8, 20, 0, 4, 2, pal.p)
+	blob(b, 10, 9, 10, 0, 9, -11, pal.p)
+	blob(b, 6, 4, 4, 0, 7.5, -16.5, pal.s, 2)
+	keep(b(2, 1, 1, 0, 9, -18.6, BLACK))
+	b(2, 1, 2, -2, 8.1, 3, pal.s)
+	b(2, 1, 2, 2.5, 8.1, 7, pal.s)
+	b(2, 1, 2, 0, 8.1, -2, pal.s)
 	for _, sx in { -1, 1 } do
-		eye(b, sx * 1.5, 5.5, -8)
-		b(2, 1, 3, sx * 4, 0.5, -2, pal.s)
+		eye(b, sx * 3, 10.5, -15.6, 0, -1)
+		keep(b(1, 1, 1, sx * 2, 7, -18.6, BLACK))
+		b(5, 1, 6, sx * 7.5, 0.5, -4, pal.s)
+		b(3, 1, 3, sx * 9.5, 0.5, -1, pal.s)
+		b(4, 1, 5, sx * 3, 0.5, 14, pal.s)
 		if o.tusks then
-			b(1, 3, 1, sx * 1, 1.5, -9, pal.a)
+			keep(b(1, 6, 1, sx * 2, 3.5, -17.5, pal.a))
 		end
 	end
-	b(5, 1, 3, 0, 0.5, 7.5, pal.s)
+	b(6, 2, 3, 0, 1.5, 11.5, pal.s)
 end
 
 function Templates.octo(b, pal, o)
-	b(7, 7, 7, 0, 8.5, 0, pal.p)
-	b(5, 1, 5, 0, 12.5, 0, pal.p)
-	b(1, 1, 1, 3.5, 10, 1, pal.s)
-	b(1, 1, 1, -3.5, 9, -1, pal.s)
-	b(1, 1, 1, 1, 12.5, 2, pal.s)
+	blob(b, 14, 14, 14, 0, 17, 0, pal.p)
+	b(2, 2, 2, 6.2, 20, 2, pal.s)
+	b(2, 2, 2, -6.2, 18, -2, pal.s)
+	b(2, 2, 2, 2, 23.2, 3, pal.s)
+	b(2, 2, 2, -3, 23.2, -2, pal.s)
+	keep(b(2, 1, 1, 0, 13.5, -6.9, BLACK))
 	for _, sx in { -1, 1 } do
-		local w = b(2, 2, 1, sx * 1.8, 9, -3.5, WHITE)
-		w:SetAttribute("Keep", true)
-		eye(b, sx * 1.8, 8.6, -4)
+		keep(b(4, 4, 2, sx * 3.6, 18, -6.4, WHITE))
+		keep(b(2, 2, 1, sx * 3.6, 17.4, -7.7, BLACK))
+		keep(b(1, 1, 1, sx * 3.6 + 0.5, 18.6, -7.9, WHITE))
 	end
 	for k = 0, 7 do
-		local ang = k * math.pi / 4
-		local x, z = math.cos(ang) * 3.2, math.sin(ang) * 3.2
-		b(1.5, 5, 1.5, x, 2.5, z, pal.s)
-		b(1.5, 1.5, 1.5, x * 1.4, 0.75, z * 1.4, pal.s)
+		local ang = k * math.pi / 4 + math.pi / 8
+		local x, z = math.cos(ang) * 6, math.sin(ang) * 6
+		b(3, 6, 3, x, 8, z, pal.p)
+		b(3, 4, 3, x * 1.3, 3.5, z * 1.3, pal.s)
+		b(2, 2, 2, x * 1.7, 1, z * 1.7, pal.s)
+		b(1, 1, 1, x * 1.3, 1, z * 1.3, shade(pal.s))
 	end
 	if o.crown then
-		b(5, 1, 5, 0, 13.5, 0, pal.a)
-		for _, c in { { 2, 2 }, { -2, 2 }, { 2, -2 }, { -2, -2 } } do
-			b(1, 2, 1, c[1], 14.5, c[2], pal.a)
+		b(10, 2, 10, 0, 25, 0, pal.a)
+		for _, c in { { 4, 4 }, { -4, 4 }, { 4, -4 }, { -4, -4 } } do
+			b(2, 4, 2, c[1], 28, c[2], pal.a)
+			keep(b(1, 1, 1, c[1], 30.5, c[2], WHITE))
 		end
 	end
 end
@@ -206,43 +297,61 @@ end
 function Templates.turtle(b, pal)
 	for _, sx in { -1, 1 } do
 		for _, sz in { -1, 1 } do
-			b(2, 2, 2, sx * 3, 1, sz * 3, pal.p)
+			b(4, 4, 4, sx * 6, 2, sz * 6, pal.p)
+			b(4, 1, 1, sx * 6, 0.5, sz * 6 - 2.4, shade(pal.p))
 		end
-		eye(b, sx * 1, 4, -7)
+		eye(b, sx * 2, 8, -13.6, 0, -1)
+		b(3, 1, 3, sx * 3, 12.6, 0, pal.a)
 	end
-	b(6, 2, 7, 0, 2.5, 0, pal.p)
-	b(7, 3, 8, 0, 4.5, 0, pal.s)
-	b(5, 1, 6, 0, 6.5, 0, pal.a)
-	b(3, 3, 3, 0, 3.5, -5.5, pal.p)
-	b(1, 1, 2, 0, 2, 5, pal.p)
+	b(12, 3, 14, 0, 4.5, 0, pal.p)
+	blob(b, 14, 8, 16, 0, 9, 0, pal.s, 2.5)
+	b(4, 1, 4, 0, 13.1, 0, pal.a)
+	b(3, 1, 3, 0, 12.6, 4.5, pal.a)
+	b(3, 1, 3, 0, 12.6, -4.5, pal.a)
+	blob(b, 6, 6, 6, 0, 7, -11, pal.p)
+	b(2, 2, 3, 0, 4, 9, pal.p)
 end
 
 function Templates.frog(b, pal)
+	local dark = shade(pal.p)
 	for _, sx in { -1, 1 } do
-		b(2, 2, 4, sx * 3.5, 1, 1, pal.p)
-		b(1, 2, 1, sx * 2, 1, -2.5, pal.p)
-		b(2, 2, 2, sx * 2, 5.5, -2, pal.p)
-		eye(b, sx * 2, 5.5, -3)
+		blob(b, 5, 5, 8, sx * 7, 2.5, 2, pal.p, 2)
+		b(6, 1, 3, sx * 7.5, 0.5, -3, dark)
+		b(2, 5, 2, sx * 4, 2.5, -5, pal.p)
+		b(3, 1, 3, sx * 4, 0.5, -6, dark)
+		blob(b, 4, 4, 4, sx * 4, 12, -3.5, pal.p, 2)
+		eye(b, sx * 4, 12.2, -5, 0, -1)
+		b(2, 1, 2, sx * 2.5, 11.1, 2, dark)
+		keep(b(1, 1, 1, sx * 1, 9, -6.1, BLACK))
 	end
-	b(6, 4, 6, 0, 3, 0, pal.p)
-	b(4, 3, 1, 0, 2.5, -3, pal.s)
-	b(4, 0.5, 0.5, 0, 3.6, -3.2, pal.a)
+	blob(b, 12, 9, 12, 0, 6.5, 0, pal.p)
+	b(8, 5, 2, 0, 5, -5.4, pal.s)
+	b(8, 1, 1, 0, 7.5, -6.2, pal.a)
+	b(2, 1, 2, 0, 11.1, -1, dark)
 end
 
 function Templates.serpent(b, pal)
-	local segs = { { 3, 9 }, { 5, 5.5 }, { 6, 2 }, { 6.5, -1.5 } }
-	for _, s in segs do
-		b(4, 4, 4, 0, s[1], s[2], pal.p)
-		b(4.2, 1.5, 3.5, 0, s[1] - 1.5, s[2], pal.s)
-		b(1, 2, 2, 0, s[1] + 3, s[2], pal.a)
+	local segs = { { 6, 18 }, { 10, 11 }, { 12, 4 }, { 13, -3 } }
+	for _, sgm in segs do
+		blob(b, 8, 8, 8, 0, sgm[1], sgm[2], pal.p)
+		b(6, 2, 6, 0, sgm[1] - 3.5, sgm[2], pal.s)
+		b(2, 3, 3, 0, sgm[1] + 5, sgm[2], pal.a)
+		b(2, 2, 2, 0, sgm[1] + 4.5, sgm[2] + 3, pal.a)
 	end
-	b(2, 2, 3, 0, 2, 12, pal.s)
-	b(5, 5, 6, 0, 8, -5, pal.p)
-	b(4, 1, 3, 0, 5.5, -8, pal.s)
+	blob(b, 4, 4, 6, 0, 4, 24, pal.s, 2)
+	b(2, 5, 3, 0, 5, 27.5, pal.a)
+	blob(b, 10, 10, 12, 0, 16, -10, pal.p)
+	b(8, 2, 7, 0, 11, -15, pal.s)
+	for _, x in { -3, -1, 1, 3 } do
+		keep(b(1, 1, 1, x, 12.3, -18.2, WHITE))
+	end
 	for _, sx in { -1, 1 } do
-		eye(b, sx * 2.5, 9, -6.5)
-		b(1, 3, 1, sx * 1.5, 11.5, -4, pal.a)
-		b(1, 1, 3, sx * 2.5, 6.5, -9, pal.a)
+		eye(b, sx * 4.4, 18, -13, sx, 0)
+		b(2, 5, 2, sx * 3, 23, -8, pal.a)
+		b(1, 3, 1, sx * 3, 26.5, -7, pal.a)
+		b(1, 1, 6, sx * 5, 13, -18, pal.a)
+		b(1, 3, 1, sx * 5, 11.5, -21, pal.a)
+		keep(b(1, 1, 1, sx * 2, 15, -16.1, BLACK))
 	end
 end
 
@@ -275,7 +384,9 @@ function Voxel.animalScale(animalId: string): number
 	local a = Config.AnimalById[animalId]
 	local tier = rarityTier(a.rarity)
 	-- Rarer animals are much bigger, so a strong base is obvious at a glance.
-	local s = 0.32 * (Config.SizeByTier[tier] or 1)
+	-- 0.16 studs per pixel for a Common pet: half the old pixel size, with
+	-- twice as many pixels in each direction.
+	local s = 0.16 * (Config.SizeByTier[tier] or 1)
 	if a.opts and a.opts.huge then
 		s *= 1.3
 	end
@@ -306,23 +417,31 @@ end
 ----------------------------------------------------------------------------
 -- Eggs
 ----------------------------------------------------------------------------
-local EGG_WIDTHS = { 4, 6, 6, 6, 6, 6, 4, 2 }
+-- Width of the egg at each one-pixel layer, bottom to top.
+local EGG_WIDTHS = { 6, 8, 10, 12, 12, 12, 12, 12, 12, 12, 10, 10, 8, 8, 6, 4 }
+-- Speckles: { layer, face, sideways offset, size }
 local EGG_SPOTS = {
-	{ 2, "-z", 1 },
-	{ 3, "+x", -1 },
-	{ 4, "-x", 1 },
-	{ 5, "-z", -1 },
-	{ 6, "+z", 0 },
-	{ 3, "+z", 1 },
-	{ 5, "+x", 1 },
-	{ 6, "-x", -1 },
-	{ 4, "+z", -1 },
-	{ 2, "+x", 0 },
+	{ 3, "-z", 2, 2 },
+	{ 4, "+x", -2, 1 },
+	{ 5, "-x", 1, 2 },
+	{ 6, "-z", -3, 1 },
+	{ 6, "+z", 2, 2 },
+	{ 7, "+x", 2, 2 },
+	{ 8, "-z", 1, 1 },
+	{ 8, "-x", -3, 1 },
+	{ 9, "+z", -2, 2 },
+	{ 10, "-z", -1, 2 },
+	{ 10, "+x", -1, 1 },
+	{ 11, "-x", 2, 1 },
+	{ 12, "+z", 1, 1 },
+	{ 13, "-z", 1, 1 },
+	{ 13, "+x", 0, 1 },
+	{ 14, "-x", 0, 1 },
 }
 
 function Voxel.eggScale(eggId: string): number
 	local e = Config.EggById[eggId]
-	return 0.42 * (1 + (e.tier - 1) * 0.08)
+	return 0.21 * (1 + (e.tier - 1) * 0.08)
 end
 
 function Voxel.egg(eggId: string, variant: string?, withNest: boolean?): Model
@@ -330,30 +449,39 @@ function Voxel.egg(eggId: string, variant: string?, withNest: boolean?): Model
 	local model = newModel(eggId .. "Egg")
 	local P = Voxel.eggScale(eggId)
 	local b = pixelBuilder(model, P)
-	local baseY = withNest and 0.6 or 0
+	local baseY = withNest and 1.4 or 0
 	local base, spot = e.base, e.spot
 	if variant == "Gold" then
 		base = base:Lerp(Config.Variants.Gold.color, 0.75)
 		spot = spot:Lerp(Color3.fromRGB(255, 240, 160), 0.6)
 	end
-	for i, w in EGG_WIDTHS do
-		local y = baseY + i - 0.5
-		local c = base
-		if variant == "Rainbow" then
-			c = Color3.fromHSV((i / #EGG_WIDTHS) % 1, 0.6, 1)
-		end
-		if w >= 4 then
-			b(w, 1, w - 2, 0, y, 0, c)
-			b(w - 2, 1, w, 0, y, 0, c)
-		else
-			b(w, 1, w, 0, y, 0, c)
+	local rainbow = variant == "Rainbow"
+
+	-- Shell: layers of equal width are merged into one taller box (Rainbow
+	-- eggs keep every layer separate so each can have its own color).
+	local function layerBox(first: number, last: number, w: number)
+		local h = last - first + 1
+		local y = baseY + first - 1 + h / 2
+		local c = rainbow and Color3.fromHSV(((first - 1) / #EGG_WIDTHS) % 1, 0.6, 1) or base
+		b(w, h, w - 2, 0, y, 0, c)
+		b(w - 2, h, w, 0, y, 0, c)
+	end
+	local first = 1
+	for i = 2, #EGG_WIDTHS + 1 do
+		if rainbow or EGG_WIDTHS[i] ~= EGG_WIDTHS[first] then
+			layerBox(first, i - 1, EGG_WIDTHS[first])
+			first = i
 		end
 	end
-	for _, s in EGG_SPOTS do
-		local layer, side, t = s[1], s[2], s[3]
+	-- A lighter shine patch up one side.
+	b(1, 4, 2, EGG_WIDTHS[9] / 2 - 0.42, baseY + 9, -3, base:Lerp(Color3.new(1, 1, 1), 0.55))
+	b(1, 1, 1, EGG_WIDTHS[12] / 2 - 0.42, baseY + 11.5, -3, base:Lerp(Color3.new(1, 1, 1), 0.55))
+
+	for _, sp in EGG_SPOTS do
+		local layer, side, t, size = sp[1], sp[2], sp[3], sp[4]
 		local w = EGG_WIDTHS[layer]
-		local y = baseY + layer - 0.5
-		local edge = w / 2 - 0.45
+		local y = baseY + layer - 1 + size / 2
+		local edge = w / 2 - size / 2 + 0.12
 		local x, z = 0, 0
 		if side == "+x" then
 			x, z = edge, t
@@ -364,22 +492,28 @@ function Voxel.egg(eggId: string, variant: string?, withNest: boolean?): Model
 		else
 			x, z = t, -edge
 		end
-		b(1, 1, 1, x, y, z, variant == "Rainbow" and WHITE or spot)
+		b(size, size, size, x, y, z, rainbow and WHITE or spot)
 	end
+
 	if withNest then
-		local browns = { Color3.fromRGB(120, 70, 35), Color3.fromRGB(150, 90, 45) }
+		local browns = { Color3.fromRGB(120, 70, 35), Color3.fromRGB(150, 90, 45), Color3.fromRGB(100, 58, 30) }
+		b(10, 1, 10, 0, 0.5, 0, browns[3])
+		for k = 0, 15 do
+			local ang = k * math.pi / 8
+			b(3, 1.4, 3, math.cos(ang) * 7.2, 0.7, math.sin(ang) * 7.2, browns[k % 3 + 1])
+		end
 		for k = 0, 11 do
-			local ang = k * math.pi / 6
-			b(2, 1, 2, math.cos(ang) * 3.8, 0.5, math.sin(ang) * 3.8, browns[k % 2 + 1])
+			local ang = k * math.pi / 6 + 0.2
+			b(3, 1.2, 2, math.cos(ang) * 8.6, 1.8, math.sin(ang) * 8.6, browns[(k + 1) % 3 + 1])
 		end
 		for k = 0, 5 do
-			local ang = k * math.pi / 3 + 0.3
-			b(3, 0.5, 1, math.cos(ang) * 4.5, 1.1, math.sin(ang) * 4.5, browns[(k + 1) % 2 + 1])
+			local ang = k * math.pi / 3 + 0.5
+			b(4, 0.6, 1, math.cos(ang) * 9.6, 2.6, math.sin(ang) * 9.6, browns[k % 2 + 1])
 		end
 	end
-	if e.glow or variant == "Rainbow" then
+	if e.glow or rainbow then
 		local light = Instance.new("PointLight")
-		light.Color = variant == "Rainbow" and Color3.fromRGB(255, 150, 255) or e.spot
+		light.Color = rainbow and Color3.fromRGB(255, 150, 255) or e.spot
 		light.Range = 10
 		light.Brightness = 1.5
 		light.Parent = model.PrimaryPart

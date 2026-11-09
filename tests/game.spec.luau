@@ -205,6 +205,29 @@ end
 -- 3. Part the sea (cutscene), grab an egg, carry it home, plant it
 ----------------------------------------------------------------------------
 local camera = ws.CurrentCamera
+
+-- Stand at an egg and complete the hold-E prompt on it.
+local function eggPromptAt(spot)
+	for _, m in ws.LocalOcean:GetChildren() do
+		if m:IsA("Model") and m.PrimaryPart then
+			local p = m.PrimaryPart.CFrame.Position
+			if math.abs(p.X - spot.X) < 0.5 and math.abs(p.Z - spot.Z) < 0.5 then
+				return m.PrimaryPart:FindFirstChildOfClass("ProximityPrompt")
+			end
+		end
+	end
+	return nil
+end
+local function grabAt(spot)
+	h:moveTo(player, spot + Vector3.new(0, 3, 0))
+	h:advance(0.3)
+	local prompt = eggPromptAt(spot)
+	if prompt and prompt.Enabled then
+		h:fire(prompt, "Triggered", player)
+	end
+	h:advance(0.3)
+	return prompt
+end
 local function startSplit(x, holdSeconds)
 	h:moveTo(player, Vector3.new(x, 3, SHORE + 6))
 	h:advance(0.3)
@@ -317,7 +340,12 @@ table.sort(eggSpots, function(a, b)
 	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)
 end)
 h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
-h:advance(0.4)
+h:advance(0.6)
+eq("walking over an egg no longer picks it up", Ocean.carried, 0)
+local firstPrompt = eggPromptAt(eggSpots[1])
+check("egg has a hold-E prompt", firstPrompt ~= nil and firstPrompt.Enabled and firstPrompt.KeyboardKeyCode == roblox.Enum.KeyCode.E)
+check("the prompt needs a short hold", firstPrompt ~= nil and firstPrompt.HoldDuration > 0.2 and firstPrompt.HoldDuration < 1)
+grabAt(eggSpots[1])
 noErrors(h, "grabbing an egg")
 eq("carrying one egg", Ocean.carried, 1)
 check("carried egg shown on the character", player.Character:FindFirstChild("CarriedEgg") ~= nil)
@@ -326,8 +354,8 @@ eq("guide says run", Guide.text, "Run back to the beach!")
 check("egg counter shown", player.PlayerGui.Hud.Carry.Visible == true)
 
 -- A second egg can't be picked up with full hands.
-h:moveTo(player, eggSpots[2] + Vector3.new(0, 3, 0))
-h:advance(0.4)
+local secondPrompt = grabAt(eggSpots[2])
+check("prompts switch off with full hands", secondPrompt ~= nil and secondPrompt.Enabled == false)
 eq("still carrying one egg (hands full)", Ocean.carried, 1)
 
 -- Back on the beach the egg is safe but NOT planted yet.
@@ -403,8 +431,7 @@ eggSpots = Ocean.eggPositions()
 table.sort(eggSpots, function(a, b)
 	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)
 end)
-h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
-h:advance(0.4)
+grabAt(eggSpots[1])
 eq("grabbed an egg on the third run", Ocean.carried, 1)
 h:advance(sp.duration + 1)
 eq("egg lost when caught", Ocean.carried, 0)
@@ -637,10 +664,8 @@ eggSpots = Ocean.eggPositions()
 table.sort(eggSpots, function(a, b)
 	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)
 end)
-h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
-h:advance(0.4)
-h:moveTo(player, eggSpots[2] + Vector3.new(0, 3, 0))
-h:advance(0.4)
+grabAt(eggSpots[1])
+grabAt(eggSpots[2])
 eq("double carry holds two eggs", Ocean.carried, 2)
 local eggsBefore = d.stats.eggsCollected
 h:moveTo(player, Vector3.new(home.X, 3, home.Z - 20))
@@ -724,8 +749,7 @@ eggSpots = Ocean.eggPositions()
 table.sort(eggSpots, function(a, b)
 	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)
 end)
-h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
-h:advance(0.4)
+grabAt(eggSpots[1])
 h:moveTo(player, Vector3.new(sp.cx, 3, SHORE + 8))
 h:advance(0.4)
 eq("carrying an egg on the beach before leaving", Ocean.carried, 1)

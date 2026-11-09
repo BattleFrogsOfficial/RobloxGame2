@@ -132,7 +132,7 @@ local function think(root: BasePart): (string?, Vector3?, boolean)
 			end
 		end
 		if best and newbie then
-			return "Grab an egg before the sea closes!", best, false
+			return "Go to an egg and hold E to grab it before the sea closes!", best, false
 		end
 		return nil, nil, false
 	end
