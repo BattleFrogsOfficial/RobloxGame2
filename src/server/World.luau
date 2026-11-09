@@ -341,8 +341,6 @@ function World.build()
 	spawn.Neutral = true
 	spawn.Duration = 0
 	spawn.Parent = map
-
-	workspace.FallenPartsDestroyHeight = -60
 end
 
 -- Geometry helpers shared with the split logic.

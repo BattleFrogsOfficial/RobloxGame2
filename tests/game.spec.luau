@@ -87,6 +87,13 @@ end
 local w = boot()
 local h = w.h
 noErrors(h, "server boot")
+local startupFailures = {}
+for _, warning in h.warnings do
+	if warning:find("%[Startup%]") then
+		table.insert(startupFailures, warning)
+	end
+end
+check("every system started", #startupFailures == 0, startupFailures[1])
 
 local Config = w.sharedModule("Config")
 local ws = h.workspace

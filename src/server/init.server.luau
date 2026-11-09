@@ -14,14 +14,23 @@ local Training = require(script.Training)
 local Shop = require(script.Shop)
 local Rewards = require(script.Rewards)
 
-World.build()
-Split.makeStaff()
-Pens.init()
-Split.init()
-Training.init()
-Shop.init()
-Rewards.init()
-Data.init() -- last: starts loading players once every listener is hooked up
+-- Start each system on its own so one failure can't stop the rest; any
+-- error shows in the Output window with the system's name.
+local function start(name: string, fn: () -> ())
+	local ok, err = xpcall(fn, debug.traceback)
+	if not ok then
+		warn("[Startup] " .. name .. " failed:\n" .. tostring(err))
+	end
+end
+
+start("Sea Staff", Split.makeStaff)
+start("World", World.build)
+start("Pens", Pens.init)
+start("Split", Split.init)
+start("Training", Training.init)
+start("Shop", Shop.init)
+start("Rewards", Rewards.init)
+start("Data", Data.init) -- last: starts loading players once every listener is hooked up
 
 local actions = {
 	BuyLuck = function(player, times)
