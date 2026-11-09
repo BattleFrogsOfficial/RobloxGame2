@@ -2,18 +2,22 @@
 -- Tests for the pure shared modules (Config, Formulas, Format), run outside
 -- Roblox with tiny stand-ins for Color3 and Random.
 --
--- Run with Lune:   lune run tests/formulas.spec.luau
--- (Any Luau runner that exposes readfile(path) + compile(src, name) also works.)
+-- Run from the repo root:   lune run tests/formulas.spec.luau
 
 local readFile, compileChunk
 if readfile and compile then
-	readFile, compileChunk = readfile, compile
+	readFile = readfile
+	compileChunk = function(src, name, env)
+		local fn = compile(src, name)
+		setfenv(fn, setmetatable(env, { __index = _G }))
+		return fn
+	end
 else
 	local fs = require("@lune/fs")
 	local luau = require("@lune/luau")
 	readFile = fs.readFile
-	compileChunk = function(src, name)
-		return luau.load(src, { debugName = name })
+	compileChunk = function(src, name, env)
+		return luau.load(src, { debugName = name, environment = env })
 	end
 end
 
@@ -66,8 +70,7 @@ local function loadShared(name)
 		return cache[name]
 	end
 	local path = "src/shared/" .. name .. ".luau"
-	local fn = compileChunk(readFile(path), path)
-	local env = setmetatable({
+	local fn = compileChunk(readFile(path), path, {
 		Color3 = _G.Color3,
 		Random = Random,
 		script = { Parent = setmetatable({}, {
@@ -78,8 +81,7 @@ local function loadShared(name)
 		require = function(t)
 			return loadShared(t.__module)
 		end,
-	}, { __index = _G })
-	setfenv(fn, env)
+	})
 	cache[name] = fn()
 	return cache[name]
 end

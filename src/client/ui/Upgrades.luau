@@ -16,6 +16,19 @@ local Upgrades = {}
 local C = Ui.Colors
 local rows = {}
 local statsLabel: TextLabel
+local oddsTitle: TextLabel
+local oddsLabels: { TextLabel } = {}
+
+local function percent(p: number): string
+	if p <= 0 then
+		return "-"
+	elseif p >= 0.1 then
+		return string.format("%d%%", math.floor(p * 100 + 0.5))
+	elseif p >= 0.01 then
+		return string.format("%.1f%%", p * 100)
+	end
+	return string.format("%.2f%%", p * 100)
+end
 
 local function row(parent: Instance, order: number, icon: string, title: string, color: Color3)
 	local f = Ui.card(parent, order)
@@ -76,6 +89,15 @@ local function render()
 	rows.baseDesc.Text = maxed and (d.baseSlots .. " slots (max)") or string.format("%d → %d pen slots", d.baseSlots, d.baseSlots + Config.Base.SlotsPerLevel)
 	Ui.setButtonText(rows.baseBtn, maxed and "MAX" or Format.cash(Formulas.baseCost(d.baseSlots)))
 
+	-- Rarity odds for an egg at the far end of a full-charge split.
+	local full = Formulas.splitParams(d.strength, 1)
+	local depth = (full.length - 6) / (Config.Ocean.ShoreZ * 2)
+	local odds = Formulas.tierOdds(depth, d.luck)
+	oddsTitle.Text = string.format("Egg odds at your deepest point (%d studs out):", math.floor(full.length))
+	for tier, label in oddsLabels do
+		label.Text = percent(odds[tier] or 0)
+	end
+
 	-- What a fully charged split gives you right now.
 	local sp = Formulas.splitParams(d.strength, 1)
 	statsLabel.Text = string.format(
@@ -89,7 +111,7 @@ local function render()
 end
 
 function Upgrades.init(gui: ScreenGui)
-	local win = Ui.window(gui, "Upgrades", "🛍️ Upgrades", C.Blue, Vector2.new(820, 470))
+	local win = Ui.window(gui, "Upgrades", "🛍️ Upgrades", C.Blue, Vector2.new(820, 560))
 	local list = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 22, Parent = win.body })
 	Ui.new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 12), Parent = list })
 
@@ -129,6 +151,42 @@ function Upgrades.init(gui: ScreenGui)
 		ZIndex = 23,
 		Parent = list,
 	})
+
+	-- Egg odds at the deepest point of a full-charge split.
+	local odds = Ui.card(list, 5)
+	odds.Size = UDim2.new(1, 0, 0, 74)
+	oddsTitle = Ui.text({
+		Text = "",
+		Size = UDim2.new(1, -20, 0, 24),
+		Position = UDim2.fromOffset(10, 6),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = Color3.fromRGB(220, 220, 230),
+		ZIndex = 23,
+		Parent = odds,
+	})
+	local oddsRow = Ui.new("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -20, 0, 30),
+		Position = UDim2.fromOffset(10, 36),
+		ZIndex = 23,
+		Parent = odds,
+	})
+	Ui.new("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = oddsRow,
+	})
+	for tier, rarity in Config.Rarities do
+		oddsLabels[tier] = Ui.text({
+			Text = "",
+			Size = UDim2.new(1 / #Config.Rarities, -6, 1, 0),
+			TextColor3 = rarity.color,
+			LayoutOrder = tier,
+			ZIndex = 24,
+			Parent = oddsRow,
+		})
+	end
 
 	win.onOpen = render
 	State.changed:Connect(function()

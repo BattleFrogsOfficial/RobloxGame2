@@ -16,8 +16,8 @@ local MAP_HALF_X = 215
 local MAP_HALF_Z = 265
 local BEACH_END = 150 -- beach sand runs from the shore (110) to here
 
-World.PenWidth = 84
-World.PenDepth = 72
+World.PenWidth = Config.Pen.Width
+World.PenDepth = Config.Pen.Depth
 World.Pens = {} -- { cf: CFrame, side: number }
 
 local SAND = Color3.fromRGB(230, 200, 140)

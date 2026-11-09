@@ -37,15 +37,22 @@ Ocean.canCharge = false
 Ocean.carried = 0
 Ocean.cap = 1
 
+local SEG = 8 -- studs per wall segment
+local MAX_SEGS = math.ceil(O.MaxLength / SEG)
+local WALL_DARK = Color3.fromRGB(45, 140, 235)
+
 local folder: Folder
 local parts: { [string]: BasePart } = {}
+local wallSegs = { L = {}, R = {} } -- [side][i] = { wall, cap }
 local eggModels: { [number]: any } = {}
 local chargeStart = 0
+local chargeSource: any = nil -- "mouse" | "button" | a touch InputObject
 local pendingGrab: number? = nil
 local pendingAt = 0
 local lastFullWarn = 0
 local wasInZone = false
 local shakeUntil = 0
+local lastTick = -1
 
 ----------------------------------------------------------------------------
 -- Water parts
@@ -59,7 +66,7 @@ local function newPart(name: string, color: Color3, transparency: number): BaseP
 	p.CanTouch = false
 	p.CastShadow = false
 	p.Color = color
-	p.Transparency = transparency
+	p.Transparency = 1
 	p.Material = Enum.Material.SmoothPlastic
 	p.Reflectance = 0.08
 	p.TopSurface = Enum.SurfaceType.Smooth
@@ -71,13 +78,22 @@ local function newPart(name: string, color: Color3, transparency: number): BaseP
 	return p
 end
 
+local function hide(p: BasePart)
+	if p.Transparency ~= 1 then
+		p.Transparency = 1
+	end
+end
+
 -- Fit a part to an axis-aligned box; hide it if the box is empty.
 local function setBox(p: BasePart, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number)
 	if x1 - x0 < 0.05 or y1 - y0 < 0.05 or z1 - z0 < 0.05 then
-		p.Transparency = 1
+		hide(p)
 		return
 	end
-	p.Transparency = p:GetAttribute("BaseTransparency") :: number
+	local base = p:GetAttribute("BaseTransparency") :: number
+	if p.Transparency ~= base then
+		p.Transparency = base
+	end
 	p.Size = Vector3.new(x1 - x0, y1 - y0, z1 - z0)
 	p.CFrame = CFrame.new((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)
 end
@@ -89,11 +105,11 @@ end
 local function addSpray(p: BasePart, rate: number): ParticleEmitter
 	local e = Instance.new("ParticleEmitter")
 	e.Color = ColorSequence.new(FOAM)
-	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 0) })
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 0) })
 	e.Transparency = NumberSequence.new(0.3, 1)
 	e.Lifetime = NumberRange.new(0.8, 1.4)
-	e.Speed = NumberRange.new(1, 4)
-	e.SpreadAngle = Vector2.new(30, 30)
+	e.Speed = NumberRange.new(2, 7)
+	e.SpreadAngle = Vector2.new(40, 40)
 	e.Acceleration = Vector3.new(0, -25, 0)
 	e.Rate = rate
 	e.LightInfluence = 0.5
@@ -111,16 +127,49 @@ local function build()
 	newPart("Left", WATER, 0.25)
 	newPart("Right", WATER, 0.25)
 	newPart("Far", WATER, 0.25)
-	addSpray(newPart("WallL", WALL, 0.12), 12)
-	addSpray(newPart("WallR", WALL, 0.12), 12)
-	addSpray(newPart("WallEnd", WALL, 0.08), 40)
-	newPart("CapL", FOAM, 0.15)
-	newPart("CapR", FOAM, 0.15)
-	newPart("CapEnd", FOAM, 0.1)
+
+	-- Corridor walls are a row of segments so their tops can roll like waves.
+	for _, side in { "L", "R" } do
+		for i = 1, MAX_SEGS do
+			local wall = newPart("Wall" .. side .. i, i % 2 == 0 and WALL or WALL_DARK, 0.12)
+			local cap = newPart("Cap" .. side .. i, FOAM, 0.1)
+			wallSegs[side][i] = { wall = wall, cap = cap }
+		end
+	end
+	addSpray(newPart("WallEnd", WALL, 0.06), 60)
+	newPart("CapEnd", FOAM, 0.05)
+	newPart("Curl", FOAM, 0.2) -- foam lip leaning over the corridor as the sea closes
+
+	-- Wet sand along the corridor floor.
+	local wet = newPart("WetSand", Color3.fromRGB(172, 148, 104), 0)
+	wet.Reflectance = 0.12
+
+	-- Invisible walls so you bump into the water instead of slipping out of
+	-- the corridor sideways (which the server treats as being swept away).
+	for _, n in { "BarrierL", "BarrierR" } do
+		local b = newPart(n, WATER, 1)
+		b.CanCollide = false
+	end
+
 	for _, s in { 1, -1 } do
 		newPart("FoamA" .. s, FOAM, 0.35)
 		newPart("FoamB" .. s, FOAM, 0.35)
 	end
+end
+
+local function hideCorridor()
+	for _, n in { "Left", "Right", "Far", "WallEnd", "CapEnd", "Curl", "WetSand" } do
+		hide(parts[n])
+	end
+	for _, side in { "L", "R" } do
+		for _, seg in wallSegs[side] do
+			hide(seg.wall)
+			hide(seg.cap)
+		end
+	end
+	parts.BarrierL.CanCollide = false
+	parts.BarrierR.CanCollide = false
+	parts.WallEnd.ParticleEmitter.Enabled = false
 end
 
 -- Lay out every water part for the current split (or the closed sea).
@@ -131,17 +180,12 @@ local function layout(sp, L: number, rise: number, t: number)
 
 	if not sp or L <= 0.05 then
 		setBox(parts.Main, -H, H, y0, y1, -Z, Z)
-		for _, n in { "Left", "Right", "Far", "WallL", "WallR", "WallEnd", "CapL", "CapR", "CapEnd" } do
-			parts[n].Transparency = 1
-		end
+		hideCorridor()
 		for _, s in { 1, -1 } do
 			local a, b = zSpan(s * (waterline - 1), s * (waterline + 1))
 			setBox(parts["FoamA" .. s], -H, H, y1 - 0.05, y1 + 0.15, a, b)
-			parts["FoamB" .. s].Transparency = 1
+			hide(parts["FoamB" .. s])
 		end
-		parts.WallL.ParticleEmitter.Enabled = false
-		parts.WallR.ParticleEmitter.Enabled = false
-		parts.WallEnd.ParticleEmitter.Enabled = false
 		return
 	end
 
@@ -149,22 +193,67 @@ local function layout(sp, L: number, rise: number, t: number)
 	local xl, xr = sp.cx - sp.width / 2, sp.cx + sp.width / 2
 	local shoreZ = s * Z
 	local farZ = s * (Z - L)
-	parts.Main.Transparency = 1
+	hide(parts.Main)
 	setBox(parts.Left, -H, xl, y0, y1, -Z, Z)
 	setBox(parts.Right, xr, H, y0, y1, -Z, Z)
 	local fa, fb = zSpan(farZ, -shoreZ)
 	setBox(parts.Far, xl, xr, y0, y1, fa, fb)
 
-	-- Walls of water rise up along the corridor.
-	local top = y1 + (O.WallTopY - y1) * (1 - (1 - rise) ^ 3)
-	local ca, cb = zSpan(shoreZ, farZ)
-	setBox(parts.WallL, xl - 4, xl, y0, top, ca, cb)
-	setBox(parts.WallR, xr, xr + 4, y0, top, ca, cb)
-	local ea, eb = zSpan(farZ, farZ - s * 4)
-	setBox(parts.WallEnd, xl - 4, xr + 4, y0, top, ea, eb)
-	setBox(parts.CapL, xl - 4.3, xl + 0.3, top, top + 0.7, ca, cb)
-	setBox(parts.CapR, xr - 0.3, xr + 4.3, top, top + 0.7, ca, cb)
-	setBox(parts.CapEnd, xl - 4.3, xr + 4.3, top, top + 0.7, ea - 0.3, eb + 0.3)
+	-- Walls of water rise along the corridor; each segment's top rolls.
+	local eased = 1 - (1 - rise) ^ 3
+	local baseTop = y1 + (O.WallTopY - y1) * eased
+	for i = 1, MAX_SEGS do
+		local d0 = (i - 1) * SEG
+		local d1 = math.min(i * SEG, L)
+		local segL, segR = wallSegs.L[i], wallSegs.R[i]
+		if d1 - d0 < 0.05 then
+			hide(segL.wall)
+			hide(segL.cap)
+			hide(segR.wall)
+			hide(segR.cap)
+		else
+			local za, zb = zSpan(s * (Z - d0), s * (Z - d1))
+			local topL = baseTop + math.sin(t * 2.1 + i * 0.9) * 1.1 * eased
+			local topR = baseTop + math.sin(t * 2.1 + i * 0.9 + 2) * 1.1 * eased
+			setBox(segL.wall, xl - 4, xl, y0, topL, za, zb)
+			setBox(segL.cap, xl - 4.3, xl + 0.4, topL, topL + 0.8, za, zb)
+			setBox(segR.wall, xr, xr + 4, y0, topR, za, zb)
+			setBox(segR.cap, xr - 0.4, xr + 4.3, topR, topR + 0.8, za, zb)
+		end
+	end
+
+	-- The far wall: taller, and it grows a foam curl once it starts rolling in.
+	local closing = L < sp.length - 0.01 and rise >= 1
+	local endTop = baseTop + 2 + math.sin(t * 3) * 0.8 * eased + (closing and 3 or 0)
+	local ea, eb = zSpan(farZ, farZ - s * 5)
+	setBox(parts.WallEnd, xl - 4, xr + 4, y0, endTop, ea, eb)
+	setBox(parts.CapEnd, xl - 4.3, xr + 4.3, endTop, endTop + 1, ea - 0.3, eb + 0.3)
+	if closing then
+		local ca, cb = zSpan(farZ, farZ + s * 3.5)
+		setBox(parts.Curl, xl, xr, endTop - 2.5, endTop + 0.6, ca, cb)
+	else
+		hide(parts.Curl)
+	end
+	parts.WallEnd.ParticleEmitter.Enabled = closing
+	parts.WallEnd.Color = closing and Color3.fromRGB(30, 110, 215) or WALL
+
+	-- Wet sand on the flat seabed part of the corridor.
+	local wetFar = math.min(L, Z * 2 - O.RampLength)
+	if wetFar > O.RampLength then
+		local wa, wb = zSpan(s * (Z - O.RampLength), s * (Z - wetFar))
+		setBox(parts.WetSand, xl, xr, y0, y0 + 0.08, wa, wb)
+	else
+		hide(parts.WetSand)
+	end
+
+	-- Side barriers (collide only for us; these parts exist only on this client).
+	local ba, bb = zSpan(shoreZ, farZ)
+	for name, x0 in { BarrierL = xl - 3, BarrierR = xr } do
+		local b = parts[name]
+		b.Size = Vector3.new(3, 60, math.max(0.1, bb - ba))
+		b.CFrame = CFrame.new(x0 + 1.5, y0 + 30, (ba + bb) / 2)
+		b.CanCollide = true
+	end
 
 	-- Shore foam, with a gap where the corridor is on our side.
 	for _, side in { 1, -1 } do
@@ -174,15 +263,9 @@ local function layout(sp, L: number, rise: number, t: number)
 			setBox(parts["FoamB" .. side], xr + 4, H, y1 - 0.05, y1 + 0.15, a, b)
 		else
 			setBox(parts["FoamA" .. side], -H, H, y1 - 0.05, y1 + 0.15, a, b)
-			parts["FoamB" .. side].Transparency = 1
+			hide(parts["FoamB" .. side])
 		end
 	end
-
-	local closing = L < sp.length - 0.01 and rise >= 1
-	parts.WallL.ParticleEmitter.Enabled = true
-	parts.WallR.ParticleEmitter.Enabled = true
-	parts.WallEnd.ParticleEmitter.Enabled = closing
-	parts.WallEnd.Color = closing and Color3.fromRGB(30, 110, 215) or WALL
 end
 
 ----------------------------------------------------------------------------
@@ -256,6 +339,12 @@ local function spawnEggs(sp)
 		local yaw = rng:NextNumber(0, math.pi * 2)
 		model:PivotTo(CFrame.new(pos) * CFrame.Angles(0, yaw, 0))
 		eggLabel(model.PrimaryPart, e.egg, e.variant)
+		-- A light beam in the rarity color so eggs can be spotted from the shore.
+		local def = Config.EggById[e.egg]
+		local w = 0.25 + def.tier * 0.12
+		local beam = Voxel.addPart(model, Vector3.new(w, 30, w), CFrame.new(pos + Vector3.new(0, 19, 0)), Config.Rarities[def.tier].color, Enum.Material.Neon)
+		beam.Transparency = 0.55
+		beam.CastShadow = false
 		eggModels[e.id] = { model = model, data = e, pos = pos, yaw = yaw, shown = false }
 	end
 end
@@ -279,6 +368,7 @@ function Ocean.start(sp)
 	Ocean.carried = 0
 	pendingGrab = nil
 	spawnEggs(sp)
+	lastTick = -1
 	shakeUntil = os.clock() + 0.8
 	playSound("rbxasset://sounds/swoosh.wav", 0.9, 0.6)
 	playSound("rbxasset://sounds/swoosh.wav", 0.6, 0.45)
@@ -312,11 +402,23 @@ function Ocean.timing(): (string?, number)
 	return "closing", math.max(0, Formulas.totalDuration(sp) - elapsed)
 end
 
-local function release()
-	if not Ocean.charging then
+-- Start / finish charging. `source` identifies what is holding the charge
+-- ("mouse", "button", or the touch InputObject) so only it can release.
+function Ocean.beginCharge(source: any)
+	if Ocean.canCharge and not Ocean.charging then
+		Ocean.charging = true
+		Ocean.charge = 0
+		chargeStart = os.clock()
+		chargeSource = source
+	end
+end
+
+function Ocean.releaseCharge(source: any)
+	if not Ocean.charging or (source ~= nil and source ~= chargeSource) then
 		return
 	end
 	Ocean.charging = false
+	chargeSource = nil
 	local charge = Ocean.charge
 	Ocean.charge = 0
 	local ok, payload, err = pcall(function()
@@ -329,8 +431,43 @@ local function release()
 	end
 end
 
-local function isPress(input: InputObject): boolean
-	return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+-- How far the closing wall is behind you (studs), or nil if it isn't closing.
+function Ocean.wallGap(): number?
+	local sp = Ocean.active
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not sp or not root then
+		return nil
+	end
+	local elapsed = State.serverNow() - sp.t0
+	if elapsed < O.OpenAnim + sp.openTime then
+		return nil
+	end
+	local d = O.ShoreZ - sp.side * root.Position.Z
+	if d <= 0 then
+		return nil
+	end
+	return Formulas.currentLength(sp, elapsed) - d
+end
+
+-- Positions of this split's eggs that are still on the seabed (for the guide).
+function Ocean.eggPositions(): { Vector3 }
+	local list = {}
+	for _, e in eggModels do
+		if e.shown then
+			table.insert(list, e.pos)
+		end
+	end
+	return list
+end
+
+local function sourceOf(input: InputObject): any
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		return "mouse"
+	elseif input.UserInputType == Enum.UserInputType.Touch then
+		return input
+	end
+	return nil
 end
 
 ----------------------------------------------------------------------------
@@ -376,6 +513,19 @@ local function update()
 		end
 	end
 	layout(sp, L, rise, t)
+
+	-- Tick down the last three seconds before the sea starts rolling back.
+	if sp then
+		local phase, left = Ocean.timing()
+		local sec = math.ceil(left)
+		if phase == "open" and sec <= 3 and sec ~= lastTick then
+			lastTick = sec
+			playSound("rbxasset://sounds/electronicpingshort.wav", 0.5, 0.7)
+		elseif phase == "closing" and lastTick ~= 0 then
+			lastTick = 0
+			playSound("rbxasset://sounds/swoosh.wav", 0.9, 0.5)
+		end
+	end
 
 	-- Eggs: appear as the corridor reaches them, get swept as it closes.
 	if sp then
@@ -438,18 +588,16 @@ function Ocean.init()
 	RunService.RenderStepped:Connect(update)
 
 	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed or not isPress(input) then
+		local source = sourceOf(input)
+		if processed or source == nil then
 			return
 		end
-		if Ocean.canCharge then
-			Ocean.charging = true
-			Ocean.charge = 0
-			chargeStart = os.clock()
-		end
+		Ocean.beginCharge(source)
 	end)
 	UserInputService.InputEnded:Connect(function(input)
-		if isPress(input) then
-			release()
+		local source = sourceOf(input)
+		if source ~= nil then
+			Ocean.releaseCharge(source)
 		end
 	end)
 

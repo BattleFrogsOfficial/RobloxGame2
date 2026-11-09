@@ -130,7 +130,12 @@ local function buildPen(index: number, info)
 	part(model, Vector3.new(W * 2, 0.2, D * 2), cf * CFrame.new(0, 0.1, 0), Color3.fromRGB(115, 215, 85), Enum.Material.Plastic).TopSurface = Enum.SurfaceType.Studs
 
 	-- Fence with a gate gap at the front (local -Z faces the beach).
-	local gate = 9
+	local gate = Config.Pen.Gate
+
+	-- Landmarks the client guide arrows point at.
+	model:SetAttribute("Center", cf.Position)
+	model:SetAttribute("Gate", (cf * CFrame.new(0, 0, -D - 3)).Position)
+	model:SetAttribute("Pad", (cf * CFrame.new(Pens.PadLocal)).Position)
 	fenceLine(model, cf, Vector3.new(-W, 0, -D), Vector3.new(-gate, 0, -D))
 	fenceLine(model, cf, Vector3.new(gate, 0, -D), Vector3.new(W, 0, -D))
 	fenceLine(model, cf, Vector3.new(-W, 0, D), Vector3.new(W, 0, D))
@@ -266,27 +271,43 @@ local function setPromptOwner(prompt: ProximityPrompt, player: Player?)
 	prompt:SetAttribute("OwnerId", player and player.UserId or 0)
 end
 
+-- Animals hop around their pen: turn toward a random spot, then bounce to it.
 local function wander(model: Model, pen)
 	local root = model.PrimaryPart
+	local HOP = 3.2 -- studs per hop
+	local HOP_TIME = 0.34
 	task.spawn(function()
 		task.wait(rng:NextNumber(0, 2))
 		while model.Parent do
 			local target = Vector3.new(rng:NextNumber(WANDER_MIN.X, WANDER_MAX.X), 0, rng:NextNumber(WANDER_MIN.Z, WANDER_MAX.Z))
-			local from = pen.cf:PointToObjectSpace(root.Position)
+			local from = pen.cf:PointToObjectSpace(root.CFrame.Position)
 			local flat = Vector3.new(from.X, 0, from.Z)
 			local dist = (target - flat).Magnitude
 			if dist > 1 then
-				local goal = pen.cf * CFrame.lookAt(target, target + (target - flat).Unit)
-				-- Turn first, then walk.
-				local turn = TweenService:Create(root, TweenInfo.new(0.35), { CFrame = CFrame.new(root.Position) * goal.Rotation })
-				turn:Play()
-				task.wait(0.35)
+				local dir = (target - flat).Unit
+				local facing = CFrame.lookAt(Vector3.zero, dir)
 				if not model.Parent then
-					break
+					return
 				end
-				local walk = TweenService:Create(root, TweenInfo.new(dist / 5, Enum.EasingStyle.Linear), { CFrame = goal })
-				walk:Play()
-				task.wait(dist / 5)
+				TweenService:Create(root, TweenInfo.new(0.3), { CFrame = pen.cf * (facing + flat) }):Play()
+				task.wait(0.3)
+				local hops = math.max(1, math.floor(dist / HOP + 0.5))
+				for i = 1, hops do
+					if not model.Parent then
+						return
+					end
+					local a = flat + dir * (dist * (i - 0.5) / hops)
+					local b = flat + dir * (dist * i / hops)
+					local up = TweenInfo.new(HOP_TIME / 2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+					local down = TweenInfo.new(HOP_TIME / 2, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+					TweenService:Create(root, up, { CFrame = pen.cf * (facing + a + Vector3.new(0, 1.1, 0)) }):Play()
+					task.wait(HOP_TIME / 2)
+					if not model.Parent then
+						return
+					end
+					TweenService:Create(root, down, { CFrame = pen.cf * (facing + b) }):Play()
+					task.wait(HOP_TIME / 2)
+				end
 			end
 			task.wait(rng:NextNumber(1.5, 5))
 		end
@@ -590,6 +611,57 @@ function Pens.placeStoredAnimal(player: Player, uid: number): (boolean, string?)
 		end
 	end
 	return false, "That pet is gone."
+end
+
+-- Fill the base with the highest-earning animals from the base + storage.
+-- Incubating eggs keep their slots.
+function Pens.placeBest(player: Player): (boolean, string?)
+	local d = Data.get(player)
+	local pool = {}
+	local openSlots = {}
+	for i = 1, d.baseSlots do
+		local key = tostring(i)
+		local item = d.pen[key]
+		if item == nil then
+			table.insert(openSlots, key)
+		elseif item.kind == "animal" then
+			table.insert(pool, { uid = item.uid, animal = item.animal, variant = item.variant })
+			table.insert(openSlots, key)
+		end
+	end
+	for _, a in d.animals do
+		table.insert(pool, { uid = a.uid, animal = a.animal, variant = a.variant })
+	end
+	if #pool == 0 then
+		return false, "You don't have any pets yet!"
+	end
+	local before = Data.income(player)
+	table.sort(pool, function(x, y)
+		local ix, iy = Formulas.animalIncome(x.animal, x.variant), Formulas.animalIncome(y.animal, y.variant)
+		if ix ~= iy then
+			return ix > iy
+		end
+		return x.uid < y.uid
+	end)
+	local rest = {}
+	for i, a in pool do
+		local key = openSlots[i]
+		if key then
+			d.pen[key] = { kind = "animal", uid = a.uid, animal = a.animal, variant = a.variant }
+		else
+			table.insert(rest, a)
+		end
+	end
+	for i = #pool + 1, #openSlots do
+		d.pen[openSlots[i]] = nil
+	end
+	d.animals = rest
+	changed(player)
+	local after = Data.income(player)
+	if after > before then
+		return true, "Best pets placed! Income " .. Format.cash(before) .. " → " .. Format.cash(after) .. "/s"
+	end
+	return true, "Your best pets are already in your base."
 end
 
 function Pens.storeAnimal(player: Player, key: string): (boolean, string?)

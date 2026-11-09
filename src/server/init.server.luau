@@ -63,6 +63,9 @@ local actions = {
 		end
 		return Pens.sellAnimal(player, where, id)
 	end,
+	PlaceBest = function(player)
+		return Pens.placeBest(player)
+	end,
 	SellAllStored = function(player)
 		return Pens.sellAllStored(player)
 	end,

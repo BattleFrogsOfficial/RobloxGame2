@@ -374,6 +374,18 @@ function Inventory.init(gui: ScreenGui)
 		pets.sig = nil
 		renderPets()
 	end
+	Ui.button({
+		Text = "Place Best",
+		Color = C.Green,
+		Size = UDim2.fromOffset(200, 34),
+		Position = UDim2.new(1, 0, 0, -4),
+		AnchorPoint = Vector2.new(1, 0),
+		ZIndex = 24,
+		Parent = win.body,
+		OnClick = function()
+			State.action("PlaceBest")
+		end,
+	})
 
 	win, eggs.info, eggs.grid = windowWithGrid(gui, "Eggs", "🥚 Eggs", C.Teal)
 	win.onOpen = function()

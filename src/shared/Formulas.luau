@@ -87,18 +87,29 @@ local function pickWeighted(rng: Random, weights: { number }): number
 	return #weights
 end
 
--- Rarity tier for an egg found `depth` (0..1 of the whole ocean) out.
-function Formulas.rollEggTier(rng: Random, depth: number, luck: number): number
+-- Chance of each rarity tier (array of probabilities summing to 1) for an
+-- egg found `depth` (0..1 of the whole ocean) out with this much luck.
+function Formulas.tierOdds(depth: number, luck: number): { number }
 	local maxTier = math.clamp(2 + math.floor(depth * 5.4), 2, #Config.Eggs)
 	local weights = {}
+	local total = 0
 	for tier = 1, maxTier do
 		local w = Config.RarityWeights[tier]
 		-- Luck and depth each push weight toward rarer tiers.
 		w *= luck ^ ((tier - 1) * 0.55)
 		w *= (1 + depth * 2.5) ^ ((tier - 1) * 0.9)
 		weights[tier] = w
+		total += w
 	end
-	return pickWeighted(rng, weights)
+	for tier = 1, maxTier do
+		weights[tier] /= total
+	end
+	return weights
+end
+
+-- Rarity tier for an egg found `depth` (0..1 of the whole ocean) out.
+function Formulas.rollEggTier(rng: Random, depth: number, luck: number): number
+	return pickWeighted(rng, Formulas.tierOdds(depth, luck))
 end
 
 function Formulas.rollVariant(rng: Random, luck: number): string

@@ -16,6 +16,7 @@ local Remotes = require(Shared.Remotes)
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.Parent.State)
 local Ocean = require(script.Parent.Parent.Ocean)
+local Guide = require(script.Parent.Parent.Guide)
 
 local Hud = {}
 
@@ -26,6 +27,7 @@ local gui: ScreenGui
 local toastHolder: Frame
 local feedHolder: Frame
 local refs: { [string]: any } = {}
+local cashShown, cashTarget = 0, 0
 
 ----------------------------------------------------------------------------
 -- Toasts & floating text
@@ -42,6 +44,9 @@ function Hud.toast(text: string, color: Color3?)
 	label.TextTransparency = 1
 	TweenService:Create(label, TweenInfo.new(0.2), { TextTransparency = 0 }):Play()
 	task.delay(3, function()
+		if not label.Parent then
+			return -- already pushed off by newer toasts
+		end
 		local tw = TweenService:Create(label, TweenInfo.new(0.5), { TextTransparency = 1 })
 		tw:Play()
 		local stroke = label:FindFirstChildOfClass("UIStroke")
@@ -101,6 +106,9 @@ local function feed(amount: number)
 		Parent = feedHolder,
 	})
 	task.delay(2.6, function()
+		if not label.Parent then
+			return
+		end
 		TweenService:Create(label, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
 		local stroke = label:FindFirstChildOfClass("UIStroke")
 		if stroke then
@@ -395,11 +403,60 @@ local function buildTrain()
 	})
 end
 
+-- Red glow around the screen edge that pulses as the closing wave gets near.
+local function buildDanger()
+	local frame = Ui.new("Frame", {
+		Name = "Danger",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -70, 1, -70),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Visible = false,
+		Parent = gui,
+	})
+	refs.dangerStroke = Ui.new("UIStroke", {
+		Thickness = 36,
+		Color = Color3.fromRGB(255, 40, 40),
+		Transparency = 1,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Parent = frame,
+	})
+	refs.danger = frame
+end
+
+-- Touch players get a big hold button so charging doesn't fight the camera.
+local function buildHoldButton()
+	local btn = Ui.button({
+		Name = "HoldToPart",
+		Text = "HOLD\nto part the sea",
+		Color = C.Blue,
+		Size = UDim2.fromOffset(190, 190),
+		Position = UDim2.new(1, -250, 1, -330),
+		Radius = 95,
+		Visible = false,
+		Parent = gui,
+	})
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Ocean.beginCharge("button")
+		end
+	end)
+	btn.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Ocean.releaseCharge("button")
+		end
+	end)
+	refs.holdBtn = btn
+end
+
 ----------------------------------------------------------------------------
 -- Updates
 ----------------------------------------------------------------------------
 local function onState(d)
-	refs.cash.Text = Format.short(d.cash) .. "$"
+	if cashTarget == 0 and cashShown == 0 then
+		cashShown = d.cash -- first state: no count-up from zero
+	end
+	cashTarget = d.cash
 	refs.strength.Text = Format.short(d.strength)
 	local luckText = "x" .. string.format("%.2f", d.luck):gsub("%.?0+$", "") .. " Luck"
 	if d.boosts and d.boosts.luckUntil > d.osTime then
@@ -439,7 +496,20 @@ local function playtimeStatus(): (boolean, number?)
 	return false, soonest
 end
 
-local function perFrame()
+local function perFrame(dt: number)
+	local now = os.clock()
+
+	-- Cash counts up/down toward its real value.
+	if cashShown ~= cashTarget then
+		local diff = cashTarget - cashShown
+		if math.abs(diff) < math.max(1, math.abs(cashTarget) * 0.0005) then
+			cashShown = cashTarget
+		else
+			cashShown += diff * math.min(1, (dt or 0.016) * 10)
+		end
+	end
+	refs.cash.Text = Format.short(cashShown) .. "$"
+
 	-- Charge meter
 	refs.charge.Visible = Ocean.canCharge
 	if Ocean.canCharge then
@@ -456,8 +526,23 @@ local function perFrame()
 		refs.statusTimer.Text = "🌊 Ocean open: " .. string.format("%.1f", left) .. "s"
 		refs.statusTimer.TextColor3 = Color3.fromRGB(150, 230, 255)
 	elseif phase == "closing" then
-		refs.statusTimer.Text = "⚠️ CLOSING! Get back to the beach!"
+		local gap = Ocean.wallGap()
+		if gap and gap > 0 then
+			refs.statusTimer.Text = "⚠️ CLOSING! Wave " .. math.floor(gap) .. " studs behind you!"
+		else
+			refs.statusTimer.Text = "⚠️ CLOSING! Get back to the beach!"
+		end
 		refs.statusTimer.TextColor3 = Color3.fromRGB(255, 110, 100)
+	end
+
+	-- Danger glow: stronger the closer the wave is.
+	local gap = phase == "closing" and Ocean.wallGap() or nil
+	if gap then
+		local danger = math.clamp(1 - gap / 45, 0.15, 1)
+		refs.danger.Visible = true
+		refs.dangerStroke.Transparency = 1 - danger * (0.45 + 0.2 * math.sin(now * 9))
+	else
+		refs.danger.Visible = false
 	end
 	if phase then
 		local cap = State.data and State.data.carry or 1
@@ -468,7 +553,13 @@ local function perFrame()
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local onLand = root and (math.abs(root.Position.Z) >= Config.Ocean.ShoreZ or math.abs(root.Position.X) >= Config.Ocean.HalfX)
 	refs.closeBtn.Visible = phase ~= nil and onLand == true
-	if Ocean.inZone and not Ocean.canCharge and not phase then
+	refs.goPrompt.Position = UDim2.new(0.5, 0, 0, phase and 196 or 96)
+	refs.goPrompt.TextColor3 = Guide.urgent and Color3.fromRGB(255, 120, 100) or Color3.fromRGB(150, 230, 255)
+	refs.holdBtn.Visible = Ocean.canCharge and UserInputService.TouchEnabled
+	if Guide.text then
+		refs.goPrompt.Text = "➤ " .. Guide.text
+		refs.goPrompt.Visible = true
+	elseif Ocean.inZone and not Ocean.canCharge and not phase then
 		refs.goPrompt.Text = "Equip your Sea Staff to part the ocean!"
 		refs.goPrompt.Visible = true
 	elseif Ocean.canCharge and not Ocean.charging then
@@ -516,6 +607,8 @@ function Hud.init()
 	buildRight()
 	buildCharge()
 	buildTrain()
+	buildDanger()
+	buildHoldButton()
 
 	State.toast:Connect(Hud.toast)
 	State.changed:Connect(onState)

@@ -2,6 +2,7 @@
 
 local State = require(script.State)
 local Ocean = require(script.Ocean)
+local Guide = require(script.Guide)
 local Ui = require(script.ui.Ui)
 local Hud = require(script.ui.Hud)
 local Inventory = require(script.ui.Inventory)
@@ -13,6 +14,7 @@ local Hatch = require(script.ui.Hatch)
 
 State.init()
 Ocean.init()
+Guide.init()
 Hud.init()
 
 local windows = Ui.screen("Windows", 5)

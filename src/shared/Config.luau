@@ -215,6 +215,8 @@ Config.Base = { StartSlots = 4, SlotsPerLevel = 2, MaxSlots = 20, BaseCost = 500
 
 Config.Training = { AutoLiftInterval = 1.1, MinClickInterval = 0.18, PadRadius = 7 }
 
+Config.Pen = { Width = 84, Depth = 72, Gate = 9 } -- studs; the gate faces the beach
+
 Config.Offline = { Rate = 0.5, MaxSeconds = 4 * 3600, MinSeconds = 60 }
 Config.SellAnimalSeconds = 25 -- an animal sells for 25s of its income
 Config.MaxStoredAnimals = 60

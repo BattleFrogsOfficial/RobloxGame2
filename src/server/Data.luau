@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Formulas = require(Shared.Formulas)
+local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 
 local Data = {}
@@ -179,11 +180,40 @@ local function buildState(player: Player)
 	}
 end
 
+-- The player-list leaderboard (top right in Roblox).
+local function makeLeaderstats(player: Player)
+	local folder = Instance.new("Folder")
+	folder.Name = "leaderstats"
+	for _, name in { "Cash", "Strength", "Eggs" } do
+		local value = Instance.new("StringValue")
+		value.Name = name
+		value.Value = "0"
+		value.Parent = folder
+	end
+	folder.Parent = player
+end
+
+local function updateLeaderstats(player: Player, d)
+	local folder = player:FindFirstChild("leaderstats")
+	if not folder then
+		return
+	end
+	local values = { Cash = Format.cash(d.cash), Strength = Format.short(d.strength), Eggs = Format.short(d.stats.eggsCollected) }
+	for name, text in values do
+		local value = folder:FindFirstChild(name)
+		if value and value.Value ~= text then
+			value.Value = text
+		end
+	end
+end
+
 local function flush()
 	for player in dirty do
 		dirty[player] = nil
-		if profiles[player] and player.Parent then
+		local d = profiles[player]
+		if d and player.Parent then
 			StateEvent:FireClient(player, buildState(player))
+			updateLeaderstats(player, d)
 		end
 	end
 end
@@ -239,6 +269,7 @@ local function onPlayerAdded(player: Player)
 		playtimeClaimed = {},
 		canSave = canSave,
 	}
+	makeLeaderstats(player)
 	Data.Loaded:Fire(player)
 	Data.markDirty(player)
 	if not canSave then
