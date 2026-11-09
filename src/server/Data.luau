@@ -67,6 +67,7 @@ end
 local profiles: { [Player]: any } = {}
 local sessions: { [Player]: any } = {}
 local dirty: { [Player]: boolean } = {}
+local inFlight = 0 -- saves currently being written
 
 Data.Loaded = Instance.new("BindableEvent") -- fires (player) once data is ready
 
@@ -216,9 +217,11 @@ function Data.save(player: Player)
 		return
 	end
 	d.lastOnline = os.time()
+	inFlight += 1
 	local ok, err = pcall(function()
 		store:SetAsync(key(player), d, { player.UserId })
 	end)
+	inFlight -= 1
 	if not ok then
 		warn("[Data] save failed for", player.Name, err)
 	end
@@ -248,7 +251,14 @@ local function onPlayerAdded(player: Player)
 end
 
 local function onPlayerRemoving(player: Player)
-	Data.save(player)
+	local s = sessions[player]
+	local alreadySaving = s ~= nil and s.leaving == true
+	if s then
+		s.leaving = true
+	end
+	if not alreadySaving then
+		Data.save(player)
+	end
 	profiles[player] = nil
 	sessions[player] = nil
 	dirty[player] = nil
@@ -278,16 +288,18 @@ function Data.init()
 	end)
 
 	game:BindToClose(function()
-		local pending = 0
+		-- PlayerRemoving already saves leaving players; save the rest, then wait
+		-- until every profile has been written and released.
 		for player in profiles do
-			pending += 1
-			task.spawn(function()
-				Data.save(player)
-				pending -= 1
-			end)
+			local s = sessions[player]
+			if s and not s.leaving then
+				s.leaving = true
+				task.spawn(Data.save, player)
+			end
 		end
 		local t = os.clock()
-		while pending > 0 and os.clock() - t < 25 do
+		task.wait()
+		while inFlight > 0 and os.clock() - t < 25 do
 			task.wait(0.1)
 		end
 	end)

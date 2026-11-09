@@ -47,7 +47,7 @@ local function corridorCoords(sp, pos: Vector3): (number, number)
 end
 
 local function eggWorldPos(sp, egg): Vector3
-	return Vector3.new(sp.cx + egg.x, O.SeabedY, sp.side * (O.ShoreZ - egg.d))
+	return Vector3.new(sp.cx + egg.x, Formulas.groundY(egg.d), sp.side * (O.ShoreZ - egg.d))
 end
 
 ----------------------------------------------------------------------------
@@ -290,6 +290,16 @@ local function step()
 			end
 		end
 		if sp and t - sp.t0 > Formulas.totalDuration(sp) then
+			-- Anyone still on the wet lip (inside the grace band) made it: step them
+			-- onto the sand so the next tick banks their egg instead of sweeping them.
+			if root and World.inOcean(root.Position) then
+				local d = corridorCoords(sp, root.Position)
+				if d <= O.SweepGrace + 1 then
+					local p = Vector3.new(root.Position.X, 4, sp.side * (O.ShoreZ + 4))
+					player.Character:PivotTo(CFrame.lookAt(p, p + Vector3.new(0, 0, sp.side)))
+					immuneUntil[player] = clock + 1
+				end
+			end
 			endSplit(player)
 		end
 	end

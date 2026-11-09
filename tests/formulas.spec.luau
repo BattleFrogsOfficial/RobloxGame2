@@ -168,6 +168,11 @@ local full = Formulas.splitParams(100, 1)
 check("tap is shorter than full charge", tap.length < full.length)
 check("charge adds open time", math.abs(full.openTime - tap.openTime - Config.Split.ChargeOpenBonus) < 1e-6)
 
+eq("ground at shore", Formulas.groundY(0), 0)
+eq("ground mid-ramp", Formulas.groundY(Config.Ocean.RampLength / 2), Config.Ocean.SeabedY / 2)
+eq("ground on seabed", Formulas.groundY(100), Config.Ocean.SeabedY)
+eq("ground at far shore", Formulas.groundY(Config.Ocean.ShoreZ * 2), 0)
+
 local sp = { length = 100, openTime = 6, closeSpeed = 8 }
 eq("length at t=0", Formulas.currentLength(sp, 0), 0)
 eq("length after open anim", Formulas.currentLength(sp, Config.Ocean.OpenAnim), 100)

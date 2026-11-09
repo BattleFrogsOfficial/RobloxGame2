@@ -194,7 +194,7 @@ local function buildPen(index: number, info)
 	local board = part(model, Vector3.new(7, 3.4, 0.5), signCf * CFrame.new(0, 3.8, 0), Color3.fromRGB(90, 95, 110))
 	board.Name = "BaseSign"
 	local signGui = Instance.new("SurfaceGui")
-	signGui.Face = Enum.NormalId.Front
+	signGui.Face = Enum.NormalId.Back
 	signGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	signGui.PixelsPerStud = 40
 	signGui.LightInfluence = 0
@@ -280,13 +280,13 @@ local function wander(model: Model, pen)
 				-- Turn first, then walk.
 				local turn = TweenService:Create(root, TweenInfo.new(0.35), { CFrame = CFrame.new(root.Position) * goal.Rotation })
 				turn:Play()
-				turn.Completed:Wait()
+				task.wait(0.35)
 				if not model.Parent then
 					break
 				end
 				local walk = TweenService:Create(root, TweenInfo.new(dist / 5, Enum.EasingStyle.Linear), { CFrame = goal })
 				walk:Play()
-				walk.Completed:Wait()
+				task.wait(dist / 5)
 			end
 			task.wait(rng:NextNumber(1.5, 5))
 		end
@@ -793,11 +793,14 @@ local function tickTimers()
 end
 
 local function tickIncome()
-	for player, pen in penByPlayer do
+	for _, player in Players:GetPlayers() do
 		local d = Data.get(player)
 		if d then
 			local inc = Data.income(player)
-			pen.ownerLabels[2].Text = Format.cash(inc) .. "/s"
+			local pen = penByPlayer[player]
+			if pen then
+				pen.ownerLabels[2].Text = Format.cash(inc) .. "/s"
+			end
 			if inc > 0 then
 				Data.addCash(player, inc)
 				Data.effect(player, "income", inc)

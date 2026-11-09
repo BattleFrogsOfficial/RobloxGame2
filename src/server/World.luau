@@ -236,6 +236,12 @@ function World.build()
 	if baseplate then
 		baseplate:Destroy()
 	end
+	-- Template spawns (e.g. the Baseplate one at the origin) sit mid-ocean.
+	for _, inst in workspace:GetDescendants() do
+		if inst:IsA("SpawnLocation") and not inst:IsDescendantOf(map) then
+			inst:Destroy()
+		end
+	end
 
 	buildGround()
 	buildDecor()
@@ -263,7 +269,7 @@ end
 
 function World.inSplitZone(pos: Vector3): boolean
 	local az = math.abs(pos.Z)
-	return az >= O.ShoreZ - 1 and az <= O.ShoreZ + O.SplitZoneDepth + 2 and math.abs(pos.X) <= O.HalfX - 2 and pos.Y > -3
+	return az >= O.ShoreZ and az <= O.ShoreZ + O.SplitZoneDepth + 2 and math.abs(pos.X) <= O.HalfX - 2 and pos.Y > -3
 end
 
 return World

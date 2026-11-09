@@ -252,7 +252,7 @@ local function spawnEggs(sp)
 	local rng = Random.new(math.floor(sp.t0 * 1000) % 100000)
 	for _, e in sp.eggs do
 		local model = Voxel.egg(e.egg, e.variant, true)
-		local pos = Vector3.new(sp.cx + e.x, O.SeabedY, sp.side * (O.ShoreZ - e.d))
+		local pos = Vector3.new(sp.cx + e.x, Formulas.groundY(e.d), sp.side * (O.ShoreZ - e.d))
 		local yaw = rng:NextNumber(0, math.pi * 2)
 		model:PivotTo(CFrame.new(pos) * CFrame.Angles(0, yaw, 0))
 		eggLabel(model.PrimaryPart, e.egg, e.variant)
@@ -271,7 +271,7 @@ end
 
 local function inZone(pos: Vector3): boolean
 	local az = math.abs(pos.Z)
-	return az >= O.ShoreZ - 1 and az <= O.ShoreZ + O.SplitZoneDepth + 2 and math.abs(pos.X) <= O.HalfX - 2 and pos.Y > -3
+	return az >= O.ShoreZ and az <= O.ShoreZ + O.SplitZoneDepth + 2 and math.abs(pos.X) <= O.HalfX - 2 and pos.Y > -3
 end
 
 function Ocean.start(sp)

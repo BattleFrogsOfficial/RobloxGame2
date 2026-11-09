@@ -59,6 +59,14 @@ function Formulas.currentLength(sp, elapsed: number): number
 	return math.max(0, sp.length - (t - sp.openTime) * sp.closeSpeed)
 end
 
+-- Height of the sea floor `d` studs out from a shore (the ramps slope down
+-- for RampLength studs at both shores, flat seabed in between).
+function Formulas.groundY(d: number): number
+	local O = Config.Ocean
+	local fromShore = math.min(d, O.ShoreZ * 2 - d)
+	return O.SeabedY * math.clamp(fromShore / O.RampLength, 0, 1)
+end
+
 -- Seconds until the corridor has fully closed.
 function Formulas.totalDuration(sp): number
 	return Config.Ocean.OpenAnim + sp.openTime + sp.length / sp.closeSpeed

@@ -27,6 +27,11 @@ To build a place file instead:
 rojo build -o SplitTheOcean.rbxl
 ```
 
+### Server size
+
+There are 8 pens per server, so set **Game Settings → Places → Max Players** to **8** before publishing. A 9th player
+can still play and earn money but has no pen to show their animals in.
+
 ### Saving in Studio
 
 Progress saves with DataStores. In Studio, turn on **Game Settings → Security → Enable Studio Access to API
