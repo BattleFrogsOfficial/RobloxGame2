@@ -300,7 +300,7 @@ local function layout(sp, half: number, length: number, rise: number, t: number)
 	setBox(parts.CapEnd, xl - WALL_THICK - 0.3, xr + WALL_THICK + 0.3, endTop, endTop + 1, farZ - WALL_THICK - 0.3, farZ + 0.3)
 
 	-- Foam churn at the foot of each closing wall.
-	local closing = rise >= 1
+	local closing = rise > 0.05 -- spray as the sea tears open, churn as it closes
 	setBox(parts.ChurnL, xl, xl + 1.2, y0, y0 + 0.5, farZ, SHORE - O.RampLength)
 	setBox(parts.ChurnR, xr - 1.2, xr, y0, y0 + 0.5, farZ, SHORE - O.RampLength)
 	parts.ChurnL.ParticleEmitter.Enabled = closing
