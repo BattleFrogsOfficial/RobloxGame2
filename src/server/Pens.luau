@@ -54,10 +54,19 @@ local function label(parent: Instance, text: string, color: Color3, height: numb
 	return l
 end
 
-local function billboard(adornee: BasePart, offsetY: number, lines: { { string | Color3 | number } }, maxDistance: number?)
+-- World-sized label stack above a part: it shrinks with distance instead of
+-- staying a fixed size on screen. Line heights are in "pixels" at 20 px/stud.
+local STUDS_PER_PIXEL = 0.05
+
+local function billboard(adornee: BasePart, offsetY: number, lines: { { string | Color3 | number } }, maxDistance: number?, scale: number?, reserveTop: number?)
+	local total = reserveTop or 0
+	for _, line in lines do
+		total += (line[3] or 20) :: number
+	end
+	local k = STUDS_PER_PIXEL * (scale or 1)
 	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromOffset(180, 22 * #lines)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, offsetY, 0)
+	gui.Size = UDim2.fromScale(200 * k, total * k)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, offsetY + total * k / 2, 0)
 	gui.MaxDistance = maxDistance or 70
 	gui.LightInfluence = 0
 	gui.Adornee = adornee
@@ -67,10 +76,12 @@ local function billboard(adornee: BasePart, offsetY: number, lines: { { string |
 	layout.Parent = gui
 	local labels = {}
 	for i, line in lines do
-		labels[i] = label(gui, line[1] :: string, line[2] :: Color3, (line[3] or 20) :: number, i)
+		local height = (line[3] or 20) :: number
+		labels[i] = label(gui, line[1] :: string, line[2] :: Color3, height, i)
+		labels[i].Size = UDim2.fromScale(1, height / total)
 	end
 	gui.Parent = adornee
-	return gui, labels
+	return gui, labels, total
 end
 
 local function rarityColor(rarity: string): Color3
@@ -127,7 +138,15 @@ local function buildPen(index: number, info)
 	model.Name = "Pen" .. index
 	local W, D = World.PenWidth / 2, World.PenDepth / 2
 
-	part(model, Vector3.new(W * 2, 0.2, D * 2), cf * CFrame.new(0, 0.1, 0), Color3.fromRGB(115, 215, 85), Enum.Material.Plastic).TopSurface = Enum.SurfaceType.Studs
+	-- Checkered pen floor.
+	local tile = 12
+	for ix = 0, math.floor(W * 2 / tile) - 1 do
+		for iz = 0, math.floor(D * 2 / tile) - 1 do
+			local color = (ix + iz) % 2 == 0 and Color3.fromRGB(122, 220, 92) or Color3.fromRGB(110, 208, 80)
+			local center = Vector3.new(-W + (ix + 0.5) * tile, 0.1, -D + (iz + 0.5) * tile)
+			part(model, Vector3.new(tile, 0.2, tile), cf * CFrame.new(center), color, Enum.Material.SmoothPlastic)
+		end
+	end
 
 	-- Fence with a gate gap at the front (local -Z faces the beach).
 	local gate = Config.Pen.Gate
@@ -144,14 +163,13 @@ local function buildPen(index: number, info)
 
 	-- Owner sign on a pole behind the back fence.
 	local pole = part(model, Vector3.new(1, 12, 1), cf * CFrame.new(0, 6, D + 3), FENCE_POST)
-	local ownerGui, ownerLabels = billboard(pole, 9, {
-		{ "Empty Base", Color3.new(1, 1, 1), 28 },
-		{ "", Color3.fromRGB(120, 255, 120), 22 },
-	}, 400)
-	ownerGui.Size = UDim2.fromOffset(240, 120)
-	ownerLabels[1].Size = UDim2.new(1, 0, 0, 30)
+	local ownerGui, ownerLabels, ownerTotal = billboard(pole, 7, {
+		{ "Empty Base", Color3.new(1, 1, 1), 30 },
+		{ "", Color3.fromRGB(120, 255, 120), 24 },
+	}, 400, 2.2, 62)
 	local face = Instance.new("ImageLabel")
-	face.Size = UDim2.fromOffset(60, 60)
+	face.SizeConstraint = Enum.SizeConstraint.RelativeYY
+	face.Size = UDim2.fromScale(60 / ownerTotal, 60 / ownerTotal)
 	face.BackgroundColor3 = Color3.fromRGB(40, 170, 220)
 	face.LayoutOrder = 0
 	face.Image = ""
@@ -172,14 +190,14 @@ local function buildPen(index: number, info)
 	barbell:PivotTo(padCf * CFrame.new(0, 1.6, 2))
 	barbell.Name = "PadBarbell"
 	barbell.Parent = model
-	local _, padLabels = billboard(pad, 5, { { "+1 STRENGTH", Color3.fromRGB(255, 220, 60), 30 } }, 80)
+	local _, padLabels = billboard(pad, 4.5, { { "+1 STRENGTH", Color3.fromRGB(255, 220, 60), 30 } }, 90, 1.6)
 
 	-- Weight upgrade pad (yellow).
 	local upCf = cf * CFrame.new(UPGRADE_PAD_LOCAL)
 	local upPad = part(model, Vector3.new(0.4, 7, 7), upCf * CFrame.new(0, 0.3, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(255, 220, 60), Enum.Material.SmoothPlastic)
 	upPad.Shape = Enum.PartType.Cylinder
 	upPad.Name = "UpgradePad"
-	local _, upLabels = billboard(upPad, 3.5, {
+	local _, upLabels = billboard(upPad, 2.5, {
 		{ "Heavier Weight", Color3.new(1, 1, 1), 20 },
 		{ "$250", Color3.fromRGB(120, 255, 120), 24 },
 	}, 60)
@@ -352,7 +370,7 @@ local function renderSlot(pen, key: string, item)
 		table.insert(lines, { e.name, Color3.new(1, 1, 1), 22 })
 		table.insert(lines, { e.rarity, rarityColor(e.rarity), 18 })
 		table.insert(lines, { "", Color3.fromRGB(120, 255, 120), 20 })
-		local _, labels = billboard(root, 5 + e.tier * 0.3, lines, 70)
+		local _, labels = billboard(root, 4.2 + e.tier * 0.3, lines, 80)
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Hatch"
 		prompt.ObjectText = e.name
@@ -384,7 +402,7 @@ local function renderSlot(pen, key: string, item)
 		table.insert(lines, { a.rarity, rarityColor(a.rarity), 18 })
 		table.insert(lines, { Format.cash(Formulas.animalIncome(item.animal, item.variant)) .. "/s", Color3.fromRGB(120, 255, 120), 20 })
 		local _, size = model:GetBoundingBox()
-		billboard(model.PrimaryPart, size.Y + 2, lines, 60)
+		billboard(model.PrimaryPart, size.Y + 0.6, lines, 80)
 		wander(model, pen)
 	end
 	model.Parent = pen.contents

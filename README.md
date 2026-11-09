@@ -70,10 +70,34 @@ src/client/      StarterPlayerScripts.Client
   init.client.luau boot
   State.luau       client copy of player state + server actions
   Ocean.luau       draws the ocean, the parted corridor, your eggs; hold-to-charge input
+  Guide.luau       new-player objective text and the trail of arrows on the ground
   ui/              HUD and windows (Pets, Eggs, Sell, Buy, Index, Shop, Gifts, Daily, hatch cutscene)
 tests/
-  formulas.spec.luau  tests for Config / Formulas / Format (run with `lune run tests/formulas.spec.luau`)
+  formulas.spec.luau  tests for the balance math and number formatting
+  game.spec.luau      a full playthrough of the real server + client code
+  harness/Roblox.luau the fake Roblox engine the playthrough runs on
 ```
+
+## Tests
+
+The tests run outside Studio with [Lune](https://lune-org.github.io/docs) (`cargo install lune`, or add it with
+Rokit). From the repo root:
+
+```bash
+lune run tests/formulas.spec.luau
+```
+
+```bash
+lune run tests/game.spec.luau
+```
+
+`game.spec.luau` boots the real server and client scripts on a small fake engine. Lune supplies real Roblox Instances,
+so a wrong property name, a wrong value type or an enum item that doesn't exist fails the test the same way it would
+error in Studio. The harness adds events, a virtual clock, remotes, tweens and in-memory DataStores. The playthrough
+joins a player, parts the sea, grabs and banks eggs, gets swept back, hatches, earns, trains, buys upgrades, claims
+rewards, tests every shop item, manages the inventory, fills a server with 9 players, saves, and rejoins two hours later.
+
+It cannot check what things look like or how the physics feels, so play it in Studio too.
 
 ## Tuning
 
@@ -85,5 +109,5 @@ Almost everything is in `src/shared/Config.luau`:
 - `Config.Eggs` and `Config.Animals` set hatch times, incomes, colours and the voxel template for each animal.
 - `Config.Weights`, `Config.Luck` and `Config.Base` set the upgrade costs.
 
-After changing numbers, run the tests. They also print a table of how deep and how long a full-charge split is at
-different Strength levels.
+After changing numbers, run the tests. `formulas.spec.luau` also prints a table of how deep and how long a full-charge
+split is at different Strength levels.

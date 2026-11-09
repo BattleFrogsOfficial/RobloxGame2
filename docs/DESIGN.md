@@ -31,7 +31,20 @@
    - **Luck:** buy it in the **Buy** menu.
    - **Base size:** upgrade it at the sign by the gate.
 
-If you walk into the ocean without parting it, or step outside your corridor, the sea pushes you back.
+If you walk into the ocean without parting it, the sea pushes you back. Inside your corridor the side walls are solid
+for you, so you can't slip out sideways by accident. The far wall is the danger.
+
+## Feedback while you play
+
+- **Guide:** until a new player has banked an egg, hatched one and trained once, a line of text says what to do next
+  and a trail of green arrows on the ground leads there (routing through the pen gate). During a run it points at the
+  nearest egg, then turns red and points home once you're carrying.
+- **Egg beams:** every egg in the corridor has a light beam in its rarity color, so rare eggs are visible from the shore.
+- **Countdown:** the last three seconds of open time tick. When the sea starts closing, the HUD shows how many studs the
+  wave is behind you and the screen edge pulses red, stronger as it gets closer.
+- **Egg odds:** the Buy menu shows the chance of each rarity at the deepest point you can currently reach, so the
+  effect of Strength and Luck is visible before spending.
+- **Touch:** phones and tablets get a large hold button for charging, so it doesn't fight the camera.
 
 ## Visibility model
 
@@ -45,7 +58,8 @@ If you walk into the ocean without parting it, or step outside your corridor, th
 
 This works because **the water is not on the server at all**. `client/Ocean.luau` builds the sea locally out of a few
 large Parts. When your own split is active it resizes them into left, right and far sections, plus walls and foam caps,
-every frame. The seabed, ramps and coral are real server Parts, so the splitter's character stands on solid ground that
+every frame (the side walls are rows of segments whose tops roll like waves). The seabed, ramps and coral are real
+server Parts, so the splitter's character stands on solid ground that
 everyone shares.
 
 The server is authoritative for everything that matters:
@@ -80,6 +94,9 @@ their timers use `os.time()`.
 
 - **Pens:** 8 per server, 4 on each side, assigned on join. You start with 4 slots, and each upgrade adds 2 (up to 20).
   Animals and eggs in slots are rendered by the server so everyone can see your base.
+- **Pets menu:** *Place Best* fills the base with your highest earners from the base and storage. Incubating eggs keep
+  their slots.
+- **Leaderboard:** Cash, Strength and Eggs show in the Roblox player list.
 - **Index:** a book of all 21 animals. Undiscovered ones are dark silhouettes, and each new discovery pays a one-time
   reward of 120 seconds of that animal's income.
 - **Playtime gifts:** 12 rewards unlock at 1 to 60 minutes of play in a session, and the progress resets when you leave.
@@ -91,7 +108,14 @@ their timers use `os.time()`.
 
 ## Art direction
 
-Everything is built from blocks in code: pixel eggs stacked layer by layer on twig nests, blocky animals from a few
-templates (crab, bird, fish, quadruped, seal, octopus, turtle, frog, serpent), voxel palms and barbells. Gold and
-Rainbow variants recolor the model. The UI uses the chunky toy-box style of the reference: gradient buttons with thick
-black outlines, Fredoka One, a green-header window for gifts, and a blue/brown/orange Buy/Base/Sell bar.
+Everything is built from blocks in code. Roblox no longer draws the old stud texture, so the toy-box look comes from
+checkered tiles on the ground, seabed and pen floors.
+
+- **Models:** pixel eggs stacked layer by layer on twig nests; blocky animals from a few templates (crab, bird, fish,
+  quadruped, seal, octopus, turtle, frog, serpent); voxel palms, umbrellas, barbells and a lighthouse. Gold and Rainbow
+  variants recolor the model. Animals hop as they move around the pen.
+- **Ocean:** drifting foam crests on the closed sea; rolling wave-topped walls, a breaking curl on the closing wall and
+  wet sand along the floor of a parted corridor.
+- **UI:** the chunky toy-box style of the reference, with gradient buttons, thick black outlines, Fredoka One, a
+  green-header window for gifts, and a blue/brown/orange Buy/Base/Sell bar. Labels over eggs and animals are sized in
+  studs, so they shrink with distance.

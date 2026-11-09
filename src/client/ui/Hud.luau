@@ -95,6 +95,22 @@ function Hud.pop(text: string, color: Color3, pos: UDim2, size: number?)
 	end)
 end
 
+-- Brief full-screen wash of color (the sea hitting you).
+function Hud.flash(color: Color3)
+	local f = Ui.new("Frame", {
+		BackgroundColor3 = color,
+		BackgroundTransparency = 0.35,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 45,
+		Parent = gui,
+	})
+	local tw = TweenService:Create(f, TweenInfo.new(0.7), { BackgroundTransparency = 1 })
+	tw:Play()
+	task.delay(0.75, function()
+		f:Destroy()
+	end)
+end
+
 local function feed(amount: number)
 	local label = Ui.text({
 		Text = "+" .. Format.cash(amount),
@@ -307,9 +323,9 @@ local function buildRight()
 		Text = "STARTER PACK!\nR$" .. Config.Products[1].price,
 		Icon = "🎁",
 		Color = C.Red,
-		Size = UDim2.fromOffset(170, 130),
-		Position = UDim2.new(1, -16, 0, 14),
-		AnchorPoint = Vector2.new(1, 0),
+		Size = UDim2.fromOffset(150, 116),
+		Position = UDim2.fromOffset(16, 64), -- left side: the player list sits top-right
+
 		Parent = gui,
 		OnClick = function()
 			Ui.open("Store")
@@ -633,6 +649,9 @@ function Hud.init()
 			Hud.pop("SAFE! 🥚", C.Cash, UDim2.fromScale(0.5, 0.45), 64)
 		elseif kind == "caught" then
 			Hud.pop("SPLASH! 🌊", Color3.fromRGB(120, 200, 255), UDim2.fromScale(0.5, 0.45), 64)
+			Hud.flash(Color3.fromRGB(40, 130, 230))
+		elseif kind == "pushed" then
+			Hud.flash(Color3.fromRGB(40, 130, 230))
 		elseif kind == "discover" then
 			Hud.toast("📖 New Index entry: " .. payload.animal .. "!", C.Yellow)
 		end

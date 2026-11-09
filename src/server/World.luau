@@ -22,7 +22,9 @@ World.Pens = {} -- { cf: CFrame, side: number }
 
 local SAND = Color3.fromRGB(230, 200, 140)
 local SAND_LIGHT = Color3.fromRGB(245, 222, 170)
+local SAND_DARK = Color3.fromRGB(221, 190, 130)
 local GRASS = Color3.fromRGB(95, 200, 70)
+local GRASS_DARK = Color3.fromRGB(86, 188, 62)
 local ROCK = Color3.fromRGB(150, 155, 165)
 
 local map: Folder
@@ -43,6 +45,26 @@ local function block(name: string, minV: Vector3, maxV: Vector3, color: Color3, 
 	p.BottomSurface = Enum.SurfaceType.Smooth
 	p.Parent = map
 	return p
+end
+
+-- Checkerboard of two shades filling a box (Roblox no longer draws stud
+-- textures, so the toy-brick look comes from the tile pattern instead).
+local function tiles(name: string, minV: Vector3, maxV: Vector3, colorA: Color3, colorB: Color3, tile: number)
+	local ix = 0
+	local x = minV.X
+	while x < maxV.X - 0.01 do
+		local x1 = math.min(x + tile, maxV.X)
+		local iz = 0
+		local z = minV.Z
+		while z < maxV.Z - 0.01 do
+			local z1 = math.min(z + tile, maxV.Z)
+			block(name, Vector3.new(x, minV.Y, z), Vector3.new(x1, maxV.Y, z1), (ix + iz) % 2 == 0 and colorA or colorB, Enum.Material.SmoothPlastic)
+			z = z1
+			iz += 1
+		end
+		x = x1
+		ix += 1
+	end
 end
 
 local function surfaceText(part: BasePart, text: string, face: Enum.NormalId, color: Color3)
@@ -70,9 +92,9 @@ local function buildGround()
 			return math.min(s * a, s * b), math.max(s * a, s * b)
 		end
 		local z0, z1 = zr(O.ShoreZ, BEACH_END)
-		block("Beach", Vector3.new(-MAP_HALF_X, -30, z0), Vector3.new(MAP_HALF_X, 0, z1), SAND, Enum.Material.Plastic, true)
+		tiles("Beach", Vector3.new(-MAP_HALF_X, -30, z0), Vector3.new(MAP_HALF_X, 0, z1), SAND, SAND_DARK, 20)
 		z0, z1 = zr(BEACH_END, MAP_HALF_Z)
-		block("Grass", Vector3.new(-MAP_HALF_X, -30, z0), Vector3.new(MAP_HALF_X, 0, z1), GRASS, Enum.Material.Plastic, true)
+		tiles("Grass", Vector3.new(-MAP_HALF_X, -30, z0), Vector3.new(MAP_HALF_X, 0, z1), GRASS, GRASS_DARK, 23)
 
 		-- Split zone: a lighter sand strip along the shoreline.
 		z0, z1 = zr(O.ShoreZ + 1.5, O.ShoreZ + O.SplitZoneDepth)
@@ -100,7 +122,7 @@ local function buildGround()
 	end
 
 	-- Seabed
-	block("Seabed", Vector3.new(-O.HalfX, -30, -O.ShoreZ), Vector3.new(O.HalfX, O.SeabedY, O.ShoreZ), Color3.fromRGB(205, 180, 130), Enum.Material.Plastic, true)
+	tiles("Seabed", Vector3.new(-O.HalfX, -30, -O.ShoreZ), Vector3.new(O.HalfX, O.SeabedY, O.ShoreZ), Color3.fromRGB(205, 180, 130), Color3.fromRGB(194, 168, 118), 20)
 
 	-- Ramps from each shore down to the seabed (thin tilted slabs).
 	local drop = -O.SeabedY
@@ -136,8 +158,8 @@ local function buildGround()
 		{ Vector3.new(MAP_HALF_X, -2, -MAP_HALF_Z), Vector3.new(MAP_HALF_X + T, H, MAP_HALF_Z) },
 	}
 	for _, w in walls do
-		block("Wall", w[1], w[2], Color3.fromRGB(45, 125, 235), Enum.Material.Plastic, true)
-		block("WallRim", Vector3.new(w[1].X, H, w[1].Z), Vector3.new(w[2].X, H + 2, w[2].Z), Color3.fromRGB(120, 215, 60), Enum.Material.Plastic, true)
+		block("Wall", w[1], w[2], Color3.fromRGB(45, 125, 235), Enum.Material.SmoothPlastic)
+		block("WallRim", Vector3.new(w[1].X, H, w[1].Z), Vector3.new(w[2].X, H + 2, w[2].Z), Color3.fromRGB(120, 215, 60), Enum.Material.SmoothPlastic)
 	end
 end
 
@@ -154,6 +176,67 @@ local function buildDecor()
 			palm:PivotTo(CFrame.new(x + rng:NextNumber(-8, 8), 0, s * (BEACH_END - 6)) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0))
 			palm.Parent = decor
 		end
+	end
+
+	-- Beach umbrellas and towels between the palms.
+	local brights = {
+		Color3.fromRGB(255, 90, 90),
+		Color3.fromRGB(255, 200, 60),
+		Color3.fromRGB(80, 180, 255),
+		Color3.fromRGB(190, 110, 255),
+	}
+	local n = 0
+	for _, s in { 1, -1 } do
+		for x = -162, 162, 65 do
+			n += 1
+			local m = Instance.new("Model")
+			m.Name = "Umbrella"
+			local c1 = brights[n % #brights + 1]
+			local base = CFrame.new(x + rng:NextNumber(-6, 6), 0, s * (BEACH_END - 9)) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0)
+			local pole = Voxel.addPart(m, Vector3.new(0.5, 8, 0.5), base * CFrame.new(0, 4, 0), Color3.fromRGB(240, 240, 240))
+			pole.CanCollide = true
+			for layer, size in { 10, 7, 4 } do
+				Voxel.addPart(m, Vector3.new(size, 0.7, size), base * CFrame.new(0, 7.3 + layer * 0.7, 0), layer % 2 == 1 and c1 or Color3.fromRGB(250, 250, 250))
+			end
+			Voxel.addPart(m, Vector3.new(4, 0.15, 8), base * CFrame.new(4.5, 0.08, 0), brights[(n + 1) % #brights + 1])
+			Voxel.addPart(m, Vector3.new(4, 0.16, 1.2), base * CFrame.new(4.5, 0.09, 2), Color3.fromRGB(250, 250, 250))
+			m.Parent = decor
+		end
+	end
+
+	-- A lighthouse on the east cliff.
+	do
+		local m = Instance.new("Model")
+		m.Name = "Lighthouse"
+		local base = CFrame.new((O.HalfX + MAP_HALF_X) / 2, 4, 0)
+		local y = 0
+		for i = 1, 7 do
+			local w = 13 - i
+			local part = Voxel.addPart(m, Vector3.new(w, 5, w), base * CFrame.new(0, y + 2.5, 0), i % 2 == 1 and Color3.fromRGB(235, 70, 60) or Color3.fromRGB(245, 245, 245))
+			part.CanCollide = true
+			y += 5
+		end
+		Voxel.addPart(m, Vector3.new(10, 1, 10), base * CFrame.new(0, y + 0.5, 0), Color3.fromRGB(60, 60, 70))
+		local lamp = Voxel.addPart(m, Vector3.new(4, 4, 4), base * CFrame.new(0, y + 3, 0), Color3.fromRGB(255, 240, 150), Enum.Material.Neon)
+		local light = Instance.new("PointLight")
+		light.Color = Color3.fromRGB(255, 240, 170)
+		light.Range = 40
+		light.Brightness = 2
+		light.Parent = lamp
+		for _, c in { { 2.5, 2.5 }, { -2.5, 2.5 }, { 2.5, -2.5 }, { -2.5, -2.5 } } do
+			Voxel.addPart(m, Vector3.new(0.6, 4, 0.6), base * CFrame.new(c[1], y + 3, c[2]), Color3.fromRGB(60, 60, 70))
+		end
+		Voxel.addPart(m, Vector3.new(8, 1.5, 8), base * CFrame.new(0, y + 5.75, 0), Color3.fromRGB(235, 70, 60))
+		Voxel.addPart(m, Vector3.new(5, 1.5, 5), base * CFrame.new(0, y + 7.25, 0), Color3.fromRGB(235, 70, 60))
+		Voxel.addPart(m, Vector3.new(2, 1.5, 2), base * CFrame.new(0, y + 8.75, 0), Color3.fromRGB(235, 70, 60))
+		m.Parent = decor
+	end
+
+	-- Boulders on the west cliff.
+	for _ = 1, 9 do
+		local size = rng:NextNumber(4, 10)
+		local rock = Voxel.addPart(decor, Vector3.new(size, size * 0.7, size * 0.9), CFrame.new(-(O.HalfX + MAP_HALF_X) / 2 + rng:NextNumber(-10, 10), 4 + size * 0.3, rng:NextNumber(-95, 95)) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0), ROCK:Lerp(Color3.new(0, 0, 0), rng:NextNumber(0.05, 0.3)))
+		rock.CanCollide = true
 	end
 
 	-- Seabed: coral, rocks and kelp, only visible inside a parted corridor.

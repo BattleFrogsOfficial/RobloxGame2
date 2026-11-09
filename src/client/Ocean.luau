@@ -40,6 +40,7 @@ Ocean.cap = 1
 local SEG = 8 -- studs per wall segment
 local MAX_SEGS = math.ceil(O.MaxLength / SEG)
 local WALL_DARK = Color3.fromRGB(45, 140, 235)
+local CRESTS = 5
 
 local folder: Folder
 local parts: { [string]: BasePart } = {}
@@ -155,6 +156,41 @@ local function build()
 		newPart("FoamA" .. s, FOAM, 0.35)
 		newPart("FoamB" .. s, FOAM, 0.35)
 	end
+
+	-- Wave crests drifting across the surface.
+	for i = 1, CRESTS do
+		newPart("CrestA" .. i, FOAM, 0.5)
+		newPart("CrestB" .. i, FOAM, 0.5)
+	end
+end
+
+-- Lines of foam that drift from one shore to the other; they split around
+-- the corridor so they never float across the gap.
+local function layoutCrests(sp, L: number, y1: number, t: number)
+	local H, Z = O.HalfX, O.ShoreZ
+	for i = 1, CRESTS do
+		local phase = (t * 0.03 + i / CRESTS) % 1
+		local z = -Z + 10 + phase * (Z * 2 - 20)
+		local fade = math.sin(phase * math.pi)
+		local a, b = parts["CrestA" .. i], parts["CrestB" .. i]
+		local inCorridor = false
+		if sp and L > 0.05 then
+			local za, zb = zSpan(sp.side * Z, sp.side * (Z - L - 5))
+			inCorridor = z + 1 >= za and z - 1 <= zb
+		end
+		if inCorridor then
+			setBox(a, -H, sp.cx - sp.width / 2 - 4, y1, y1 + 0.12, z - 0.7, z + 0.7)
+			setBox(b, sp.cx + sp.width / 2 + 4, H, y1, y1 + 0.12, z - 0.7, z + 0.7)
+		else
+			setBox(a, -H, H, y1, y1 + 0.12, z - 0.7, z + 0.7)
+			hide(b)
+		end
+		for _, p in { a, b } do
+			if p.Transparency < 1 then
+				p.Transparency = 1 - 0.5 * fade
+			end
+		end
+	end
 end
 
 local function hideCorridor()
@@ -177,6 +213,8 @@ local function layout(sp, L: number, rise: number, t: number)
 	local H, Z = O.HalfX, O.ShoreZ
 	local y0, y1 = O.SeabedY, O.WaterTopY + math.sin(t * 1.3) * 0.12
 	local waterline = Z - 2.5 -- where the water surface meets the ramp
+
+	layoutCrests(sp, L, y1, t)
 
 	if not sp or L <= 0.05 then
 		setBox(parts.Main, -H, H, y0, y1, -Z, Z)
@@ -299,34 +337,40 @@ local function clearEggs()
 	table.clear(eggModels)
 end
 
+-- World-sized name tag over an egg (shrinks with distance).
 local function eggLabel(root: BasePart, egg: string, variant: string)
 	local e = Config.EggById[egg]
+	local lines = {}
+	if variant ~= "Normal" then
+		table.insert(lines, { variant, Config.Variants[variant].color, 18 })
+	end
+	table.insert(lines, { e.name, Color3.new(1, 1, 1), 24 })
+	table.insert(lines, { e.rarity, Config.Rarities[Config.RarityIndex[e.rarity]].color, 20 })
+	local total = 0
+	for _, l in lines do
+		total += l[3]
+	end
 	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromOffset(160, variant ~= "Normal" and 62 or 44)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 4.5, 0)
-	gui.MaxDistance = 140
+	gui.Size = UDim2.fromScale(11, total * 0.06)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, 5 + total * 0.03, 0)
+	gui.MaxDistance = 170
 	gui.LightInfluence = 0
 	gui.Adornee = root
 	local list = Instance.new("UIListLayout")
 	list.SortOrder = Enum.SortOrder.LayoutOrder
 	list.Parent = gui
-	local function line(text: string, color: Color3, h: number, order: number)
-		local l = Instance.new("TextLabel")
-		l.BackgroundTransparency = 1
-		l.Size = UDim2.new(1, 0, 0, h)
-		l.Font = Enum.Font.FredokaOne
-		l.TextScaled = true
-		l.Text = text
-		l.TextColor3 = color
-		l.TextStrokeTransparency = 0
-		l.LayoutOrder = order
-		l.Parent = gui
+	for i, l in lines do
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Size = UDim2.fromScale(1, l[3] / total)
+		label.Font = Enum.Font.FredokaOne
+		label.TextScaled = true
+		label.Text = l[1]
+		label.TextColor3 = l[2]
+		label.TextStrokeTransparency = 0
+		label.LayoutOrder = i
+		label.Parent = gui
 	end
-	if variant ~= "Normal" then
-		line(variant, Config.Variants[variant].color, 18, 0)
-	end
-	line(e.name, Color3.new(1, 1, 1), 24, 1)
-	line(e.rarity, Config.Rarities[Config.RarityIndex[e.rarity]].color, 20, 2)
 	gui.Parent = root
 end
 
@@ -569,6 +613,20 @@ local function update()
 				end
 			end
 		end
+	end
+
+	-- The staff's gem flares up as the charge builds.
+	local staffTool = char and char:FindFirstChild(STAFF_NAME)
+	local gem = staffTool and staffTool:FindFirstChild("Gem")
+	if gem then
+		local light = gem:FindFirstChildOfClass("PointLight")
+		if not light then
+			light = Instance.new("PointLight")
+			light.Color = Color3.fromRGB(120, 255, 255)
+			light.Range = 14
+			light.Parent = gem
+		end
+		light.Brightness = Ocean.charging and (1 + Ocean.charge * 7) or 0.5
 	end
 
 	-- Camera shake while the sea tears open.

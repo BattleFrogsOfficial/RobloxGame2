@@ -192,6 +192,9 @@ local ocean = ws:FindFirstChild("LocalOcean")
 check("closed sea hidden while parted", ocean.Main.Transparency == 1)
 check("corridor walls are visible", ocean.WallL1.Transparency < 1 and ocean.WallR1.Transparency < 1)
 check("far wall is visible", ocean.WallEnd.Transparency < 1)
+check("wall segments past the corridor end stay hidden", ocean.WallL20.Transparency == 1)
+check("wet sand shows on the corridor floor", ocean.WetSand.Transparency < 1)
+check("guide arrows lead to the egg", #ws.GuideArrows:GetChildren() > 0)
 check("side barriers block the player", ocean.BarrierL.CanCollide and ocean.BarrierR.CanCollide)
 local eggSpots = Ocean.eggPositions()
 check("eggs appear in the corridor", #eggSpots >= 2, #eggSpots)
@@ -329,6 +332,12 @@ check("training stopped", player:GetAttribute("Training") == false)
 eq("walk speed restored", player.Character.Humanoid.WalkSpeed, 16)
 check("barbell removed", player.Character:FindFirstChild("TrainingBarbell") == nil)
 noErrors(h, "training")
+
+-- The tutorial is done once you've banked an egg, hatched one and trained.
+h:moveTo(player, Vector3.new(0, 3, 160))
+h:advance(0.5)
+eq("guide goes quiet after the tutorial", Guide.text, nil)
+eq("no guide arrows left on the ground", #ws.GuideArrows:GetChildren(), 0)
 
 check("can't afford luck at first", act("BuyLuck", 1) == false or d.luckLevel == 0 or d.cash >= 0)
 d.cash = 1e12
