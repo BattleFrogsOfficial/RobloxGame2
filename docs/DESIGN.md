@@ -13,13 +13,17 @@ stand against the back wall. A server holds 5 players, one base each.
    out your Sea Staff.
 2. **Charge and release.** Hold click (or the HOLD button on touch) to fill the charge bar, then let go. A tap gives 45%
    of the distance; a full bar gives full distance and 4 more seconds before the sea shuts.
-3. **The sea parts.** A 3.6-second cutscene plays, and you can't move until it ends:
-   - Your character winds the staff back, thrusts it overhead and holds it there, trembling, while the camera arcs
-     around in front of them.
-   - The camera swings behind and rises as the sea peels open from the shore outward. Each stretch of water surges
-     well above its resting height as it tears, a fountain of spray rides the tear, and chunks of water are flung up
-     and out to both sides.
-   - Letterbox bars, a flash and a title show the depth and the number of eggs revealed.
+3. **The sea parts.** A 4-second cutscene plays, and you can't move until it ends:
+   - **Coil, leap, slam.** Your character drops into a deep crouch and twists away with the staff wound far back,
+     launches off the ground swinging it overhead, then comes down into a lunge and drives it forward and down. The
+     camera arcs around in front of them the whole time.
+   - **The slam** (about a third of the way in) is when the sea starts to tear: a shockwave ring and debris burst from
+     the character's feet, the screen flashes and the camera jolts.
+   - **Parting.** The character rises off the ground with both arms pushed out in front, then slowly spreads them
+     wide apart, straining, as the camera swings behind and rises to watch the sea peel open from the shore outward.
+     Each stretch of water surges well above its resting height as it tears, a fountain of spray rides the tear, and
+     chunks of water are flung up and out to both sides.
+   - Letterbox bars and a title show the depth and the number of eggs revealed.
    - The camera then glides back to exactly where your own camera was, so control returns without a cut.
    - **Depth** grows with Strength: `length = (30 + 13.2 · log2(1 + Strength/5)) × chargeFactor`, up to 300 studs, which
      takes about 7M Strength.
@@ -43,9 +47,11 @@ stand against the back wall. A server holds 5 players, one base each.
    Ready* in the Eggs menu). The hatch cutscene plays first; the animal appears in your base, and any "new Index entry"
    news is announced, only after it ends.
 8. **Grow.**
-   - **Strength:** step onto the pink pad in your base. Reps start on their own: your character presses the barbell from
-     the chest to overhead and back, bending at the knees, and each finished rep adds Strength. Step off to stop. The
-     staff is put away while you train.
+   - **Strength:** step onto the pink pad in your base. Reps start on their own, 1.4 seconds each: a clean-and-press.
+     Your character drops into a deep squat with the bar at the shoulders, drives up with a small hop as the bar
+     punches overhead, holds the lockout with shaking arms, and lowers it. Each lockout sends a shockwave ring and
+     debris out from the feet, kicks your camera, and adds Strength. Step off to stop. The staff is put away while you
+     train.
    - **Heavier weights:** buy them on the yellow pad for more Strength per rep.
    - **Luck:** buy it in the **Buy** menu.
    - **Base size:** upgrade it at the sign by the gate.
@@ -114,17 +120,20 @@ their timers use `os.time()`. If you leave while carrying an egg you had already
 
 The staff cast and the barbell reps are animated in code, with no uploaded animation assets. The server publishes only
 timing, as player attributes (`CastStart`, `Training`, `RepStart`, `WeightTier`). `client/Poses.luau` turns that into
-joint rotations every frame on every client. It rotates each joint's resting offset from the value it had when the move
-began and restores it when the move ends. The engine's Animator never writes that offset, so nothing overrides the
-pose, and whatever default animation is playing layers on top.
+full-body poses every frame on every client: each move is a set of keyframe tracks for the shoulders, elbows, hips,
+knees, waist and the root joint (which moves and tilts the whole body, for the crouches, the leap and the hop). It
+changes each joint's resting offset from the value it had when the move began and restores it when the move ends. The
+engine's Animator never writes that offset, so nothing overrides the pose, and whatever default animation is playing
+layers on top.
 
 - **Joint types:** characters come with either classic `Motor6D` joints (offset = `C0`) or, on rigs with Roblox's avatar
   joint upgrade, `AnimationConstraint` joints (offset = the `CFrame` of its `Attachment0`). Both are handled, here and
   in the ragdoll.
-- **Rigs:** R15 (elbows and knees bend) and R6 (straight limbs).
+- **Rigs:** R15 uses every joint. R6 has no elbows, knees or waist, so it gets the shoulders, hips and whole-body
+  movement.
 - **Barbell:** placed at the midpoint of the two hands each frame, so it is always in the character's grip.
 - **Diagnostics:** each move prints one `[Poses]` line (avatar type, number and type of joints found) to the Output
-  window and, for your own character, on screen. Errors are shown the same way.
+  window.
 
 The build number (`Config.Build`) is shown in small print at the top of the screen and is part of the place file's
 name, so it is always clear which build is running.

@@ -49,31 +49,34 @@ local function smooth(k: number): number
 	return k * k * (3 - 2 * k)
 end
 
--- Half the corridor's width `elapsed` seconds after the split began. During
--- the cutscene this is the width at the shore (the first place to open);
--- afterwards both walls close in steadily along the whole corridor.
+-- Half the corridor's width `elapsed` seconds after the split began. Nothing
+-- moves until the staff slams down partway through the cutscene; then the
+-- shore tears open first. After the cutscene both walls close in steadily
+-- along the whole corridor.
 function Formulas.halfWidth(sp, elapsed: number): number
 	local anim = Config.Ocean.OpenAnim
 	local full = sp.width / 2
-	if elapsed <= 0 then
-		return 0
-	elseif elapsed < anim then
-		return full * smooth(elapsed / (anim * 0.5))
+	if elapsed < anim then
+		return full * smooth((elapsed / anim - Config.Ocean.SlamAt) / 0.35)
 	end
 	return full * math.max(0, 1 - (elapsed - anim) / sp.duration)
 end
 
--- Half-width at a point `d` studs out from the shore. During the cutscene
--- the sea peels open from the shore outward, so far points open later; by
--- the end of the cutscene the whole corridor is fully open.
+-- Half-width at a point `d` studs out from the shore. After the slam the sea
+-- peels open from the shore outward, so far points open later; by the end
+-- of the cutscene the whole corridor is fully open.
 function Formulas.halfWidthAt(sp, d: number, elapsed: number): number
 	local anim = Config.Ocean.OpenAnim
 	if elapsed >= anim then
 		return Formulas.halfWidth(sp, elapsed)
 	end
-	local start = math.clamp(d / sp.length, 0, 1) * anim * 0.45
-	return sp.width / 2 * smooth((elapsed - start) / (anim * 0.5))
+	local start = Config.Ocean.SlamAt + math.clamp(d / sp.length, 0, 1) * Formulas.RipSpan
+	return sp.width / 2 * smooth((elapsed / anim - start) / 0.35)
 end
+
+-- Fraction of the cutscene the tear takes to travel from the shore to the
+-- far end (slam + rip + opening = the whole cutscene).
+Formulas.RipSpan = 1 - 0.35 - Config.Ocean.SlamAt
 
 -- Is there still room to stand in the corridor?
 function Formulas.isOpen(sp, elapsed: number): boolean

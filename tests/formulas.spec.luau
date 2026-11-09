@@ -180,6 +180,7 @@ local anim = Config.Ocean.OpenAnim
 local sp = { length = 100, width = 30, duration = 20 }
 eq("shut before it starts", Formulas.halfWidth(sp, 0), 0)
 eq("fully open when the cutscene ends", Formulas.halfWidth(sp, anim), 15)
+eq("still shut during the coil and leap", Formulas.halfWidth(sp, anim * 0.2), 0)
 check("already closing a second later", Formulas.halfWidth(sp, anim + 1) < 15)
 eq("half closed halfway through", Formulas.halfWidth(sp, anim + 10), 7.5)
 eq("shut at the end", Formulas.halfWidth(sp, anim + 20), 0)
@@ -196,10 +197,12 @@ check("closed once the gap is too small to stand in", not Formulas.isOpen(sp, an
 eq("total duration", Formulas.totalDuration(sp), anim + 20)
 
 -- During the cutscene the sea peels open from the shore outward.
-check("the shore opens before the far end", Formulas.halfWidthAt(sp, 0, anim * 0.3) > Formulas.halfWidthAt(sp, 100, anim * 0.3))
-eq("the far end is still shut early on", Formulas.halfWidthAt(sp, 100, anim * 0.3), 0)
+local slam = Config.Ocean.SlamAt
+eq("nothing opens before the staff slams down", Formulas.halfWidthAt(sp, 0, anim * (slam - 0.02)), 0)
+check("the shore starts opening right after the slam", Formulas.halfWidthAt(sp, 0, anim * (slam + 0.1)) > 0)
+check("the shore opens before the far end", Formulas.halfWidthAt(sp, 0, anim * 0.55) > Formulas.halfWidthAt(sp, 100, anim * 0.55))
+eq("the far end is still shut halfway through", Formulas.halfWidthAt(sp, 100, anim * 0.55), 0)
 eq("the whole corridor is open when the cutscene ends", Formulas.halfWidthAt(sp, 100, anim), 15)
-eq("near the end of the cutscene the far end is fully open too", Formulas.halfWidthAt(sp, 100, anim * 0.96), 15)
 for d = 0, 100, 20 do
 	local lastHw = 0
 	for t = 0, anim, anim / 20 do

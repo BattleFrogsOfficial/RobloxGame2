@@ -861,7 +861,20 @@ function Harness:spawnCharacter(player, position)
 	end
 	local root = part("HumanoidRootPart", roblox.Vector3.new(2, 2, 1), roblox.Vector3.new(0, 0, 0))
 	part("Head", roblox.Vector3.new(1.2, 1.2, 1.2), roblox.Vector3.new(0, 1.6, 0))
-	part("UpperTorso", roblox.Vector3.new(2, 1.6, 1), roblox.Vector3.new(0, 0.4, 0))
+	local upperTorso = part("UpperTorso", roblox.Vector3.new(2, 1.6, 1), roblox.Vector3.new(0, 0.4, 0))
+	local lowerTorso = part("LowerTorso", roblox.Vector3.new(2, 0.4, 1), roblox.Vector3.new(0, -0.6, 0))
+	local function motorIn(parent, name)
+		local joint = I.new("Motor6D")
+		joint.Name = name
+		joint.Parent = parent
+	end
+	motorIn(lowerTorso, "Root")
+	motorIn(upperTorso, "Waist")
+	for _, side in { "Right", "Left" } do
+		local x = side == "Right" and 0.5 or -0.5
+		motorIn(part(side .. "UpperLeg", roblox.Vector3.new(1, 1, 1), roblox.Vector3.new(x, -1.3, 0)), side .. "Hip")
+		motorIn(part(side .. "LowerLeg", roblox.Vector3.new(1, 1, 1), roblox.Vector3.new(x, -2.2, 0)), side .. "Knee")
+	end
 	for _, side in { "Right", "Left" } do
 		local x = side == "Right" and 1.5 or -1.5
 		local pieces = {

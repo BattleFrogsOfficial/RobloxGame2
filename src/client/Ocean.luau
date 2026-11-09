@@ -378,7 +378,7 @@ local function layout(sp, elapsed: number, t: number)
 	-- Spray: a fountain riding the tear while it opens, plus flung chunks of
 	-- water; then foam churning at the foot of each wall as they close.
 	local xl, xr = sp.cx - half, sp.cx + half
-	local frontK = elapsed / (O.OpenAnim * 0.45)
+	local frontK = (elapsed / O.OpenAnim - O.SlamAt) / Formulas.RipSpan -- 0 at the slam, 1 at the far end
 	local ripping = opening and frontK > 0 and frontK < 1.15
 	if ripping then
 		local frontD = math.min(frontK, 1) * length
@@ -576,16 +576,17 @@ local function smoothstep(k: number): number
 	return k * k * (3 - 2 * k)
 end
 
--- Shot 1: a low arc in front of the player while they wind up and thrust.
+-- Shot 1: a wide, low arc in front of the player for the coil, the leap
+-- and the slam (wide enough to keep the leap in frame).
 local function heroShot(p: Vector3, u: number): CFrame
-	local angle = math.rad(40 - 55 * u)
-	local pos = p + Vector3.new(math.sin(angle) * 10, 2 + u * 1.8, -math.cos(angle) * 10)
-	return CFrame.lookAt(pos, p + Vector3.new(0, 2.8, 0))
+	local angle = math.rad(50 - 70 * u)
+	local pos = p + Vector3.new(math.sin(angle) * 15, 1.5 + u * 3, -math.cos(angle) * 15)
+	return CFrame.lookAt(pos, p + Vector3.new(0, 3.6, 0))
 end
 
 -- Shot 2: behind and above, rising as the tear races away from the shore.
 local function seaShot(p: Vector3, v: number, length: number): CFrame
-	local pos = (p + Vector3.new(0, 8, 13)):Lerp(p + Vector3.new(0, 32 + length * 0.07, 30), v)
+	local pos = (p + Vector3.new(0, 9, 15)):Lerp(p + Vector3.new(0, 32 + length * 0.07, 32), v)
 	return CFrame.lookAt(pos, p + Vector3.new(0, -5, -(18 + length * 0.6 * v)))
 end
 
@@ -599,23 +600,28 @@ local function updateCutscene(sp, elapsed: number)
 		return
 	end
 	local p = scene.origin
+	local slam = O.SlamAt
 	local cf
-	if k < 0.22 then
-		cf = heroShot(p, k / 0.22)
-	elseif k < 0.3 then
+	if k < slam + 0.03 then
+		cf = heroShot(p, k / (slam + 0.03))
+		if k > slam then
+			-- The slam jolts the camera.
+			cf *= CFrame.new((math.random() - 0.5) * 1.6, (math.random() - 0.5) * 1.6, 0)
+		end
+	elseif k < slam + 0.11 then
 		-- Whip around from the hero shot to the view down the sea.
-		cf = heroShot(p, 1):Lerp(seaShot(p, 0, sp.length), smoothstep((k - 0.22) / 0.08))
-	elseif k < 0.82 then
-		local v = smoothstep((k - 0.3) / 0.52)
+		cf = heroShot(p, 1):Lerp(seaShot(p, 0, sp.length), smoothstep((k - slam - 0.03) / 0.08))
+	elseif k < 0.85 then
+		local v = smoothstep((k - slam - 0.11) / (0.85 - slam - 0.11))
 		cf = seaShot(p, v, sp.length)
 		local shake = (1 - v) * 0.8
 		cf *= CFrame.new((math.random() - 0.5) * shake, (math.random() - 0.5) * shake, 0)
 	else
 		-- Glide back to the player's own camera.
-		cf = seaShot(p, 1, sp.length):Lerp(scene.home, smoothstep((k - 0.82) / 0.18))
+		cf = seaShot(p, 1, sp.length):Lerp(scene.home, smoothstep((k - 0.85) / 0.15))
 	end
 	scene.camera.CFrame = cf
-	scene.camera.FieldOfView = scene.fov + 14 * math.sin(math.pi * math.clamp(k / 0.82, 0, 1))
+	scene.camera.FieldOfView = scene.fov + 14 * math.sin(math.pi * math.clamp(k / 0.85, 0, 1))
 end
 
 ----------------------------------------------------------------------------

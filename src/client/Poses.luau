@@ -1,12 +1,17 @@
--- Procedural limb animation for every player, on every client.
+-- Procedural full-body animation for every player, on every client.
 --
--- Two moves: raising the Sea Staff to part the sea, and barbell reps on the
--- training pad. The server only publishes timing as player attributes
--- (CastStart, Training, RepStart, WeightTier); each client turns that into
--- joint rotations here, so the motion works on both R6 and R15 avatars and
--- is seen by everyone.
+-- Two moves:
+--   cast    - parting the sea: coil, leap, slam the staff down, then rise off
+--             the ground with both arms spreading apart as the sea opens
+--   workout - a clean-and-press rep: deep squat, explosive drive with a hop
+--             as the bar punches overhead, a shaking hold, and the lower
 --
--- Joints are posed by rotating each joint's resting offset from the value it
+-- The server only publishes timing as player attributes (CastStart,
+-- Training, RepStart, WeightTier); each client turns that into joint
+-- rotations here, so the motion works on both R6 and R15 avatars and is seen
+-- by everyone.
+--
+-- Joints are posed by changing each joint's resting offset from the value it
 -- had when the move began, and putting that value back when the move ends.
 -- The engine's Animator never writes that offset (it writes Transform), so
 -- nothing overrides the pose; whatever default animation is playing (idle,
@@ -19,20 +24,25 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Voxel = require(Shared.Voxel)
 
-local State = require(script.Parent.State)
-
 local Poses = {}
 
 local rad = math.rad
 
+-- Moments in each move (as a fraction of its length) that get an impact effect.
+Poses.SLAM = 0.32 -- cast: the staff hits the ground and the sea starts to tear
+Poses.LOCKOUT = 0.5 -- workout: the bar locks out overhead
+
 local folder: Folder
 local barbells: { [Player]: { model: Model, tier: number } } = {}
+local lastPhase: { [Player]: number } = {}
 
 ----------------------------------------------------------------------------
 -- Rig access
@@ -54,6 +64,7 @@ local R6_JOINTS = {
 	lShoulder = { "Torso", "Left Shoulder" },
 	rHip = { "Torso", "Right Hip" },
 	lHip = { "Torso", "Left Hip" },
+	root = { "HumanoidRootPart", "RootJoint" },
 }
 
 local function isR6(char: Model): boolean
@@ -98,14 +109,28 @@ local function setOffset(j: Instance, cf: CFrame)
 	end
 end
 
--- Rotation that swings a limb forward/up by `degrees` from hanging straight
--- down. R15 joints share the limb's axes; R6 shoulder and hip joints are
--- turned sideways, mirrored between left and right.
-local function swing(r6: boolean, left: boolean, degrees: number): CFrame
-	if r6 then
-		return CFrame.Angles(0, 0, rad(left and -degrees or degrees))
+-- Turn a pose entry into the rotation for a joint on this rig.
+--   limbs (shoulder, elbow, hip, knee): { f = degrees forward/up from hanging
+--     straight down, s = degrees out to the side }
+--   root:  { y = studs up, lean = degrees forward, yaw = degrees of turn }
+--   waist: { lean = degrees forward, yaw = degrees of turn }
+-- R15 joints share their limb's axes. R6 shoulder and hip joints are turned
+-- sideways (mirrored left to right) and its root joint is tipped on its back.
+local function offsetFor(r6: boolean, key: string, v): CFrame
+	if key == "root" then
+		if r6 then
+			return CFrame.new(0, 0, v.y or 0) * CFrame.Angles(rad(v.lean or 0), 0, rad(v.yaw or 0))
+		end
+		return CFrame.new(0, v.y or 0, 0) * CFrame.Angles(rad(-(v.lean or 0)), rad(v.yaw or 0), 0)
+	elseif key == "waist" then
+		return CFrame.Angles(rad(-(v.lean or 0)), rad(v.yaw or 0), 0)
 	end
-	return CFrame.Angles(rad(degrees), 0, 0)
+	local left = string.sub(key, 1, 1) == "l"
+	local f, s = v.f or 0, v.s or 0
+	if r6 then
+		return CFrame.Angles(0, 0, rad(left and -f or f)) * CFrame.Angles(rad(-s), 0, 0)
+	end
+	return CFrame.Angles(rad(f), 0, 0) * CFrame.Angles(0, 0, rad(left and -s or s))
 end
 
 -- What we are currently posing: per player, the character and each posed
@@ -125,7 +150,6 @@ local function release(player: Player)
 	end
 end
 
--- Apply a pose: joint key -> degrees (limbs) or CFrame (root / waist).
 local function apply(player: Player, char: Model, move: string, pose: { [string]: any })
 	local state = posed[player]
 	if state and (state.char ~= char or state.move ~= move) then
@@ -136,7 +160,7 @@ local function apply(player: Player, char: Model, move: string, pose: { [string]
 	if not state then
 		state = { char = char, move = move, base = {} }
 		posed[player] = state
-		-- One line per move, to make problems visible.
+		-- One line in the Output window per move, for diagnosis.
 		local found, kind = 0, "no"
 		for key in pose do
 			local j = joint(char, r6, key)
@@ -145,13 +169,7 @@ local function apply(player: Player, char: Model, move: string, pose: { [string]
 				kind = j.ClassName
 			end
 		end
-		local report = string.format("[Poses] %s: %s on a %s rig, %d %s joints", player.Name, move, r6 and "R6" or "R15", found, kind)
-		print(report)
-		-- While this system is being verified, also say it on screen for
-		-- your own character (no need to open the Output window).
-		if player == Players.LocalPlayer then
-			State.toast:Fire(report, Color3.fromRGB(190, 190, 200))
-		end
+		print(string.format("[Poses] %s: %s on a %s rig, %d %s joints", player.Name, move, r6 and "R6" or "R15", found, kind))
 	end
 	for key, value in pose do
 		local j = joint(char, r6, key)
@@ -164,15 +182,14 @@ local function apply(player: Player, char: Model, move: string, pose: { [string]
 			end
 			local base = state.base[j]
 			if base then
-				local offset = if typeof(value) == "CFrame" then value else swing(r6, string.sub(key, 1, 1) == "l", value)
-				setOffset(j, base * offset)
+				setOffset(j, base * offsetFor(r6, key, value))
 			end
 		end
 	end
 end
 
 ----------------------------------------------------------------------------
--- Keyframe helper: value at time k along { {time, value}, ... }
+-- Keyframe helper: value at time k along { {time, value}, ... }, eased.
 ----------------------------------------------------------------------------
 local function track(k: number, keys: { { number } }): number
 	if k <= keys[1][1] then
@@ -193,51 +210,140 @@ end
 -- The moves
 ----------------------------------------------------------------------------
 
--- Parting the sea: wind the staff back, thrust it overhead, hold it there
--- trembling while the sea tears open, then lower it. Angles are added on
--- top of the default tool-holding pose, which already has the staff arm
--- raised about 90 degrees in front of the body.
-function Poses.cast(k: number, clock: number): { [string]: any }
-	local tremble = (k > 0.3 and k < 0.86) and math.sin(clock * 38) * 3 or 0
-	local crouch = track(k, { { 0, 0 }, { 0.14, 22 }, { 0.26, 6 }, { 0.86, 10 }, { 1, 0 } })
+-- Parting the sea, k from 0 to 1 over the cutscene:
+--   0.00 - 0.12  coil: drop into a deep crouch, twist away, staff wound back
+--   0.12 - 0.24  leap: launch off the ground, staff swung up overhead
+--   0.24 - 0.32  slam: come down into a lunge, staff driven forward and down
+--   0.32 - 0.85  part: rise off the ground, both arms pushed out in front and
+--                then slowly spread wide apart as the sea opens, straining
+--   0.85 - 1.00  settle back onto the sand
+-- The staff arm's angles are added to the default tool-holding pose, which
+-- already has that arm raised about 90 degrees in front of the body.
+function Poses.cast(k: number, clock: number)
+	local strain = (k > 0.4 and k < 0.86) and math.sin(clock * 42) * 3 or 0
+	local hover = (k > 0.45 and k < 0.9) and math.sin(clock * 3) * 0.25 or 0
+	local spread = track(k, { { 0, 0 }, { 0.36, 0 }, { 0.45, 12 }, { 0.85, 88 }, { 1, 0 } })
 	return {
-		rShoulder = track(k, { { 0, 0 }, { 0.14, -120 }, { 0.26, 88 }, { 0.86, 84 }, { 1, 0 } }) + tremble,
-		rElbow = track(k, { { 0, 0 }, { 0.14, 50 }, { 0.26, 0 }, { 0.86, 0 }, { 1, 0 } }),
-		lShoulder = track(k, { { 0, 0 }, { 0.14, 30 }, { 0.26, 95 }, { 0.86, 85 }, { 1, 0 } }) - tremble,
-		lElbow = track(k, { { 0, 0 }, { 0.14, 40 }, { 0.26, 10 }, { 0.86, 15 }, { 1, 0 } }),
-		rHip = crouch,
-		lHip = crouch * 0.4,
-		rKnee = -crouch * 1.6,
-		lKnee = -crouch * 0.8,
-		waist = CFrame.Angles(rad(track(k, { { 0, 0 }, { 0.14, 14 }, { 0.26, -12 }, { 0.86, -8 }, { 1, 0 } })), 0, 0),
-		root = CFrame.new(0, -crouch * 0.012, 0),
+		rShoulder = {
+			f = track(k, { { 0, 0 }, { 0.12, -150 }, { 0.24, 95 }, { 0.32, -15 }, { 0.42, 5 }, { 0.85, 8 }, { 1, 0 } }) + strain,
+			s = spread,
+		},
+		rElbow = { f = track(k, { { 0, 0 }, { 0.12, 80 }, { 0.24, 0 }, { 0.32, 25 }, { 0.42, 0 }, { 1, 0 } }) },
+		lShoulder = {
+			f = track(k, { { 0, 0 }, { 0.12, 75 }, { 0.24, 160 }, { 0.32, 55 }, { 0.42, 95 }, { 0.85, 98 }, { 1, 0 } }) - strain,
+			s = spread,
+		},
+		lElbow = { f = track(k, { { 0, 0 }, { 0.12, 50 }, { 0.24, 10 }, { 0.32, 30 }, { 0.42, 0 }, { 1, 0 } }) },
+		rHip = { f = track(k, { { 0, 0 }, { 0.12, 75 }, { 0.24, -20 }, { 0.32, 65 }, { 0.42, 25 }, { 0.85, 12 }, { 1, 0 } }), s = spread * 0.12 },
+		lHip = { f = track(k, { { 0, 0 }, { 0.12, 75 }, { 0.24, 25 }, { 0.32, -30 }, { 0.42, -10 }, { 0.85, 6 }, { 1, 0 } }), s = spread * 0.12 },
+		rKnee = { f = track(k, { { 0, 0 }, { 0.12, -115 }, { 0.24, -35 }, { 0.32, -75 }, { 0.42, -30 }, { 0.85, -14 }, { 1, 0 } }) },
+		lKnee = { f = track(k, { { 0, 0 }, { 0.12, -115 }, { 0.24, -55 }, { 0.32, -10 }, { 0.42, -10 }, { 0.85, -20 }, { 1, 0 } }) },
+		waist = {
+			lean = track(k, { { 0, 0 }, { 0.12, 18 }, { 0.24, -22 }, { 0.32, 30 }, { 0.42, 5 }, { 0.85, -16 }, { 1, 0 } }),
+			yaw = track(k, { { 0, 0 }, { 0.12, -35 }, { 0.24, 10 }, { 0.32, 0 }, { 1, 0 } }),
+		},
+		root = {
+			y = track(k, { { 0, 0 }, { 0.12, -1.4 }, { 0.24, 3.4 }, { 0.32, -0.9 }, { 0.42, -0.3 }, { 0.85, 1.8 }, { 0.95, 0.3 }, { 1, 0 } }) + hover,
+			lean = track(k, { { 0, 0 }, { 0.12, -10 }, { 0.24, -18 }, { 0.32, 32 }, { 0.42, 8 }, { 0.85, -14 }, { 1, 0 } }),
+			yaw = track(k, { { 0, 0 }, { 0.12, -40 }, { 0.24, 0 }, { 0.32, 12 }, { 0.42, 0 }, { 1, 0 } }),
+		},
 	}
 end
 
--- A barbell rep: `lift` goes 0 (bar at the chest, knees bent) to 1 (bar
--- locked out overhead, standing tall) and back.
-function Poses.rep(lift: number, r6: boolean): { [string]: any }
-	if r6 then
-		-- No elbows on R6: straight arms from chest height to overhead.
-		return {
-			rShoulder = 100 + 76 * lift,
-			lShoulder = 100 + 76 * lift,
-			rHip = 12 * (1 - lift),
-			lHip = 12 * (1 - lift),
-		}
-	end
-	local dip = 1 - lift
+-- One clean-and-press rep, p from 0 to 1:
+--   0.00 - 0.30  drop into a deep squat with the bar racked at the shoulders
+--   0.30 - 0.50  drive: legs fire, a small hop, the bar punches overhead
+--   0.50 - 0.80  hold the lockout, arms shaking
+--   0.80 - 1.00  lower the bar back to the shoulders
+function Poses.rep(p: number, clock: number)
+	local shake = (p > 0.52 and p < 0.8) and math.sin(clock * 46) * 2.5 or 0
+	local press = track(p, { { 0, 45 }, { 0.3, 60 }, { 0.5, 178 }, { 0.8, 174 }, { 1, 45 } }) + shake
+	local bend = track(p, { { 0, 130 }, { 0.3, 125 }, { 0.5, 0 }, { 0.8, 0 }, { 1, 130 } })
+	local wide = track(p, { { 0, 10 }, { 0.3, 10 }, { 0.5, 20 }, { 0.8, 20 }, { 1, 10 } })
+	local hip = track(p, { { 0, 5 }, { 0.3, 95 }, { 0.47, -5 }, { 1, 5 } })
+	local knee = track(p, { { 0, -5 }, { 0.3, -120 }, { 0.47, 0 }, { 1, -5 } })
 	return {
-		rShoulder = 38 + 134 * lift,
-		lShoulder = 38 + 134 * lift,
-		rElbow = 132 * dip + 4,
-		lElbow = 132 * dip + 4,
-		rHip = 26 * dip,
-		lHip = 26 * dip,
-		rKnee = -52 * dip,
-		lKnee = -52 * dip,
-		root = CFrame.new(0, -0.32 * dip, 0),
+		rShoulder = { f = press, s = wide },
+		lShoulder = { f = press, s = wide },
+		rElbow = { f = bend },
+		lElbow = { f = bend },
+		rHip = { f = hip, s = 12 },
+		lHip = { f = hip, s = 12 },
+		rKnee = { f = knee },
+		lKnee = { f = knee },
+		waist = { lean = track(p, { { 0, 0 }, { 0.3, 16 }, { 0.5, -10 }, { 0.8, -5 }, { 1, 0 } }) },
+		root = {
+			y = track(p, { { 0, 0 }, { 0.3, -1.5 }, { 0.46, 0.2 }, { 0.52, 1.1 }, { 0.6, 0 }, { 1, 0 } }),
+			lean = track(p, { { 0, 0 }, { 0.3, 22 }, { 0.5, -8 }, { 0.8, -4 }, { 1, 0 } }),
+		},
 	}
+end
+
+----------------------------------------------------------------------------
+-- Impact effects: a shockwave ring and a burst of debris at the feet
+----------------------------------------------------------------------------
+local function shockwave(pos: Vector3, color: Color3, size: number)
+	local ring = Instance.new("Part")
+	ring.Name = "Shockwave"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.CastShadow = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = color
+	ring.Transparency = 0.25
+	ring.Size = Vector3.new(0.35, 2, 2)
+	ring.CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.pi / 2)
+	ring.Parent = folder
+	TweenService:Create(ring, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.2, size, size),
+		Transparency = 1,
+	}):Play()
+	Debris:AddItem(ring, 0.7)
+
+	for _ = 1, 10 do
+		local chunk = Instance.new("Part")
+		chunk.Name = "Debris"
+		local s = 0.4 + math.random() * 0.7
+		chunk.Size = Vector3.new(s, s, s)
+		chunk.Color = color:Lerp(Color3.new(1, 1, 1), math.random() * 0.6)
+		chunk.Material = Enum.Material.SmoothPlastic
+		chunk.CanCollide = false
+		chunk.CanQuery = false
+		chunk.CanTouch = false
+		chunk.CastShadow = false
+		chunk.CFrame = CFrame.new(pos + Vector3.new(0, 0.5, 0))
+		chunk.Parent = folder
+		local angle = math.random() * math.pi * 2
+		local speed = size * (1.2 + math.random())
+		chunk.AssemblyLinearVelocity = Vector3.new(math.cos(angle) * speed, 22 + math.random() * 26, math.sin(angle) * speed)
+		chunk.AssemblyAngularVelocity = Vector3.new(math.random() * 12 - 6, math.random() * 12 - 6, math.random() * 12 - 6)
+		Debris:AddItem(chunk, 1.2)
+	end
+end
+
+-- A short downward kick of the local camera, for weight.
+local function cameraKick(char: Model, amount: number)
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	humanoid.CameraOffset = Vector3.new(0, -amount, 0)
+	TweenService:Create(humanoid, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { CameraOffset = Vector3.zero }):Play()
+end
+
+local function feetPosition(char: Model): Vector3
+	local root = char:FindFirstChild("HumanoidRootPart") :: BasePart
+	return root.Position - Vector3.new(0, 2.9, 0)
+end
+
+-- Fire `fn` once when a move's phase passes `mark`.
+local function crossed(player: Player, phase: number, mark: number): boolean
+	local last = lastPhase[player]
+	lastPhase[player] = phase
+	return last ~= nil and last < mark and phase >= mark
 end
 
 ----------------------------------------------------------------------------
@@ -289,23 +395,33 @@ end
 ----------------------------------------------------------------------------
 -- Per-frame
 ----------------------------------------------------------------------------
-local function liftPhase(player: Player, now: number): number
+
+-- Where in the rep a training player is. The server awards Strength at each
+-- multiple of RepTime after RepStart; that moment is the lockout here.
+function Poses.repPhase(player: Player, now: number): number
 	local start = player:GetAttribute("RepStart") or now
-	local phase = ((now - start) / Config.Training.RepTime) % 1
-	return 0.5 - 0.5 * math.cos(phase * math.pi * 2)
+	return ((now - start) / Config.Training.RepTime + Poses.LOCKOUT) % 1
 end
 
 -- Every frame: pose whoever is casting or training, release everyone else.
 local function poseAll()
 	local now = workspace:GetServerTimeNow()
 	local clock = os.clock()
+	local me = Players.LocalPlayer
 	for _, player in Players:GetPlayers() do
 		local char = player.Character
 		local active = false
 		if char and char:FindFirstChild("HumanoidRootPart") then
 			if player:GetAttribute("Training") then
-				apply(player, char, "workout", Poses.rep(liftPhase(player, now), isR6(char)))
+				local p = Poses.repPhase(player, now)
+				apply(player, char, "workout", Poses.rep(p, clock))
 				active = true
+				if crossed(player, p, Poses.LOCKOUT) then
+					shockwave(feetPosition(char), Color3.fromRGB(255, 215, 80), 16)
+					if player == me then
+						cameraKick(char, 0.7)
+					end
+				end
 			else
 				local castStart = player:GetAttribute("CastStart")
 				if castStart then
@@ -313,17 +429,23 @@ local function poseAll()
 					if k >= 0 and k < 1 then
 						apply(player, char, "cast", Poses.cast(k, clock))
 						active = true
+						if crossed(player, k, Poses.SLAM) then
+							shockwave(feetPosition(char), Color3.fromRGB(120, 230, 255), 30)
+						end
 					end
 				end
 			end
 		end
-		if not active and posed[player] then
-			release(player)
+		if not active then
+			lastPhase[player] = nil
+			if posed[player] then
+				release(player)
+			end
 		end
 	end
 end
 
--- Each rendered frame: keep every training player's barbell in their hands.
+-- Keep every training player's barbell in their hands.
 local function carryBarbells()
 	for _, player in Players:GetPlayers() do
 		local char = player.Character
@@ -351,15 +473,14 @@ function Poses.init()
 			carryBarbells()
 		end)
 		if not ok and not reported then
-			-- Surface the first failure on screen instead of failing silently.
 			reported = true
 			warn("[Poses] error: " .. tostring(err))
-			State.toast:Fire("[Poses] error: " .. tostring(err), Color3.fromRGB(255, 120, 100))
 		end
 	end)
 	Players.PlayerRemoving:Connect(function(player)
 		release(player)
 		dropBarbell(player)
+		lastPhase[player] = nil
 	end)
 end
 

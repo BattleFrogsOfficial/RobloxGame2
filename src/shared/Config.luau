@@ -4,7 +4,7 @@ local Config = {}
 
 -- Shown in small print at the top of the screen and used in the place
 -- file's name, so it is always clear which build is running.
-Config.Build = 15
+Config.Build = 16
 
 ----------------------------------------------------------------------------
 -- Rarities
@@ -171,7 +171,8 @@ Config.Ocean = {
 	WaterTopY = -1.5,
 	WallTopY = 26, -- height the parted water walls rise to
 	SplitZoneDepth = 18, -- beach band (from the shoreline) where you can part the sea
-	OpenAnim = 3.6, -- seconds of the parting cutscene before the walls start closing
+	OpenAnim = 4, -- seconds of the parting cutscene before the walls start closing
+	SlamAt = 0.32, -- fraction of the cutscene at which the staff slams down and the sea starts to tear
 	Reach = 300, -- the deepest a corridor can ever go
 	GrabRadius = 6,
 	SweepGrace = 2, -- studs of forgiveness at the closing walls (covers network delay)
@@ -222,20 +223,20 @@ Config.Odds = { LuckPower = 0.35, DepthPower = 0.6, DepthBoost = 2.5 }
 ----------------------------------------------------------------------------
 -- Strength gained per rep on the training pad.
 Config.Weights = {
-	{ name = "Driftwood Dumbbell", cost = 0, gain = 4 },
-	{ name = "Shell Barbell", cost = 250, gain = 10 },
-	{ name = "Coral Kettlebell", cost = 3000, gain = 28 },
-	{ name = "Iron Anchor", cost = 30000, gain = 70 },
-	{ name = "Ship Cannon", cost = 300000, gain = 175 },
-	{ name = "Pirate Chest", cost = 3000000, gain = 440 },
-	{ name = "Kraken Tentacle", cost = 30000000, gain = 1100 },
-	{ name = "Trident of Tides", cost = 300000000, gain = 2800 },
+	{ name = "Driftwood Dumbbell", cost = 0, gain = 6 },
+	{ name = "Shell Barbell", cost = 250, gain = 15 },
+	{ name = "Coral Kettlebell", cost = 3000, gain = 42 },
+	{ name = "Iron Anchor", cost = 30000, gain = 105 },
+	{ name = "Ship Cannon", cost = 300000, gain = 260 },
+	{ name = "Pirate Chest", cost = 3000000, gain = 660 },
+	{ name = "Kraken Tentacle", cost = 30000000, gain = 1650 },
+	{ name = "Trident of Tides", cost = 300000000, gain = 4200 },
 }
 
 Config.Luck = { BaseCost = 120, Growth = 1.45, PerLevel = 0.12, MaxLevel = 150 }
 Config.Base = { StartSlots = 4, SlotsPerLevel = 2, MaxSlots = 20, BaseCost = 500, Growth = 2.9 }
 
-Config.Training = { RepTime = 0.9, PadRadius = 7 } -- one rep = one push up and back down
+Config.Training = { RepTime = 1.4, PadRadius = 7 } -- one rep = one push up and back down
 
 Config.Pen = { Width = 70, Depth = 72, Gate = 9, Spacing = 84, FrontZ = 66 } -- studs; gates face the ocean
 

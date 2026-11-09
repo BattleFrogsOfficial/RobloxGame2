@@ -270,8 +270,18 @@ check("server published the cast for everyone to animate", player:GetAttribute("
 check("cutscene takes the camera", camera.CameraType == roblox.Enum.CameraType.Scriptable)
 eq("player held still during the cutscene", player.Character.Humanoid.WalkSpeed, 0)
 check("split-start effect fired", sawEffect("splitStart"))
--- Early on, the sea has torn open near the shore but not yet far out.
-h:advance(O.OpenAnim * 0.25)
+-- Before the slam: the character coils and leaps; the sea is untouched.
+h:advance(O.OpenAnim * 0.12)
+local rootJoint = player.Character:FindFirstChild("Root", true)
+check("body drops into a crouch in the coil", rootJoint ~= nil and rootJoint.C0.Position.Y < -0.4, rootJoint and rootJoint.C0.Position.Y)
+h:advance(O.OpenAnim * 0.12)
+check("body is launched well off the ground in the leap", rootJoint.C0.Position.Y > 1.2, rootJoint.C0.Position.Y)
+check("sea still closed before the slam", ws.LocalOcean.UpperL1.Transparency == 1)
+check("no shockwave before the slam", ws.Poses:FindFirstChild("Shockwave") == nil)
+h:advance(O.OpenAnim * 0.1)
+check("shockwave at the slam", ws.Poses:FindFirstChild("Shockwave") ~= nil)
+-- After the slam, the sea has torn open near the shore but not yet far out.
+h:advance(O.OpenAnim * 0.14)
 local seaParts = ws:FindFirstChild("LocalOcean")
 check("near wall has risen out of the sea", seaParts.UpperL1.Transparency < 1 and seaParts.UpperL1.Size.Y > 3, seaParts.UpperL1.Size.Y)
 check("far end has not torn open yet", seaParts.UpperL2.Transparency == 1)
@@ -290,7 +300,10 @@ h:advance(O.OpenAnim * 0.1)
 check("the staff arm moves during the cast", shoulder.C0 ~= t1)
 local leftRest = player.Character.UpperTorso.LeftShoulderRigAttachment
 check("an arm on the newer joint type (AnimationConstraint) moves too", leftRest.CFrame ~= roblox.CFrame.new())
-h:advance(O.OpenAnim * 0.15)
+h:advance(O.OpenAnim * 0.2)
+local rShoulder, lShoulder = Poses.cast(0.8, 0).rShoulder, Poses.cast(0.8, 0).lShoulder
+check("arms spread wide apart as the sea opens", rShoulder.s > 70 and lShoulder.s > 70, rShoulder.s)
+check("rises off the ground while parting", Poses.cast(0.8, 0).root.y > 1.2)
 check("HUD hidden during the cutscene", player.PlayerGui.Hud.Enabled == false)
 check("cutscene banner shown", player.PlayerGui.Overlay:FindFirstChild("Banner") ~= nil)
 waitOutCutscene()
@@ -547,7 +560,11 @@ check("newer-joint arm works the rep too", player.Character.UpperTorso.LeftElbow
 check("staff is put away while training", player.Character:FindFirstChild("Sea Staff") == nil and player.Backpack:FindFirstChild("Sea Staff") ~= nil)
 check("you can still walk off the pad", player.Character.Humanoid.WalkSpeed > 0)
 eq("no strength before the first rep finishes", d.strength, 0)
-h:advance(Config.Training.RepTime * 2.7 + 0.3)
+check("shockwave on the lockout", (function()
+	h:advance(Config.Training.RepTime * 0.9)
+	return ws.Poses:FindFirstChild("Shockwave") ~= nil
+end)())
+h:advance(Config.Training.RepTime * 1.8 + 0.3)
 local gain = Config.Weights[1].gain
 check("strength comes one rep at a time", d.strength >= gain * 2 and d.strength <= gain * 4, d.strength)
 check("lift effect per rep", sawEffect("lift"))
@@ -558,13 +575,15 @@ check("stepping off stops training", player:GetAttribute("Training") == false)
 check("barbell removed", ws.Poses:FindFirstChild("TrainingBarbell") == nil)
 check("joints return to rest after training", elbow.C0 == roblox.CFrame.new() and player.Character.RightUpperArm.RightShoulder.C0 == roblox.CFrame.new())
 
--- The same moves work on an R6 avatar (no elbows, sideways shoulder joints).
-local repR15, repR6 = Poses.rep(0.5, false), Poses.rep(0.5, true)
-check("R15 rep bends the elbows", repR15.rElbow ~= nil and repR15.rElbow > 30)
-check("R6 rep swings straight arms", repR6.rElbow == nil and repR6.rShoulder > 100)
-local castMid = Poses.cast(0.5, 0)
-check("cast lifts the staff arm from the tool pose to overhead", castMid.rShoulder > 75)
-check("cast starts with a wind-up behind the body", Poses.cast(0.14, 0).rShoulder < -90)
+-- The moves are big, full-body ones.
+local squat, lockout = Poses.rep(0.3, 0), Poses.rep(0.5, 0)
+check("rep drops into a deep squat", squat.rKnee.f < -100 and squat.rHip.f > 80 and squat.root.y < -1.2)
+check("rep locks the bar out overhead", lockout.rShoulder.f > 170 and lockout.rElbow.f < 5)
+check("rep hops at the lockout", Poses.rep(0.52, 0).root.y > 0.8)
+check("arms travel well over 100 degrees in a rep", lockout.rShoulder.f - squat.rShoulder.f > 100)
+check("cast winds the staff far back", Poses.cast(0.12, 0).rShoulder.f < -120)
+check("cast leaps high", Poses.cast(0.24, 0).root.y > 3)
+check("cast slams forward into a lunge", Poses.cast(Poses.SLAM, 0).root.lean > 25 and Poses.cast(Poses.SLAM, 0).root.y < 0)
 local frozen = d.strength
 h:advance(3)
 eq("no more strength once off the pad", d.strength, frozen)
