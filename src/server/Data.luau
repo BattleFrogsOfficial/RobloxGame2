@@ -283,7 +283,22 @@ local function onPlayerAdded(player: Player)
 	end
 end
 
+-- Other systems register work to do just before a leaving player is saved
+-- (e.g. putting carried eggs into storage).
+local leavingHooks: { (Player) -> () } = {}
+function Data.onLeaving(fn: (Player) -> ())
+	table.insert(leavingHooks, fn)
+end
+
 local function onPlayerRemoving(player: Player)
+	if profiles[player] then
+		for _, fn in leavingHooks do
+			local ok, err = pcall(fn, player)
+			if not ok then
+				warn("[Data] leaving hook failed:", err)
+			end
+		end
+	end
 	local s = sessions[player]
 	local alreadySaving = s ~= nil and s.leaving == true
 	if s then

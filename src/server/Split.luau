@@ -2,7 +2,12 @@
 --
 -- The water is drawn on each client, so only the splitter sees their corridor
 -- and eggs. The server owns the truth: corridor size and timing, which eggs
--- exist, who is carrying what, and who gets swept back by the sea.
+-- exist, who is carrying what, and who gets swept away.
+--
+-- A corridor opens straight out from the shore. Its two side walls start
+-- closing as soon as it opens and meet after `duration` seconds; an egg is
+-- gone once the water covers it, and so is anyone still between the walls.
+-- Eggs you grab stay on your head until you carry them into your own base.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -23,12 +28,14 @@ local Split = {}
 
 local O = Config.Ocean
 local STAFF_NAME = "Sea Staff"
+local FLING_SECONDS = 1.5 -- how long the client's ragdoll flight back to shore lasts
 
 local splits: { [Player]: any } = {}
 local carrying: { [Player]: { any } } = {}
 local carryModels: { [Player]: { Model } } = {}
 local immuneUntil: { [Player]: number } = {}
 local lastRequest: { [Player]: number } = {}
+local wasInOcean: { [Player]: boolean } = {}
 local rng = Random.new()
 
 local function now(): number
@@ -40,14 +47,13 @@ local function rootOf(player: Player): BasePart?
 	return char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 end
 
--- Distance from this split's shore toward the far side, and sideways offset.
+-- Distance out from the shore, and sideways offset from the corridor center.
 local function corridorCoords(sp, pos: Vector3): (number, number)
-	local d = O.ShoreZ - sp.side * pos.Z
-	return d, pos.X - sp.cx
+	return O.ShoreZ - pos.Z, pos.X - sp.cx
 end
 
 local function eggWorldPos(sp, egg): Vector3
-	return Vector3.new(sp.cx + egg.x, Formulas.groundY(egg.d), sp.side * (O.ShoreZ - egg.d))
+	return Vector3.new(sp.cx + egg.x, Formulas.groundY(egg.d), O.ShoreZ - egg.d)
 end
 
 ----------------------------------------------------------------------------
@@ -59,6 +65,7 @@ local function clearCarry(player: Player)
 	end
 	carryModels[player] = {}
 	carrying[player] = {}
+	player:SetAttribute("Carrying", 0)
 end
 
 local function addCarryModel(player: Player, egg: string, variant: string)
@@ -91,69 +98,73 @@ local function splash(pos: Vector3)
 	p.CanQuery = false
 	p.Transparency = 1
 	p.Size = Vector3.new(1, 1, 1)
-	p.Position = pos
+	p.CFrame = CFrame.new(pos)
 	local e = Instance.new("ParticleEmitter")
 	e.Color = ColorSequence.new(Color3.fromRGB(150, 220, 255), Color3.fromRGB(255, 255, 255))
-	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.5), NumberSequenceKeypoint.new(1, 0) })
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2.5), NumberSequenceKeypoint.new(1, 0) })
 	e.Transparency = NumberSequence.new(0.2, 1)
-	e.Lifetime = NumberRange.new(0.6, 1.1)
-	e.Speed = NumberRange.new(18, 30)
-	e.SpreadAngle = Vector2.new(60, 60)
-	e.Acceleration = Vector3.new(0, -50, 0)
+	e.Lifetime = NumberRange.new(0.8, 1.4)
+	e.Speed = NumberRange.new(30, 55)
+	e.SpreadAngle = Vector2.new(35, 35)
+	e.Acceleration = Vector3.new(0, -60, 0)
 	e.Rate = 0
 	e.Parent = p
 	p.Parent = workspace
-	e:Emit(60)
-	Debris:AddItem(p, 2)
+	e:Emit(90)
+	Debris:AddItem(p, 2.5)
 end
 
 ----------------------------------------------------------------------------
 -- Run outcomes
 ----------------------------------------------------------------------------
-local function caught(player: Player, root: BasePart)
-	local sp = splits[player]
+
+local endSplit: (Player) -> ()
+
+-- The sea throws the player back onto the beach, and the run is over. The client plays the
+-- ragdoll flight (it owns its character's physics); the server keeps them
+-- safe meanwhile and puts them on the sand if they somehow don't land there.
+local function caught(player: Player, root: BasePart, reason: string)
 	local lost = carrying[player] and #carrying[player] or 0
 	splash(root.Position + Vector3.new(0, 2, 0))
 	clearCarry(player)
-	immuneUntil[player] = os.clock() + 1.5
-	local side = sp and sp.side or (root.Position.Z >= 0 and 1 or -1)
-	local x = math.clamp(root.Position.X, -O.HalfX + 4, O.HalfX - 4)
-	local back = Vector3.new(x, 4, side * (O.ShoreZ + 8))
-	local char = player.Character
-	if char then
-		char:PivotTo(CFrame.lookAt(back, back + Vector3.new(0, 0, side)))
-	end
-	if sp then
-		Data.effect(player, "caught", { lost = lost })
-		if lost > 0 then
-			Data.notify(player, "The sea swept you back! You lost your egg.", Color3.fromRGB(120, 200, 255))
-		else
-			Data.notify(player, "The sea swept you back!", Color3.fromRGB(120, 200, 255))
+	immuneUntil[player] = os.clock() + FLING_SECONDS + 1.5
+	local x = math.clamp(root.Position.X, -O.HalfX + 8, O.HalfX - 8)
+	local landing = Vector3.new(x, 3.5, O.ShoreZ + 16)
+	Data.effect(player, "caught", { lost = lost, reason = reason, landing = landing, seconds = FLING_SECONDS })
+	-- Being caught ends the split, so the client drops its water walls and
+	-- nothing blocks the flight back to shore.
+	endSplit(player)
+	task.delay(FLING_SECONDS + 0.8, function()
+		local char = player.Character
+		local r = rootOf(player)
+		if char and r and (World.inOcean(r.Position) or r.Position.Y < -2) then
+			char:PivotTo(CFrame.lookAt(landing, landing + Vector3.new(0, 0, 1)))
 		end
-	else
-		Data.effect(player, "pushed", nil)
-		Data.notify(player, "The sea pushes you back! Part it with your staff first.", Color3.fromRGB(120, 200, 255))
-	end
+	end)
 end
 
-local function bank(player: Player)
+-- Carried eggs are planted the moment their owner walks into their base.
+local function plant(player: Player)
 	local list = carrying[player]
 	if not list or #list == 0 then
 		return
 	end
 	local d = Data.get(player)
-	local banked = {}
+	if not d then
+		return
+	end
+	local planted = {}
 	for _, item in list do
 		local where = Pens.addEgg(player, item.egg, item.variant)
 		d.stats.eggsCollected += 1
-		table.insert(banked, { egg = item.egg, variant = item.variant, where = where })
+		table.insert(planted, { egg = item.egg, variant = item.variant, where = where })
 	end
 	clearCarry(player)
 	Data.markDirty(player)
-	Data.effect(player, "banked", banked)
+	Data.effect(player, "planted", planted)
 end
 
-local function endSplit(player: Player)
+function endSplit(player: Player)
 	if splits[player] then
 		splits[player] = nil
 		Data.effect(player, "splitEnd", nil)
@@ -174,7 +185,7 @@ local function onRequestSplit(player: Player, charge: any)
 	lastRequest[player] = t
 	local d = Data.get(player)
 	if not d then
-		return nil, "Still loading…"
+		return nil, "Still loading..."
 	end
 	if splits[player] then
 		return nil, "Your ocean is still open!"
@@ -187,17 +198,18 @@ local function onRequestSplit(player: Player, charge: any)
 	if not World.inSplitZone(root.Position) then
 		return nil, "Walk up to the shoreline to part the sea!"
 	end
+	local cap = Formulas.carry(Data.hasPass(player, "ExtraCarry"))
+	if carrying[player] and #carrying[player] >= cap then
+		return nil, "Your hands are full! Plant your egg in your base first."
+	end
 
-	local side = root.Position.Z >= 0 and 1 or -1
 	local params = Formulas.splitParams(d.strength, math.clamp(charge, 0, 1))
 	local half = params.width / 2
 	local sp = {
-		side = side,
-		cx = math.clamp(root.Position.X, -O.HalfX + half + 1, O.HalfX - half - 1),
+		cx = math.clamp(root.Position.X, -O.HalfX + half + 6, O.HalfX - half - 6),
 		width = params.width,
 		length = params.length,
-		openTime = params.openTime,
-		closeSpeed = params.closeSpeed,
+		duration = params.duration,
 		t0 = now(),
 	}
 	local eggs = Formulas.rollEggs(rng, sp, Data.luck(player))
@@ -210,12 +222,10 @@ local function onRequestSplit(player: Player, charge: any)
 	Data.markDirty(player)
 
 	return {
-		side = sp.side,
 		cx = sp.cx,
 		width = sp.width,
 		length = sp.length,
-		openTime = sp.openTime,
-		closeSpeed = sp.closeSpeed,
+		duration = sp.duration,
 		t0 = sp.t0,
 		eggs = eggs,
 	}
@@ -238,15 +248,21 @@ local function onGrab(player: Player, id: any)
 		Data.effect(player, "grabFail", { id = id, reason = "full" })
 		return
 	end
-	local L = Formulas.currentLength(sp, now() - sp.t0)
+	local elapsed = now() - sp.t0
 	local pos = eggWorldPos(sp, egg)
 	local flat = Vector3.new(root.Position.X - pos.X, 0, root.Position.Z - pos.Z).Magnitude
-	if flat > O.GrabRadius + 3 or egg.d > L + 1 then
+	if flat > O.GrabRadius + 3 or elapsed < O.OpenAnim * 0.5 then
+		return
+	end
+	-- A little slack past "covered" so a grab at the last instant still counts.
+	if math.abs(egg.x) > Formulas.halfWidth(sp, elapsed) + O.SweepGrace then
+		Data.effect(player, "grabFail", { id = id, reason = "covered" })
 		return
 	end
 	egg.taken = true
 	table.insert(list, { egg = egg.egg, variant = egg.variant })
 	addCarryModel(player, egg.egg, egg.variant)
+	player:SetAttribute("Carrying", #list)
 	Data.effect(player, "grabbed", { id = id, egg = egg.egg, variant = egg.variant, count = #list, cap = cap })
 end
 
@@ -257,13 +273,13 @@ local function onClose(player: Player)
 		return
 	end
 	if root and World.inOcean(root.Position) then
-		caught(player, root)
+		caught(player, root, "closed")
 	end
 	endSplit(player)
 end
 
 ----------------------------------------------------------------------------
--- Per-frame checks
+-- Per-tick checks
 ----------------------------------------------------------------------------
 local function step()
 	local t = now()
@@ -271,38 +287,44 @@ local function step()
 	for _, player in Players:GetPlayers() do
 		local root = rootOf(player)
 		local sp = splits[player]
+		local elapsed = sp and (t - sp.t0) or 0
 		if root then
 			local pos = root.Position
-			if World.inOcean(pos) then
+			local inOcean = World.inOcean(pos)
+			if inOcean then
 				if not immuneUntil[player] or clock > immuneUntil[player] then
 					local safe = false
 					if sp then
 						local d, lateral = corridorCoords(sp, pos)
-						local L = Formulas.currentLength(sp, t - sp.t0)
-						safe = math.abs(lateral) <= sp.width / 2 + 2.5 and d <= L + O.SweepGrace
+						local half = Formulas.halfWidth(sp, elapsed)
+						safe = Formulas.isOpen(sp, elapsed) and d <= sp.length + O.SweepGrace and math.abs(lateral) <= half + O.SweepGrace
 					end
 					if not safe then
-						caught(player, root)
+						caught(player, root, sp and "swept" or "closed")
 					end
 				end
-			elseif carrying[player] and #carrying[player] > 0 then
-				bank(player)
-			end
-		end
-		if sp and t - sp.t0 > Formulas.totalDuration(sp) then
-			-- Anyone still on the wet lip (inside the grace band) made it: step them
-			-- onto the sand so the next tick banks their egg instead of sweeping them.
-			if root and World.inOcean(root.Position) then
-				local d = corridorCoords(sp, root.Position)
-				if d <= O.SweepGrace + 1 then
-					local p = Vector3.new(root.Position.X, 4, sp.side * (O.ShoreZ + 4))
-					player.Character:PivotTo(CFrame.lookAt(p, p + Vector3.new(0, 0, sp.side)))
-					immuneUntil[player] = clock + 1
+			else
+				local list = carrying[player]
+				if list and #list > 0 then
+					if wasInOcean[player] then
+						-- Made it back to land with eggs in hand.
+						Data.effect(player, "safe", { count = #list })
+					end
+					if Pens.contains(player, pos) then
+						plant(player)
+					end
 				end
 			end
+			wasInOcean[player] = inOcean
+		end
+		if sp and not Formulas.isOpen(sp, elapsed) then
 			endSplit(player)
 		end
 	end
+end
+
+function Split.carried(player: Player): number
+	return carrying[player] and #carrying[player] or 0
 end
 
 function Split.init()
@@ -322,10 +344,12 @@ function Split.init()
 	local function hook(player: Player)
 		carrying[player] = {}
 		carryModels[player] = {}
+		player:SetAttribute("Carrying", 0)
 		player.CharacterAdded:Connect(function()
 			-- A respawn drops whatever you were carrying.
 			carryModels[player] = {}
 			carrying[player] = {}
+			player:SetAttribute("Carrying", 0)
 			immuneUntil[player] = os.clock() + 2
 			task.defer(Split.ensureStaff, player)
 		end)
@@ -335,12 +359,30 @@ function Split.init()
 	for _, p in Players:GetPlayers() do
 		hook(p)
 	end
+
+	-- Leaving with eggs you already carried to safety keeps them (in storage).
+	Data.onLeaving(function(player)
+		local root = rootOf(player)
+		local list = carrying[player]
+		if list and #list > 0 and not (root and World.inOcean(root.Position)) then
+			for _, item in list do
+				Pens.addEgg(player, item.egg, item.variant)
+			end
+		end
+		carrying[player] = {}
+	end)
+
 	Players.PlayerRemoving:Connect(function(player)
-		splits[player] = nil
-		carrying[player] = nil
-		carryModels[player] = nil
-		immuneUntil[player] = nil
-		lastRequest[player] = nil
+		-- Deferred so the leaving hook above (run by Data's own
+		-- PlayerRemoving handler) still sees what the player was carrying.
+		task.defer(function()
+			splits[player] = nil
+			carrying[player] = nil
+			carryModels[player] = nil
+			immuneUntil[player] = nil
+			lastRequest[player] = nil
+			wasInOcean[player] = nil
+		end)
 	end)
 end
 

@@ -102,7 +102,7 @@ function Rewards.init()
 		if d and d.daily.last < math.floor(os.time() / 86400) then
 			task.delay(6, function()
 				if player.Parent then
-					Data.notify(player, "Your daily reward is ready! 📅", GREEN)
+					Data.notify(player, "Your daily reward is ready!", GREEN)
 				end
 			end)
 		end

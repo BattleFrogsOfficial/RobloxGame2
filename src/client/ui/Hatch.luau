@@ -14,6 +14,7 @@ local Ui = require(script.Parent.Ui)
 local Viewport = require(script.Parent.Viewport)
 local State = require(script.Parent.Parent.State)
 local Ocean = require(script.Parent.Parent.Ocean)
+local PenAnimals = require(script.Parent.Parent.PenAnimals)
 
 local Hatch = {}
 
@@ -22,6 +23,7 @@ local gui: ScreenGui
 local queue = {}
 local playing = false
 local newlyFound: { [string]: boolean } = {}
+local hatching: { [string]: number } = {} -- animals with a cutscene still queued
 local skip = false
 
 local function play(info)
@@ -94,7 +96,8 @@ local function play(info)
 	local function line(text: string, color: Color3, h: number, order: number)
 		Ui.text({ Text = text, Size = UDim2.new(1, 0, 0, h), TextColor3 = color, StrokeThickness = 3, LayoutOrder = order, ZIndex = 63, Parent = texts })
 	end
-	if newlyFound[info.animal] then
+	local isNew = newlyFound[info.animal] == true
+	if isNew then
 		newlyFound[info.animal] = nil
 		line("NEW!", C.Yellow, 30, 0)
 	end
@@ -113,6 +116,17 @@ local function play(info)
 	end
 	avf:Destroy()
 	overlay:Destroy()
+
+	local left = (hatching[info.animal] or 1) - 1
+	hatching[info.animal] = left > 0 and left or nil
+
+	-- Only now does the pet appear in the pen and the news get announced.
+	if info.uid then
+		PenAnimals.reveal(info.uid)
+	end
+	if isNew then
+		State.toast:Fire("New Index entry: " .. a.name .. "!", C.Yellow)
+	end
 end
 
 local function pump()
@@ -131,7 +145,19 @@ function Hatch.init()
 	State.effect:Connect(function(kind, payload)
 		if kind == "discover" then
 			newlyFound[payload.animal] = true
+			-- A discovery with no hatch behind it (a gifted pet) is announced
+			-- on its own; one from a hatch waits for the cutscene to end.
+			task.delay(0.5, function()
+				if newlyFound[payload.animal] and not hatching[payload.animal] then
+					newlyFound[payload.animal] = nil
+					State.toast:Fire("New Index entry: " .. payload.animal .. "!", C.Yellow)
+				end
+			end)
 		elseif kind == "hatch" then
+			if payload.uid then
+				PenAnimals.hide(payload.uid) -- stays hidden until its cutscene ends
+			end
+			hatching[payload.animal] = (hatching[payload.animal] or 0) + 1
 			table.insert(queue, payload)
 			task.spawn(pump)
 		end

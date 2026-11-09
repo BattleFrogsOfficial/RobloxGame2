@@ -12,6 +12,30 @@ local HOP_HEIGHT = 1.1
 local animals: { Model } = {}
 local lastScan = 0
 
+-- Animals (by uid) to keep invisible on this client: a freshly hatched pet
+-- stays hidden in the pen until its hatch cutscene has revealed it.
+local hidden: { [number]: boolean } = {}
+local hiddenModels: { [Model]: boolean } = {}
+
+local function setHidden(model: Model, hide: boolean)
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.LocalTransparencyModifier = hide and 1 or 0
+		elseif d:IsA("BillboardGui") then
+			d.Enabled = not hide
+		end
+	end
+	hiddenModels[model] = hide or nil
+end
+
+function PenAnimals.hide(uid: number)
+	hidden[uid] = true
+end
+
+function PenAnimals.reveal(uid: number)
+	hidden[uid] = nil
+end
+
 local function scan()
 	table.clear(animals)
 	local pens = workspace:FindFirstChild("Pens")
@@ -24,6 +48,10 @@ local function scan()
 			for _, m in contents:GetChildren() do
 				if m:IsA("Model") and m:GetAttribute("Animal") and m.PrimaryPart then
 					table.insert(animals, m)
+					local shouldHide = hidden[m:GetAttribute("Uid")] == true
+					if shouldHide ~= (hiddenModels[m] == true) then
+						setHidden(m, shouldHide)
+					end
 				end
 			end
 		end
@@ -32,7 +60,7 @@ end
 
 local function update()
 	local clock = os.clock()
-	if clock - lastScan > 0.5 then
+	if clock - lastScan > 0.15 then
 		lastScan = clock
 		scan()
 	end

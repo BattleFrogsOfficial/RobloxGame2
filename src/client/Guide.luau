@@ -78,10 +78,10 @@ local function insidePen(pen: Model, pos: Vector3): boolean
 	return math.abs(pos.X - c.X) < Config.Pen.Width / 2 and math.abs(pos.Z - c.Z) < Config.Pen.Depth / 2
 end
 
--- Ground height under a point (ocean ramps + seabed, flat land elsewhere).
+-- Ground height under a point (ocean ramp + seabed, flat land elsewhere).
 local function groundY(pos: Vector3): number
-	if math.abs(pos.X) < O.HalfX and math.abs(pos.Z) < O.ShoreZ then
-		return Formulas.groundY(O.ShoreZ - math.abs(pos.Z))
+	if pos.Z < O.ShoreZ then
+		return Formulas.groundY(O.ShoreZ - pos.Z)
 	end
 	return 0
 end
@@ -109,13 +109,21 @@ local function think(root: BasePart): (string?, Vector3?, boolean)
 	local pos = root.Position
 	local newbie = d.stats.eggsCollected < 3
 	local sp = Ocean.active
+	local pen = myPen()
+	local inSea = pos.Z < O.ShoreZ
 
-	if sp then
-		if Ocean.carried > 0 then
-			local shore = Vector3.new(pos.X, 0, sp.side * (O.ShoreZ + 6))
-			return "Run back to the beach!", newbie and shore or nil, true
+	-- Carrying: get out of the sea, then plant the egg at home.
+	if Ocean.carried > 0 then
+		if inSea then
+			return "Run back to the beach!", newbie and Vector3.new(pos.X, 0, O.ShoreZ + 6) or nil, true
 		end
-		local phase = Ocean.timing()
+		if pen then
+			return "Carry your egg to your base to plant it!", pen:GetAttribute("Gate") :: Vector3, false
+		end
+		return nil, nil, false
+	end
+
+	if sp and not Ocean.cutscene then
 		local best, bestDist
 		for _, e in Ocean.eggPositions() do
 			local dist = (e - pos).Magnitude
@@ -123,19 +131,20 @@ local function think(root: BasePart): (string?, Vector3?, boolean)
 				best, bestDist = e, dist
 			end
 		end
-		if best and newbie and phase == "open" then
+		if best and newbie then
 			return "Grab an egg before the sea closes!", best, false
 		end
 		return nil, nil, false
 	end
+	if sp then
+		return nil, nil, false
+	end
 
-	local pen = myPen()
 	if d.stats.eggsCollected == 0 then
 		if Ocean.inZone then
-			return Ocean.canCharge and "Hold click to charge, then let go to part the sea!" or "Equip your Sea Staff!", nil, false
+			return Ocean.canCharge and "Hold to charge, then let go to part the sea!" or "Equip your Sea Staff!", nil, false
 		end
-		local side = pen and ((pen:GetAttribute("Center") :: Vector3).Z >= 0 and 1 or -1) or (pos.Z >= 0 and 1 or -1)
-		local shore = Vector3.new(math.clamp(pos.X, -O.HalfX + 20, O.HalfX - 20), 0, side * (O.ShoreZ + 8))
+		local shore = Vector3.new(math.clamp(pos.X, -O.HalfX + 40, O.HalfX - 40), 0, O.ShoreZ + 8)
 		return "Walk to the shoreline to part the sea!", shore, false
 	end
 	if pen and d.stats.hatched == 0 then
@@ -145,7 +154,7 @@ local function think(root: BasePart): (string?, Vector3?, boolean)
 		end
 	end
 	if pen and d.strength == 0 then
-		return "Stand on the pink pad and TRAIN to split deeper!", pen:GetAttribute("Pad") :: Vector3, false
+		return "Step onto the pink pad to train your Strength!", pen:GetAttribute("Pad") :: Vector3, false
 	end
 	return nil, nil, false
 end

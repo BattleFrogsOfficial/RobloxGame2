@@ -1,12 +1,17 @@
--- Strength training on the pink pad in your pen, plus buying heavier weights.
+-- Strength training on the pink pad in your base, plus buying heavier weights.
+--
+-- Training starts as soon as you step onto your pad and stops when you step
+-- off. Each rep pushes the barbell from the chest to overhead and back down;
+-- Strength is awarded when the rep completes. The staff is put away while
+-- you train.
 
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Format = require(Shared.Format)
-local Remotes = require(Shared.Remotes)
 local Voxel = require(Shared.Voxel)
 
 local Data = require(script.Parent.Data)
@@ -15,6 +20,13 @@ local Pens = require(script.Parent.Pens)
 local Training = {}
 
 local T = Config.Training
+
+-- Barbell position relative to the torso, and arm joint angles (degrees),
+-- at the bottom and top of a rep.
+local BAR_DOWN = CFrame.new(0, 1.1, -1.1)
+local BAR_UP = CFrame.new(0, 3.4, -0.3)
+local SHOULDER_DOWN, SHOULDER_UP = 75, 172
+local ELBOW_DOWN, ELBOW_UP = 95, 0
 
 local training: { [Player]: any } = {}
 
@@ -34,63 +46,91 @@ local function onPad(player: Player): boolean
 	return flat.Magnitude <= T.PadRadius and math.abs(root.Position.Y - padPos.Y) < 8
 end
 
--- Arms up holding a barbell overhead (R15 rigs; R6 just shows the barbell).
-local function setPose(player: Player, state)
+local function joint(char: Model, partName: string, jointName: string): Motor6D?
+	local part = char:FindFirstChild(partName)
+	local j = part and part:FindFirstChild(jointName)
+	if j and j:IsA("Motor6D") then
+		return j
+	end
+	return nil
+end
+
+-- Attach the barbell and remember the arm joints (R15; other rigs just get
+-- the moving barbell).
+local function setUp(player: Player, state)
 	local char = player.Character
 	if not char then
 		return
 	end
-	local humanoid = char:FindFirstChildOfClass("Humanoid")
-	if state.on then
-		if humanoid then
-			state.walkSpeed = humanoid.WalkSpeed
-			state.jumpPower = humanoid.JumpPower
-			state.jumpHeight = humanoid.JumpHeight
-			humanoid.WalkSpeed = 0
-			humanoid.JumpPower = 0
-			humanoid.JumpHeight = 0
+	local torso = (char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")) :: BasePart?
+	if not torso then
+		return
+	end
+	local d = Data.get(player)
+	local bar = Voxel.barbell(d and d.weightTier or 1)
+	Voxel.weld(bar, false)
+	bar.Name = "TrainingBarbell"
+	bar:PivotTo(torso.CFrame * BAR_DOWN)
+	local weld = Instance.new("Weld")
+	weld.Name = "BarbellWeld"
+	weld.Part0 = torso
+	weld.Part1 = bar.PrimaryPart
+	weld.C0 = BAR_DOWN
+	weld.Parent = bar.PrimaryPart
+	bar.Parent = char
+	state.barbell = bar
+	state.weld = weld
+
+	state.joints = {}
+	for _, side in { "Right", "Left" } do
+		local shoulder = joint(char, side .. "UpperArm", side .. "Shoulder")
+		local elbow = joint(char, side .. "LowerArm", side .. "Elbow")
+		if shoulder then
+			table.insert(state.joints, { motor = shoulder, base = shoulder.C0, down = SHOULDER_DOWN, up = SHOULDER_UP })
 		end
-		state.shoulders = {}
-		for _, name in { "RightUpperArm", "LeftUpperArm" } do
-			local arm = char:FindFirstChild(name)
-			local joint = arm and arm:FindFirstChild(name == "RightUpperArm" and "RightShoulder" or "LeftShoulder")
-			if joint and joint:IsA("Motor6D") then
-				state.shoulders[joint] = joint.C0
-				joint.C0 = joint.C0 * CFrame.Angles(math.rad(170), 0, 0)
-			end
+		if elbow then
+			table.insert(state.joints, { motor = elbow, base = elbow.C0, down = ELBOW_DOWN, up = ELBOW_UP })
 		end
-		local head = char:FindFirstChild("Head") :: BasePart?
-		if head then
-			local d = Data.get(player)
-			local bar = Voxel.barbell(d and d.weightTier or 1)
-			Voxel.weld(bar, false)
-			bar:PivotTo(head.CFrame * CFrame.new(0, 2.2, 0))
-			local w = Instance.new("WeldConstraint")
-			w.Part0 = head
-			w.Part1 = bar.PrimaryPart
-			w.Parent = bar.PrimaryPart
-			bar.Name = "TrainingBarbell"
-			bar.Parent = char
-			state.barbell = bar
+	end
+	for _, j in state.joints do
+		j.motor.C0 = j.base * CFrame.Angles(math.rad(j.down), 0, 0)
+	end
+end
+
+local function tearDown(state)
+	for _, j in state.joints or {} do
+		if j.motor.Parent then
+			j.motor.C0 = j.base
 		end
-	else
-		if humanoid then
-			humanoid.WalkSpeed = state.walkSpeed or 16
-			humanoid.JumpPower = state.jumpPower or 50
-			humanoid.JumpHeight = state.jumpHeight or 7.2
-		end
-		for joint, c0 in state.shoulders or {} do
-			if joint.Parent then
-				joint.C0 = c0
-			end
-		end
-		if state.barbell then
-			state.barbell:Destroy()
+	end
+	if state.barbell then
+		state.barbell:Destroy()
+	end
+end
+
+-- Move the bar and arms to the top or bottom of the rep.
+local function pose(state, up: boolean, seconds: number)
+	local info = TweenInfo.new(seconds, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	if state.weld and state.weld.Parent then
+		TweenService:Create(state.weld, info, { C0 = up and BAR_UP or BAR_DOWN }):Play()
+	end
+	for _, j in state.joints or {} do
+		if j.motor.Parent then
+			local angle = up and j.up or j.down
+			TweenService:Create(j.motor, info, { C0 = j.base * CFrame.Angles(math.rad(angle), 0, 0) }):Play()
 		end
 	end
 end
 
-local function lift(player: Player)
+local function putStaffAway(player: Player)
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if char and humanoid and char:FindFirstChildOfClass("Tool") then
+		humanoid:UnequipTools()
+	end
+end
+
+local function awardRep(player: Player)
 	local d = Data.get(player)
 	if not d then
 		return
@@ -110,19 +150,42 @@ function Training.stop(player: Player)
 		return
 	end
 	training[player] = nil
-	state.on = false
-	setPose(player, state)
+	tearDown(state)
 	player:SetAttribute("Training", false)
 end
 
 function Training.start(player: Player)
-	if training[player] or not onPad(player) then
+	if training[player] or not Data.get(player) then
 		return
 	end
-	local state = { on = true, lastLift = 0, nextAuto = os.clock() + T.AutoLiftInterval }
+	local state = {}
 	training[player] = state
-	setPose(player, state)
+	putStaffAway(player)
+	setUp(player, state)
 	player:SetAttribute("Training", true)
+
+	-- Rep loop: up, down, then the Strength for that rep.
+	task.spawn(function()
+		local half = T.RepTime / 2
+		while training[player] == state do
+			putStaffAway(player)
+			pose(state, true, half)
+			task.wait(half)
+			if training[player] ~= state then
+				break
+			end
+			pose(state, false, half)
+			task.wait(half)
+			if training[player] ~= state then
+				break
+			end
+			awardRep(player)
+		end
+	end)
+end
+
+function Training.isTraining(player: Player): boolean
+	return training[player] ~= nil
 end
 
 function Training.buyWeight(player: Player): (boolean, string?)
@@ -139,50 +202,36 @@ function Training.buyWeight(player: Player): (boolean, string?)
 		return false
 	end
 	d.weightTier += 1
-	Data.notify(player, "New weight: " .. nextW.name .. "! +" .. nextW.gain .. " per lift.", Color3.fromRGB(120, 255, 120))
+	Data.notify(player, "New weight: " .. nextW.name .. "! +" .. nextW.gain .. " Strength per rep.", Color3.fromRGB(120, 255, 120))
 	Pens.refreshSigns(player)
+	-- Swap the barbell if they're mid-workout.
+	if training[player] then
+		Training.stop(player)
+		Training.start(player)
+	end
 	return true
 end
 
 function Training.init()
 	Pens.callbacks.buyWeight = Training.buyWeight
 
-	Remotes.get("Train").OnServerEvent:Connect(function(player: Player, action: any)
-		if action == "start" then
-			Training.start(player)
-		elseif action == "stop" then
-			Training.stop(player)
-		elseif action == "lift" then
-			local state = training[player]
-			local t = os.clock()
-			if state and t - state.lastLift >= T.MinClickInterval then
-				state.lastLift = t
-				lift(player)
-			end
-		end
-	end)
-
 	Players.PlayerRemoving:Connect(function(player)
 		training[player] = nil
 	end)
 
+	-- Start when the owner steps onto their pad, stop when they step off.
 	task.spawn(function()
 		while true do
-			task.wait(0.2)
-			local t = os.clock()
+			task.wait(0.15)
 			for _, player in Players:GetPlayers() do
 				local isOn = onPad(player)
 				if player:GetAttribute("OnTrainPad") ~= isOn then
 					player:SetAttribute("OnTrainPad", isOn)
 				end
-				local state = training[player]
-				if state then
-					if not isOn or not player.Character then
-						Training.stop(player)
-					elseif t >= state.nextAuto then
-						state.nextAuto = t + T.AutoLiftInterval
-						lift(player)
-					end
+				if isOn and not training[player] then
+					Training.start(player)
+				elseif not isOn and training[player] then
+					Training.stop(player)
 				end
 			end
 		end

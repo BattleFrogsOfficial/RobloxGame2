@@ -28,48 +28,62 @@ function Formulas.carry(hasPass: boolean?): number
 	return Config.Split.BaseCarry + (hasPass and 1 or 0)
 end
 
--- Max distance / open time / width for a split, before charge.
+-- Depth, starting width and lifetime of a split.
 function Formulas.splitParams(strength: number, charge: number)
 	local S = Config.Split
 	local lvl = Formulas.strengthLevel(strength)
 	local c = math.clamp(charge, 0, 1)
 	local chargeFactor = S.MinChargeFactor + (1 - S.MinChargeFactor) * c
 	local length = (S.BaseLength + S.LengthPerDoubling * lvl) * chargeFactor
-	length = math.clamp(length, 12, Config.Ocean.MaxLength)
-	local openTime = S.BaseOpenTime + S.OpenTimePerDoubling * lvl + S.ChargeOpenBonus * c
-	local width = math.min(S.MaxWidth, S.BaseWidth + lvl * 0.8)
+	length = math.clamp(length, 12, Config.Ocean.Reach)
 	return {
 		length = length,
-		openTime = openTime,
-		width = width,
-		closeSpeed = Config.Ocean.CloseSpeed,
+		width = math.min(S.MaxWidth, S.BaseWidth + lvl * S.WidthPerLevel),
+		-- Seconds from the end of the cutscene until the walls meet.
+		duration = S.BaseDuration + S.DurationPerStud * length + S.ChargeOpenBonus * c,
 	}
 end
 
--- Open length of a corridor at `elapsed` seconds after it started.
-function Formulas.currentLength(sp, elapsed: number): number
+-- Half the corridor's width `elapsed` seconds after the split began: it
+-- bursts open during the cutscene, then both walls close in steadily.
+function Formulas.halfWidth(sp, elapsed: number): number
 	local anim = Config.Ocean.OpenAnim
-	if elapsed < anim then
-		return sp.length * math.max(0, elapsed) / anim
+	local full = sp.width / 2
+	if elapsed <= 0 then
+		return 0
+	elseif elapsed < anim then
+		local k = math.clamp(elapsed / (anim * 0.6), 0, 1)
+		return full * (1 - (1 - k) ^ 3)
 	end
-	local t = elapsed - anim
-	if t < sp.openTime then
-		return sp.length
-	end
-	return math.max(0, sp.length - (t - sp.openTime) * sp.closeSpeed)
+	return full * math.max(0, 1 - (elapsed - anim) / sp.duration)
 end
 
--- Height of the sea floor `d` studs out from a shore (the ramps slope down
--- for RampLength studs at both shores, flat seabed in between).
+-- How far the corridor has torn open (it rips outward during the cutscene).
+function Formulas.openLength(sp, elapsed: number): number
+	local k = math.clamp(elapsed / (Config.Ocean.OpenAnim * 0.75), 0, 1)
+	return sp.length * (1 - (1 - k) ^ 2)
+end
+
+-- Is there still room to stand in the corridor?
+function Formulas.isOpen(sp, elapsed: number): boolean
+	return elapsed < Config.Ocean.OpenAnim or Formulas.halfWidth(sp, elapsed) > Config.Ocean.MinGap
+end
+
+-- Has the water already covered this egg?
+function Formulas.eggCovered(sp, egg, elapsed: number): boolean
+	return elapsed >= Config.Ocean.OpenAnim and math.abs(egg.x) > Formulas.halfWidth(sp, elapsed) - 0.5
+end
+
+-- Height of the sea floor `d` studs out from the shore (a ramp slopes down
+-- for RampLength studs, then flat seabed).
 function Formulas.groundY(d: number): number
 	local O = Config.Ocean
-	local fromShore = math.min(d, O.ShoreZ * 2 - d)
-	return O.SeabedY * math.clamp(fromShore / O.RampLength, 0, 1)
+	return O.SeabedY * math.clamp(d / O.RampLength, 0, 1)
 end
 
--- Seconds until the corridor has fully closed.
+-- Seconds from the start of a split until the corridor is shut.
 function Formulas.totalDuration(sp): number
-	return Config.Ocean.OpenAnim + sp.openTime + sp.length / sp.closeSpeed
+	return Config.Ocean.OpenAnim + sp.duration
 end
 
 local function pickWeighted(rng: Random, weights: { number }): number
@@ -139,12 +153,17 @@ function Formulas.rollEggs(rng: Random, sp, luck: number)
 		-- Spread along the corridor with jitter so they don't bunch up.
 		local slot = (i - 0.5) / count
 		local d = nearest + span * math.clamp(slot + (rng:NextNumber() - 0.5) / count, 0, 1)
-		local depth = d / (Config.Ocean.ShoreZ * 2)
+		local depth = d / Config.Ocean.Reach
 		local tier = Formulas.rollEggTier(rng, depth, luck)
+		-- Keep every egg reachable: by the time a player sprinting from the
+		-- shore gets this deep, the walls must not have covered it yet.
+		local runTime = (d + 10) / 16
+		local roomThen = sp.width / 2 * math.max(0, 1 - runTime / sp.duration)
+		local maxX = math.max(0, roomThen - 2)
 		table.insert(eggs, {
 			id = i,
 			d = d,
-			x = (rng:NextNumber() - 0.5) * (sp.width - 7),
+			x = (rng:NextNumber() * 2 - 1) * maxX,
 			egg = Config.Eggs[tier].id,
 			variant = Formulas.rollVariant(rng, luck),
 		})

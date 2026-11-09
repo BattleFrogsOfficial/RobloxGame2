@@ -20,13 +20,13 @@ Pens.callbacks = {
 	buyWeight = nil :: ((Player) -> ())?,
 }
 
-local SLOT_COLS = { -28, -14, 0, 14, 28 }
+local SLOT_COLS = { -24, -12, 0, 12, 24 }
 local SLOT_ROWS = { 4, 13, 22, 31 }
-local WANDER_MIN = Vector3.new(-34, 0, -8)
-local WANDER_MAX = Vector3.new(34, 0, 33)
-Pens.PadLocal = Vector3.new(-22, 0, -22)
-local UPGRADE_PAD_LOCAL = Vector3.new(-6, 0, -29)
-local BASE_SIGN_LOCAL = Vector3.new(26, 0, -28)
+local WANDER_MIN = Vector3.new(-28, 0, -8)
+local WANDER_MAX = Vector3.new(28, 0, 33)
+Pens.PadLocal = Vector3.new(-20, 0, -22)
+local UPGRADE_PAD_LOCAL = Vector3.new(-5, 0, -29)
+local BASE_SIGN_LOCAL = Vector3.new(22, 0, -28)
 
 local pens = {} -- array of pen records
 local penByPlayer: { [Player]: any } = {}
@@ -137,12 +137,13 @@ local function buildPen(index: number, info)
 	local W, D = World.PenWidth / 2, World.PenDepth / 2
 
 	-- Checkered pen floor.
-	local tile = 12
-	for ix = 0, math.floor(W * 2 / tile) - 1 do
-		for iz = 0, math.floor(D * 2 / tile) - 1 do
+	local cols, rows = 6, 6
+	local tw, td = W * 2 / cols, D * 2 / rows
+	for ix = 0, cols - 1 do
+		for iz = 0, rows - 1 do
 			local color = (ix + iz) % 2 == 0 and Color3.fromRGB(122, 220, 92) or Color3.fromRGB(110, 208, 80)
-			local center = Vector3.new(-W + (ix + 0.5) * tile, 0.1, -D + (iz + 0.5) * tile)
-			part(model, Vector3.new(tile, 0.2, tile), cf * CFrame.new(center), color, Enum.Material.SmoothPlastic)
+			local center = Vector3.new(-W + (ix + 0.5) * tw, 0.1, -D + (iz + 0.5) * td)
+			part(model, Vector3.new(tw, 0.2, td), cf * CFrame.new(center), color, Enum.Material.SmoothPlastic)
 		end
 	end
 
@@ -249,7 +250,6 @@ local function buildPen(index: number, info)
 	local pen = {
 		index = index,
 		cf = cf,
-		side = info.side,
 		model = model,
 		owner = nil :: Player?,
 		ownerLabels = ownerLabels,
@@ -293,9 +293,10 @@ end
 -- movement is smooth and costs one replicated CFrame per walk.
 local WALK_SPEED = 9 -- studs per second
 
-local function wander(model: Model, pen)
+local function wander(model: Model, pen, item)
 	local root = model.PrimaryPart
 	model:SetAttribute("Animal", true)
+	model:SetAttribute("Uid", item.uid)
 	task.spawn(function()
 		task.wait(rng:NextNumber(0, 2))
 		while model.Parent do
@@ -391,7 +392,7 @@ local function renderSlot(pen, key: string, item)
 		table.insert(lines, { Format.cash(Formulas.animalIncome(item.animal, item.variant)) .. "/s", Color3.fromRGB(120, 255, 120), 20 })
 		local _, size = model:GetBoundingBox()
 		billboard(model.PrimaryPart, size.Y + 0.6, lines, 80)
-		wander(model, pen)
+		wander(model, pen, item)
 	end
 	model.Parent = pen.contents
 	pen.slotModels[key].model = model
@@ -456,7 +457,7 @@ function Pens.refreshSigns(player: Player)
 		pen.signCost.Text = ""
 		pen.basePrompt.Enabled = false
 	else
-		pen.signInfo.Text = d.baseSlots .. " → " .. (d.baseSlots + Config.Base.SlotsPerLevel) .. " slots"
+		pen.signInfo.Text = d.baseSlots .. " -> " .. (d.baseSlots + Config.Base.SlotsPerLevel) .. " slots"
 		pen.signCost.Text = Format.cash(Formulas.baseCost(d.baseSlots))
 		pen.basePrompt.Enabled = true
 	end
@@ -554,9 +555,12 @@ function Pens.hatch(player: Player, key: string): boolean
 	local animal = Formulas.rollAnimal(rng, item.egg, Data.luck(player))
 	local variant = item.variant or "Normal"
 	discover(player, animal)
-	d.pen[key] = { kind = "animal", uid = Data.newUid(player), animal = animal, variant = variant }
+	local uid = Data.newUid(player)
+	d.pen[key] = { kind = "animal", uid = uid, animal = animal, variant = variant }
 	d.stats.hatched += 1
-	Data.effect(player, "hatch", { egg = item.egg, animal = animal, variant = variant })
+	-- The uid lets the owner's client keep the new animal hidden in the pen
+	-- until their hatch cutscene has revealed it.
+	Data.effect(player, "hatch", { egg = item.egg, animal = animal, variant = variant, uid = uid })
 	changed(player)
 	return true
 end
@@ -665,7 +669,7 @@ function Pens.placeBest(player: Player): (boolean, string?)
 	changed(player)
 	local after = Data.income(player)
 	if after > before then
-		return true, "Best pets placed! Income " .. Format.cash(before) .. " → " .. Format.cash(after) .. "/s"
+		return true, "Best pets placed! Income " .. Format.cash(before) .. " -> " .. Format.cash(after) .. "/s"
 	end
 	return true, "Your best pets are already in your base."
 end
@@ -767,6 +771,16 @@ end
 ----------------------------------------------------------------------------
 function Pens.get(player: Player)
 	return penByPlayer[player]
+end
+
+-- Is this position inside the player's own base?
+function Pens.contains(player: Player, pos: Vector3): boolean
+	local pen = penByPlayer[player]
+	if not pen then
+		return false
+	end
+	local p = pen.cf:PointToObjectSpace(pos)
+	return math.abs(p.X) <= World.PenWidth / 2 and math.abs(p.Z) <= World.PenDepth / 2
 end
 
 function Pens.homeCFrame(player: Player): CFrame?

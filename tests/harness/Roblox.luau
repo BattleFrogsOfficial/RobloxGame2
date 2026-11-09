@@ -426,17 +426,70 @@ local function registerMocks()
 		return store
 	end)
 
+	method("DataStoreService", "GetOrderedDataStore", function(_, name)
+		if current.dataStoreFails then
+			error("DataStore unavailable (simulated)", 0)
+		end
+		local bucket = current.orderedStores[name]
+		if not bucket then
+			bucket = {}
+			current.orderedStores[name] = bucket
+		end
+		local store = {}
+		function store:SetAsync(key, value)
+			assert(type(key) == "string", "OrderedDataStore keys are strings")
+			assert(type(value) == "number" and value == math.floor(value), "OrderedDataStore values must be integers")
+			bucket[key] = value
+		end
+		function store:GetSortedAsync(ascending, pageSize)
+			local list = {}
+			for key, value in bucket do
+				table.insert(list, { key = key, value = value })
+			end
+			table.sort(list, function(a, b)
+				if ascending then
+					return a.value < b.value
+				end
+				return a.value > b.value
+			end)
+			local page = {}
+			for i = 1, math.min(pageSize, #list) do
+				page[i] = list[i]
+			end
+			return {
+				GetCurrentPage = function()
+					return page
+				end,
+			}
+		end
+		return store
+	end)
+	method("Players", "GetNameFromUserIdAsync", function(_, id)
+		return "User" .. id
+	end)
+	method("Humanoid", "ChangeState", function(_, state)
+		assert(typeof(state) == "EnumItem", "ChangeState expects an Enum.HumanoidStateType")
+	end)
+
 	-- Misc
 	method("Humanoid", "EquipTool", function(self, tool)
 		tool.Parent = self.Parent
 	end)
 	method("Humanoid", "UnequipTools", function(self)
-		local player = current.localPlayer
+		local player = current.Players:GetPlayerFromCharacter(self.Parent)
 		for _, c in self.Parent:GetChildren() do
 			if c:IsA("Tool") and player then
 				c.Parent = player:FindFirstChild("Backpack")
 			end
 		end
+	end)
+	method("Players", "GetPlayerFromCharacter", function(self, char)
+		for _, p in self:GetChildren() do
+			if p:IsA("Player") and p.Character == char then
+				return p
+			end
+		end
+		return nil
 	end)
 	method("ParticleEmitter", "Emit", function(_, n)
 		assert(type(n) == "number", "Emit expects a count")
@@ -468,6 +521,7 @@ function Harness.new(options)
 	self.closers = {}
 	self.prompts = {}
 	self.dataStores = options.dataStores or {}
+	self.orderedStores = options.orderedStores or {}
 	self.dataStoreFails = options.dataStoreFails or false
 	self.errors = {}
 	self.warnings = {}
@@ -595,6 +649,7 @@ function Harness:_buildDataModel()
 	self.RunService = game:GetService("RunService")
 	self.ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+	self.workspace.Gravity = 196.2
 	local camera = I.new("Camera")
 	camera.Parent = self.workspace
 	self.workspace.CurrentCamera = camera

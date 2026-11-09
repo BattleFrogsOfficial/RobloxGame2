@@ -31,16 +31,15 @@ end
 
 local function card(parent: Instance, order: number, kind: string, item, color: Color3)
 	local f = Ui.card(parent, order)
-	Ui.new("TextLabel", {
+	local holder = Ui.new("Frame", {
 		BackgroundTransparency = 1,
-		Text = item.icon,
-		TextScaled = true,
-		Size = UDim2.fromOffset(64, 64),
-		Position = UDim2.new(0.5, 0, 0, 10),
+		Size = UDim2.fromOffset(68, 68),
+		Position = UDim2.new(0.5, 0, 0, 8),
 		AnchorPoint = Vector2.new(0.5, 0),
 		ZIndex = 23,
 		Parent = f,
 	})
+	Ui.icon(holder, item.icon, { ZIndex = 23 })
 	Ui.text({
 		Text = item.name,
 		Size = UDim2.new(1, -12, 0, 26),
@@ -91,13 +90,13 @@ local function render()
 				item = p
 			end
 		end
-		Ui.setButtonText(btn, owned and "Owned ✅" or "R$ " .. item.price)
+		Ui.setButtonText(btn, owned and "Owned" or "R$ " .. item.price)
 		Ui.setButtonColor(btn, owned and Color3.fromRGB(110, 110, 120) or C.Green)
 	end
 end
 
 function Store.init(gui: ScreenGui)
-	local win = Ui.window(gui, "Store", "🛒 Shop", C.Yellow, Vector2.new(880, 580))
+	local win = Ui.window(gui, "Store", "Shop", C.Yellow, Vector2.new(880, 580), "chest")
 	local sf = Ui.scrollGrid(win.body, Vector2.new(196, 210), 12)
 	local order = 0
 	for _, p in Config.Products do

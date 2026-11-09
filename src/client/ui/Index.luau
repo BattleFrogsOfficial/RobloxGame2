@@ -50,7 +50,7 @@ local function render()
 		local eggIcon = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(40, 40), ZIndex = 23, Parent = section })
 		Viewport.egg(eggIcon, egg.id, "Normal")
 		Ui.text({
-			Text = egg.name .. "  •  " .. egg.rarity,
+			Text = egg.name .. "   |   " .. egg.rarity,
 			Size = UDim2.new(1, -60, 0, 32),
 			Position = UDim2.fromOffset(48, 4),
 			TextXAlignment = Enum.TextXAlignment.Left,
@@ -108,7 +108,7 @@ local function render()
 				})
 			else
 				Ui.text({
-					Text = status == 2 and ("✅ " .. Format.cash(a.income) .. "/s") or ("Reward: " .. Format.cash(reward)),
+					Text = status == 2 and ("Claimed   " .. Format.cash(a.income) .. "/s") or ("Reward: " .. Format.cash(reward)),
 					Size = UDim2.new(1, -10, 0, 22),
 					Position = UDim2.new(0, 5, 1, -36),
 					TextColor3 = status == 2 and C.Cash or Color3.fromRGB(170, 170, 180),
@@ -122,7 +122,7 @@ local function render()
 end
 
 function Index.init(gui: ScreenGui)
-	local win = Ui.window(gui, "Index", "📖 Index", C.Blue, Vector2.new(760, 580))
+	local win = Ui.window(gui, "Index", "Index", C.Blue, Vector2.new(760, 580), "book")
 	header = Ui.text({
 		Text = "",
 		Size = UDim2.new(1, 0, 0, 28),

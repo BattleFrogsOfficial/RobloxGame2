@@ -4,7 +4,10 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
-local GuiService = game:GetService("GuiService")
+
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Voxel = require(Shared.Voxel)
+local Viewport = require(script.Parent.Viewport)
 
 local Ui = {}
 
@@ -133,18 +136,16 @@ function Ui.button(props: { [string]: any }): TextButton
 		Parent = btn,
 	})
 	if props.Icon then
-		Ui.new("TextLabel", {
+		local holder = Ui.new("Frame", {
 			Name = "Icon",
 			BackgroundTransparency = 1,
-			Text = props.Icon,
-			TextScaled = true,
-			Font = Ui.Font,
-			Size = UDim2.new(1, -10, 0.62, 0),
-			Position = UDim2.new(0.5, 0, 0, 4),
+			Size = UDim2.new(1, -10, 0.64, 0),
+			Position = UDim2.new(0.5, 0, 0, 3),
 			AnchorPoint = Vector2.new(0.5, 0),
 			ZIndex = btn.ZIndex + 1,
 			Parent = btn,
 		})
+		Ui.icon(holder, props.Icon)
 	end
 	local scale = Ui.new("UIScale", { Parent = btn })
 	btn.MouseEnter:Connect(function()
@@ -184,6 +185,41 @@ function Ui.setButtonText(btn: GuiObject, text: string)
 	if label then
 		label.Text = text
 	end
+end
+
+-- A picture made from a 3D model (see Voxel.icon), filling `parent`.
+function Ui.icon(parent: Instance, name: string, props: { [string]: any }?): ViewportFrame
+	return Viewport.show(parent, Voxel.icon(name), props)
+end
+
+-- A check mark drawn from two bars, centered in `parent`.
+function Ui.check(parent: Instance, color: Color3?, zIndex: number?): Frame
+	local holder = Ui.new("Frame", {
+		Name = "Check",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(0.6, 0.6),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		SizeConstraint = Enum.SizeConstraint.RelativeYY,
+		ZIndex = zIndex or 27,
+		Parent = parent,
+	})
+	local c = color or Color3.fromRGB(120, 255, 120)
+	for _, bar in { { 0.3, 0.62, 0.42, 45 }, { 0.6, 0.45, 0.78, -45 } } do
+		local f = Ui.new("Frame", {
+			BackgroundColor3 = c,
+			BorderSizePixel = 0,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(bar[1], bar[2]),
+			Size = UDim2.fromScale(bar[3], 0.16),
+			Rotation = bar[4],
+			ZIndex = zIndex or 27,
+			Parent = holder,
+		})
+		Ui.corner(f, 4)
+		Ui.stroke(f, 2)
+	end
+	return holder
 end
 
 -- A red notification badge ("!" or a number) in a button's corner.
@@ -231,16 +267,11 @@ function Ui.screen(name: string, order: number?): ScreenGui
 	return gui
 end
 
-function Ui.isMobile(): boolean
-	return GuiService:IsTenFootInterface() == false and game:GetService("UserInputService").TouchEnabled
-		and not game:GetService("UserInputService").MouseEnabled
-end
-
 local windows = {}
 local openName: string? = nil
 
 -- Big centered window with a colored header and a red X.
-function Ui.window(gui: ScreenGui, name: string, title: string, color: Color3?, size: Vector2?)
+function Ui.window(gui: ScreenGui, name: string, title: string, color: Color3?, size: Vector2?, icon: string?)
 	local sz = size or Vector2.new(760, 520)
 	local frame = Ui.new("Frame", {
 		Name = name,
@@ -264,10 +295,20 @@ function Ui.window(gui: ScreenGui, name: string, title: string, color: Color3?, 
 	Ui.corner(header, 14)
 	Ui.stroke(header, 4)
 	Ui.gradient(header, color or Ui.Colors.Green)
+	if icon then
+		local holder = Ui.new("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(52, 52),
+			Position = UDim2.fromOffset(12, 6),
+			ZIndex = 22,
+			Parent = header,
+		})
+		Ui.icon(holder, icon, { ZIndex = 22 })
+	end
 	Ui.text({
 		Text = title,
-		Size = UDim2.new(1, -100, 0, 46),
-		Position = UDim2.fromOffset(22, 9),
+		Size = UDim2.new(1, icon and -150 or -100, 0, 46),
+		Position = UDim2.fromOffset(icon and 72 or 22, 9),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 22,
 		StrokeThickness = 3,

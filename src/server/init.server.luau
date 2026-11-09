@@ -13,6 +13,7 @@ local Split = require(script.Split)
 local Training = require(script.Training)
 local Shop = require(script.Shop)
 local Rewards = require(script.Rewards)
+local Leaderboards = require(script.Leaderboards)
 
 -- Start each system on its own so one failure can't stop the rest; any
 -- error shows in the Output window with the system's name.
@@ -30,6 +31,7 @@ start("Split", Split.init)
 start("Training", Training.init)
 start("Shop", Shop.init)
 start("Rewards", Rewards.init)
+start("Leaderboards", Leaderboards.init)
 start("Data", Data.init) -- last: starts loading players once every listener is hooked up
 
 local actions = {
@@ -105,10 +107,8 @@ local actions = {
 		local char = player.Character
 		local pen = Pens.get(player)
 		if char and pen then
-			local x = pen.cf.Position.X
-			local side = pen.side
-			local pos = Vector3.new(x, 4, side * 122)
-			char:PivotTo(CFrame.lookAt(pos, pos + Vector3.new(0, 0, -side)))
+			local pos = Vector3.new(pen.cf.Position.X, 4, 10)
+			char:PivotTo(CFrame.lookAt(pos, pos + Vector3.new(0, 0, -1)))
 		end
 		return true
 	end,

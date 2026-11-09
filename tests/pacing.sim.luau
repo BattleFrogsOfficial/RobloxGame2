@@ -46,9 +46,8 @@ local Formulas = load("Formulas")
 local Format = load("Format")
 
 local WALK = 16
-local CLICKS_PER_SECOND = 3 -- a player tapping while training
 local TRAIN_SECONDS = 25 -- training between runs
-local TRIP_OVERHEAD = 16 -- pen <-> shore walking, charging, hatching
+local TRIP_OVERHEAD = 22 -- base <-> shore walking, charging, the cutscene, planting, hatching
 
 local function simulate(seed)
 	local rng = lcg(seed)
@@ -114,11 +113,12 @@ local function simulate(seed)
 		local eggs = Formulas.rollEggs(rng, sp, luck)
 		table.sort(eggs, function(a, b) return a.d > b.d end)
 		local clock = 0
-		local window = sp.openTime + Config.Ocean.OpenAnim
 		for _, e in eggs do
+			-- One egg per trip (carry 1), and each egg must be planted at
+			-- home before the next, so only the first trip fits in a split.
 			local arrive = clock + (e.d + 8) / WALK
-			if arrive > window + (sp.length - e.d) / sp.closeSpeed then
-				continue -- the wave would get there first
+			if Formulas.eggCovered(sp, e, Config.Ocean.OpenAnim + arrive) then
+				continue -- the water got there first
 			end
 			clock = arrive + (e.d + 8) / WALK
 			local def = Config.EggById[e.egg]
@@ -128,12 +128,13 @@ local function simulate(seed)
 			if not firstTier[def.tier] then
 				firstTier[def.tier] = s.t + clock
 			end
+			break
 		end
 		pass(clock + TRIP_OVERHEAD)
 		shop()
 		-- train
 		local gain = Config.Weights[s.weight].gain
-		s.strength += gain * (CLICKS_PER_SECOND + 1 / Config.Training.AutoLiftInterval) * TRAIN_SECONDS
+		s.strength += gain * math.floor(TRAIN_SECONDS / Config.Training.RepTime)
 		pass(TRAIN_SECONDS)
 		shop()
 		for _, mark in { 5, 15, 30, 60, 120, 240, 480 } do

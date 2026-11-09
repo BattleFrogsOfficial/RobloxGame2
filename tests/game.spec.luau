@@ -68,7 +68,7 @@ local function boot(options)
 	function world.join(userId, name)
 		local player = h:addPlayer(userId or 1, name or "Tester")
 		h:advance(0.3)
-		h:spawnCharacter(player, Vector3.new(0, 3, 140))
+		h:spawnCharacter(player, Vector3.new(0, 3, 30))
 		h:advance(0.5)
 		return player
 	end
@@ -100,7 +100,7 @@ local ws = h.workspace
 check("map built", ws:FindFirstChild("Map") ~= nil)
 check("template baseplate removed", ws:FindFirstChild("Baseplate") == nil)
 check("template spawn removed", ws:FindFirstChild("SpawnLocation") == nil)
-check("8 pens built", ws:FindFirstChild("Pens") ~= nil and #ws.Pens:GetChildren() == 8, ws:FindFirstChild("Pens") and #ws.Pens:GetChildren())
+check("bases built", ws:FindFirstChild("Pens") ~= nil and #ws.Pens:GetChildren() == Config.MaxPlayers, ws:FindFirstChild("Pens") and #ws.Pens:GetChildren())
 local staff = h.game:GetService("StarterPack"):FindFirstChild("Sea Staff")
 check("staff tool in StarterPack", staff ~= nil and staff:FindFirstChild("Handle") ~= nil)
 check("remotes created", h.ReplicatedStorage:FindFirstChild("Remotes") ~= nil)
@@ -126,6 +126,7 @@ local Guide = w.clientModule("Guide")
 local Remotes = w.sharedModule("Remotes", "client")
 local Formulas = w.sharedModule("Formulas")
 local O = Config.Ocean
+local SHORE = O.ShoreZ
 
 local effects = {}
 State.effect:Connect(function(kind)
@@ -144,6 +145,14 @@ local function act(...)
 	return okAction, message
 end
 
+local function count(t)
+	local n = 0
+	for _ in t do
+		n += 1
+	end
+	return n
+end
+
 local WINDOWS = { "Pets", "Eggs", "Sell", "Upgrades", "Index", "Store", "Playtime", "Daily" }
 local function openEveryWindow(label)
 	for _, name in WINDOWS do
@@ -157,24 +166,59 @@ end
 openEveryWindow("(fresh player)")
 
 local d = Data.get(player)
+local pen = Pens.get(player)
 eq("fresh player has no cash", d.cash, 0)
 check("guide points a new player at the shore", Guide.text ~= nil and Guide.text:find("shoreline") ~= nil, Guide.text)
 check("leaderstats created", player:FindFirstChild("leaderstats") ~= nil and player.leaderstats:FindFirstChild("Cash") ~= nil)
 
+-- No emoji or other special glyphs anywhere in the interface.
+local function plainText(root, label)
+	local bad
+	for _, inst in root:GetDescendants() do
+		if inst:IsA("TextLabel") or inst:IsA("TextButton") then
+			if inst.Text:find("[\128-\255]") then
+				bad = inst:GetFullName() .. " = " .. inst.Text
+				break
+			end
+		end
+	end
+	check("no emoji in " .. label, bad == nil, bad)
+end
+plainText(player.PlayerGui, "the HUD and windows")
+plainText(ws, "world signs and labels")
+
+-- World layout: one shore, five bases in a row, three leaderboards.
+eq("five bases", #ws.Pens:GetChildren(), 5)
+local boards = 0
+for _, m in ws.Map:GetChildren() do
+	if m.Name:find("^Leaderboard") then
+		boards += 1
+	end
+end
+eq("three leaderboards in the world", boards, 3)
+for _, m in ws.Pens:GetChildren() do
+	local c = m:GetAttribute("Center")
+	check("base " .. m.Name .. " is on the land side", c.Z > SHORE + 40, c.Z)
+end
+
 ----------------------------------------------------------------------------
--- 3. Part the sea, grab an egg, bank it
+-- 3. Part the sea (cutscene), grab an egg, carry it home, plant it
 ----------------------------------------------------------------------------
-local function startSplit(x, side, holdSeconds)
-	h:moveTo(player, Vector3.new(x, 3, side * (O.ShoreZ + 6)))
+local camera = ws.CurrentCamera
+local function startSplit(x, holdSeconds)
+	h:moveTo(player, Vector3.new(x, 3, SHORE + 6))
 	h:advance(0.3)
 	Ocean.beginCharge("mouse")
 	h:advance(holdSeconds or 1.6)
 	Ocean.releaseCharge("mouse")
 	h:advance(0.1)
 end
+local function waitOutCutscene()
+	h:advance(O.OpenAnim + 0.2)
+end
 
 check("no split before charging", Ocean.active == nil)
-h:moveTo(player, Vector3.new(10, 3, O.ShoreZ + 6))
+h:moveTo(player, Vector3.new(10, 3, SHORE + 6))
 h:advance(0.3)
 check("in the split zone", Ocean.inZone)
 check("staff auto-equipped on the shore", player.Character:FindFirstChild("Sea Staff") ~= nil)
@@ -194,20 +238,56 @@ check("split depth matches formula", sp and math.abs(sp.length - Formulas.splitP
 check("split has eggs", sp and #sp.eggs >= 2, sp and #sp.eggs)
 eq("server counted the split", d.stats.splits, 1)
 
-h:advance(1.2)
+-- The cutscene owns the camera and holds the player still.
+check("cutscene is playing", Ocean.cutscene)
+check("cutscene takes the camera", camera.CameraType == roblox.Enum.CameraType.Scriptable)
+eq("player held still during the cutscene", player.Character.Humanoid.WalkSpeed, 0)
+check("split-start effect fired", sawEffect("splitStart"))
+h:advance(O.OpenAnim * 0.5)
+check("HUD hidden during the cutscene", player.PlayerGui.Hud.Enabled == false)
+check("cutscene banner shown", player.PlayerGui.Overlay:FindFirstChild("Banner") ~= nil)
+waitOutCutscene()
+check("cutscene ended", not Ocean.cutscene)
+check("camera handed back", camera.CameraType ~= roblox.Enum.CameraType.Scriptable)
+eq("player can walk again", player.Character.Humanoid.WalkSpeed, 16)
+check("HUD back after the cutscene", player.PlayerGui.Hud.Enabled == true)
+noErrors(h, "parting cutscene")
+
 local ocean = ws:FindFirstChild("LocalOcean")
 check("closed sea hidden while parted", ocean.Main.Transparency == 1)
 check("corridor walls are visible", ocean.WallL1.Transparency < 1 and ocean.WallR1.Transparency < 1)
+check("walls are solid for the camera and the player", ocean.WallL1.CanCollide and ocean.WallL1.CanQuery)
 check("far wall is visible", ocean.WallEnd.Transparency < 1)
-check("wall segments past the corridor end stay hidden", ocean.WallL20.Transparency == 1)
+check("wall segments past the corridor end stay hidden", ocean.WallL30.Transparency == 1)
 check("wet sand shows on the corridor floor", ocean.WetSand.Transparency < 1)
-check("guide arrows lead to the egg", #ws.GuideArrows:GetChildren() > 0)
-check("side barriers block the player", ocean.BarrierL.CanCollide and ocean.BarrierR.CanCollide)
+check("the sea reaches the horizon", ocean:FindFirstChild("Sea1") ~= nil and ocean.Sea1.Size.Z > 1000)
 local eggSpots = Ocean.eggPositions()
 check("eggs appear in the corridor", #eggSpots >= 2, #eggSpots)
 check("guide points at an egg", Guide.text ~= nil and Guide.text:find("egg") ~= nil, Guide.text)
+for _, m in ocean:GetChildren() do
+	if m:IsA("Model") then
+		local beams = 0
+		for _, p in m:GetChildren() do
+			if p:IsA("BasePart") and p.Material == roblox.Enum.Material.Neon and p.Size.Y > 20 then
+				beams += 1
+			end
+		end
+		check("no light beam over eggs", beams == 0)
+	end
+end
 
--- Walk onto the first egg.
+-- The walls close in the whole time.
+local gapBefore = ocean.WallR1.CFrame.Position.X - ocean.WallL1.CFrame.Position.X
+h:advance(1)
+local gapAfter = ocean.WallR1.CFrame.Position.X - ocean.WallL1.CFrame.Position.X
+check("walls keep closing from both sides", gapAfter < gapBefore - 0.5, gapBefore .. " -> " .. gapAfter)
+local phase, left, room = Ocean.timing()
+check("HUD timing reports closing", phase == "closing" and left > 0 and room < 1 and room > 0)
+
+-- Walk onto the egg nearest the corridor center.
+table.sort(eggSpots, function(a, b)
+	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)
+end)
 h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
 h:advance(0.4)
 noErrors(h, "grabbing an egg")
@@ -215,145 +295,212 @@ eq("carrying one egg", Ocean.carried, 1)
 check("carried egg shown on the character", player.Character:FindFirstChild("CarriedEgg") ~= nil)
 check("grab effect received", sawEffect("grabbed"))
 eq("guide says run", Guide.text, "Run back to the beach!")
+check("egg counter shown", player.PlayerGui.Hud.Carry.Visible == true)
 
 -- A second egg can't be picked up with full hands.
 h:moveTo(player, eggSpots[2] + Vector3.new(0, 3, 0))
 h:advance(0.4)
 eq("still carrying one egg (hands full)", Ocean.carried, 1)
 
--- Back to the beach.
-h:moveTo(player, Vector3.new(10, 3, O.ShoreZ + 8))
+-- Back on the beach the egg is safe but NOT planted yet.
+h:moveTo(player, Vector3.new(sp.cx, 3, SHORE + 8))
 h:advance(0.4)
-eq("egg banked", Ocean.carried, 0)
-check("banked effect received", sawEffect("banked"))
+check("safe effect on reaching land", sawEffect("safe"))
+eq("still carrying on the beach", Ocean.carried, 1)
+eq("nothing planted yet", count(d.pen), 0)
+eq("egg not counted until planted", d.stats.eggsCollected, 0)
+check("counter stays up on land", player.PlayerGui.Hud.Carry.Visible == true)
+check("guide sends you home", Guide.text ~= nil and Guide.text:find("base") ~= nil, Guide.text)
+h:advance(3)
+eq("egg still carried a few seconds later", Ocean.carried, 1)
+check("can't part the sea with full hands", not Ocean.canCharge)
+
+-- Walk into your own base: now it's planted.
+local home = pen.cf.Position
+h:moveTo(player, Vector3.new(home.X, 3, home.Z - 20))
+h:advance(0.4)
+eq("egg planted on entering the base", Ocean.carried, 0)
+check("planted effect received", sawEffect("planted"))
 eq("server counted the egg", d.stats.eggsCollected, 1)
 check("egg is incubating in slot 1", d.pen["1"] ~= nil and d.pen["1"].kind == "egg")
-check("client state shows the egg", State.data.pen["1"] ~= nil and State.data.pen["1"].kind == "egg")
 check("carried egg removed from character", player.Character:FindFirstChild("CarriedEgg") == nil)
-check("egg model placed in the pen", #Pens.get(player).contents:GetChildren() == 1)
+check("counter gone once planted", player.PlayerGui.Hud.Carry.Visible == false)
+check("egg model placed in the pen", #pen.contents:GetChildren() == 1)
 check("egg is not ready straight away", act("HatchAll") == false and d.pen["1"].kind == "egg")
-noErrors(h, "grab and bank")
+noErrors(h, "carry home and plant")
 
--- Close early from the beach.
+-- Close early (the corridor may already have shut on its own).
 Ocean.close()
-h:advance(0.3)
-check("split closed early", Ocean.active == nil)
+h:advance(0.5)
+check("split is over", Ocean.active == nil)
 check("closed sea is back", ocean.Main.Transparency < 1 and ocean.WallL1.Transparency == 1)
-check("barriers off when closed", not ocean.BarrierL.CanCollide)
+check("walls stop colliding when hidden", not ocean.WallL1.CanCollide and not ocean.BarrierL.CanCollide)
 noErrors(h, "close ocean")
 
 ----------------------------------------------------------------------------
--- 4. The sea sweeps you back
+-- 4. The sea catches you
 ----------------------------------------------------------------------------
--- Standing deep in the corridor when the wall arrives.
-startSplit(-40, 1)
+-- Standing in the corridor when the walls meet.
+h:advance(1)
+startSplit(-40)
 sp = Ocean.active
 check("second split started", sp ~= nil)
-h:advance(1) -- let the corridor finish opening
-h:moveTo(player, Vector3.new(sp.cx, O.SeabedY + 3, O.ShoreZ - 26))
-h:advance(sp.openTime - 0.6)
-check("safe while the sea is open", h:positionOf(player).Z < O.ShoreZ)
-check("no wall gap while open", Ocean.wallGap() == nil)
-h:advance(1)
-check("wall gap reported while closing", Ocean.wallGap() ~= nil)
-h:advance(3)
-check("swept back to the beach", h:positionOf(player).Z >= O.ShoreZ, h:positionOf(player).Z)
+waitOutCutscene()
+h:moveTo(player, Vector3.new(sp.cx, O.SeabedY + 3, SHORE - 24))
+h:advance(sp.duration * 0.5)
+check("safe in the middle while there's room", h:positionOf(player).Z < SHORE)
+check("wall gap reported", Ocean.wallGap() ~= nil and Ocean.wallGap() > 0)
+-- Eggs near the edges are swallowed as the walls pass them.
+local alive = #Ocean.eggPositions()
+h:advance(sp.duration * 0.38)
+check("eggs get covered as the walls close", #Ocean.eggPositions() < alive, #Ocean.eggPositions() .. " of " .. alive)
+h:advance(sp.duration * 0.05)
 check("caught effect received", sawEffect("caught"))
-h:advance(6)
-check("split ended after closing", Ocean.active == nil)
-noErrors(h, "swept by the closing wall")
+check("ragdoll flight started (limp + launched upward)", player.Character.Humanoid.PlatformStand == true and player.Character.HumanoidRootPart.AssemblyLinearVelocity.Y > 50)
+check("big centered banner shown", player.PlayerGui.Overlay:FindFirstChild("Banner") ~= nil)
+check("split ended when the walls met", Ocean.active == nil)
+h:advance(3)
+check("put safely on the beach", h:positionOf(player).Z >= SHORE, h:positionOf(player).Z)
+check("character stands back up", player.Character.Humanoid.PlatformStand == false)
+noErrors(h, "caught by the closing walls")
 
--- Stepping out of the side of the corridor.
-startSplit(60, -1)
-sp = Ocean.active
-check("split from the south shore", sp ~= nil and sp.side == -1)
+-- Losing a carried egg.
 h:advance(1)
-h:moveTo(player, Vector3.new(sp.cx + sp.width / 2 + 8, O.SeabedY + 3, -(O.ShoreZ - 25)))
-h:advance(0.3)
-check("pushed back to the south beach", h:positionOf(player).Z <= -O.ShoreZ, h:positionOf(player).Z)
+startSplit(60)
+sp = Ocean.active
+waitOutCutscene()
+eggSpots = Ocean.eggPositions()
+table.sort(eggSpots, function(a, b)
+	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)
+end)
+h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
+h:advance(0.4)
+eq("grabbed an egg on the third run", Ocean.carried, 1)
+h:advance(sp.duration + 1)
+eq("egg lost when caught", Ocean.carried, 0)
+eq("lost egg never counted", d.stats.eggsCollected, 1)
 sawEffect("caught")
-Ocean.close()
-h:advance(0.3)
+h:advance(3.5)
 
 -- Walking into the closed sea.
-h:advance(2) -- wait out the brief immunity after a sweep
-h:moveTo(player, Vector3.new(0, O.SeabedY + 3, 40))
+h:moveTo(player, Vector3.new(0, O.SeabedY + 3, SHORE - 40))
 h:advance(0.3)
-check("closed sea pushes you out", math.abs(h:positionOf(player).Z) >= O.ShoreZ)
-check("pushed effect received", sawEffect("pushed"))
+check("pushed out of the closed sea", sawEffect("caught"))
+h:advance(3.5)
+check("back on the beach", h:positionOf(player).Z >= SHORE)
+-- Jumping over the water is still "in the ocean".
+h:moveTo(player, Vector3.new(0, 9, SHORE - 6))
+h:advance(0.3)
+check("jumping over closed water still gets you thrown back", sawEffect("caught"))
+h:advance(3.5)
 noErrors(h, "push-back cases")
 
 -- A split request from the middle of the map is refused.
-h:moveTo(player, Vector3.new(0, 3, 200))
+h:moveTo(player, Vector3.new(0, 3, SHORE + 60))
 local refused, reason = Remotes.get("RequestSplit"):InvokeServer(1)
 check("split refused away from the shore", refused == nil and type(reason) == "string", reason)
 
 ----------------------------------------------------------------------------
--- 5. Hatch the egg, earn money
+-- 5. Hatch the egg: the pet and the news wait for the cutscene
 ----------------------------------------------------------------------------
 h:advance(Config.EggById[d.pen["1"].egg].hatch + 1, 0.25)
-local slot = Pens.get(player).slotModels["1"]
+local slot = pen.slotModels["1"]
 check("pen egg shows Ready!", slot.timer.Text == "Ready!", slot.timer.Text)
 check("hatch prompt enabled", slot.prompt.Enabled)
+local toasts = {}
+State.toast:Connect(function(text)
+	table.insert(toasts, text)
+end)
 h:fire(slot.prompt, "Triggered", player)
-h:advance(6)
+h:advance(1)
 check("hatch effect received", sawEffect("hatch"))
 check("slot 1 is now an animal", d.pen["1"].kind == "animal")
 local firstAnimal = d.pen["1"].animal
+local animalModel = pen.slotModels["1"].model
+local function isHidden(model)
+	for _, p in model:GetDescendants() do
+		if p:IsA("BasePart") and p.Name ~= "Root" and p.LocalTransparencyModifier < 1 then
+			return false
+		end
+	end
+	return true
+end
+check("new pet is hidden in the pen during the cutscene", isHidden(animalModel))
+local announcedEarly = false
+for _, text in toasts do
+	if text:find("Index") then
+		announcedEarly = true
+	end
+end
+check("Index news waits for the cutscene", not announcedEarly)
+h:advance(6)
+check("pet revealed in the pen after the cutscene", not isHidden(animalModel))
+local announced = false
+for _, text in toasts do
+	if text:find("Index") then
+		announced = true
+	end
+end
+check("Index news announced after the cutscene", announced)
 check("animal recorded in the index", d.index[firstAnimal] == 1)
 eq("hatch counted", d.stats.hatched, 1)
 noErrors(h, "hatching")
 local before = d.cash
 h:advance(3.2, 0.2)
 check("animal earns money", d.cash > before, d.cash)
-check("income shown on the pen sign", Pens.get(player).ownerLabels[2].Text ~= "")
+check("income shown on the pen sign", pen.ownerLabels[2].Text ~= "")
 check("leaderboard cash updates", player.leaderstats.Cash.Value ~= "0", player.leaderstats.Cash.Value)
-noErrors(h, "income")
-
--- The server publishes walks; the client animates them.
-local animalModel = Pens.get(player).slotModels["1"].model
 check("animal is marked for client animation", animalModel:GetAttribute("Animal") == true)
 h:advance(8, 0.1)
 check("server published a walk", animalModel:GetAttribute("WalkStart") ~= nil and animalModel:GetAttribute("WalkDuration") > 0)
-noErrors(h, "animal wandering")
+noErrors(h, "income and wandering")
 
-local okIndex = act("ClaimIndex", firstAnimal)
-check("index reward claimed", okIndex == true and d.index[firstAnimal] == 2)
+check("index reward claimed", act("ClaimIndex", firstAnimal) == true and d.index[firstAnimal] == 2)
 check("index reward can't be claimed twice", act("ClaimIndex", firstAnimal) == false)
 
+-- Rare animals are far bigger than common ones.
+local Voxel = w.sharedModule("Voxel")
+local function height(animal)
+	local _, size = Voxel.animal(animal, "Normal"):GetBoundingBox()
+	return size.Y
+end
+check("a Secret pet towers over a Common one", height("Golden Kraken") > height("Crab") * 6, height("Golden Kraken") .. " vs " .. height("Crab"))
+check("a Mythic pet is bigger than a Legendary one", height("Kraken") > height("Parrot"))
+
 ----------------------------------------------------------------------------
--- 6. Training and upgrades
+-- 6. Training: automatic on the pad, a rep at a time, no staff
 ----------------------------------------------------------------------------
-local pen = Pens.get(player)
 local padPos = (pen.cf * roblox.CFrame.new(Pens.PadLocal)).Position
+h:moveTo(player, Vector3.new(0, 3, SHORE + 6))
+h:advance(0.4)
+check("holding the staff before training", player.Character:FindFirstChild("Sea Staff") ~= nil)
 h:moveTo(player, padPos + Vector3.new(0, 3, 0))
-h:advance(0.5)
-check("standing on the training pad", player:GetAttribute("OnTrainPad") == true)
-Remotes.get("Train"):FireServer("start")
-h:advance(0.2)
-check("training started", player:GetAttribute("Training") == true)
-check("barbell overhead", player.Character:FindFirstChild("TrainingBarbell") ~= nil)
-eq("can't walk while training", player.Character.Humanoid.WalkSpeed, 0)
-h:advance(2.5)
-local auto = d.strength
-check("auto-lifts add strength", auto >= 2, auto)
-Remotes.get("Train"):FireServer("lift")
-h:advance(0.3)
-check("clicking lifts too", d.strength > auto)
-Remotes.get("Train"):FireServer("stop")
-h:advance(0.2)
-check("training stopped", player:GetAttribute("Training") == false)
-eq("walk speed restored", player.Character.Humanoid.WalkSpeed, 16)
+h:advance(0.4)
+check("training starts by stepping on the pad", player:GetAttribute("Training") == true)
+check("barbell appears", player.Character:FindFirstChild("TrainingBarbell") ~= nil)
+check("staff is put away while training", player.Character:FindFirstChild("Sea Staff") == nil and player.Backpack:FindFirstChild("Sea Staff") ~= nil)
+check("you can still walk off the pad", player.Character.Humanoid.WalkSpeed > 0)
+eq("no strength before the first rep finishes", d.strength, 0)
+h:advance(Config.Training.RepTime * 3 + 0.3)
+local gain = Config.Weights[1].gain
+check("strength comes one rep at a time", d.strength >= gain * 2 and d.strength <= gain * 4, d.strength)
+check("lift effect per rep", sawEffect("lift"))
+check("training banner shown", player.PlayerGui.Hud.Train.Visible == true)
+h:moveTo(player, Vector3.new(home.X, 3, home.Z + 10))
+h:advance(0.4)
+check("stepping off stops training", player:GetAttribute("Training") == false)
 check("barbell removed", player.Character:FindFirstChild("TrainingBarbell") == nil)
+local frozen = d.strength
+h:advance(3)
+eq("no more strength once off the pad", d.strength, frozen)
 noErrors(h, "training")
 
--- The tutorial is done once you've banked an egg, hatched one and trained.
-h:moveTo(player, Vector3.new(0, 3, 160))
+-- The tutorial is done once you've planted an egg, hatched one and trained.
+h:moveTo(player, Vector3.new(0, 3, SHORE + 60))
 h:advance(0.5)
 eq("guide goes quiet after the tutorial", Guide.text, nil)
 eq("no guide arrows left on the ground", #ws.GuideArrows:GetChildren(), 0)
 
-check("can't afford luck at first", act("BuyLuck", 1) == false or d.luckLevel == 0 or d.cash >= 0)
 d.cash = 1e12
 Data.markDirty(player)
 h:advance(0.3)
@@ -373,13 +520,12 @@ noErrors(h, "upgrades")
 check("daily reward claims", act("ClaimDaily") == true)
 check("daily reward only once a day", act("ClaimDaily") == false)
 eq("daily streak is 1", d.daily.streak, 1)
-check("playtime gift not ready early", act("ClaimPlaytime", 5) == false)
+check("playtime gift not ready early", act("ClaimPlaytime", 12) == false)
 h:advance(61, 0.5)
 check("first playtime gift claims", act("ClaimPlaytime", 1) == true)
 check("playtime gift can't be claimed twice", act("ClaimPlaytime", 1) == false)
 for _, product in Config.Products do
-	local granted = act("StudioGrant", "product", product.key)
-	check("studio grant product " .. product.key, granted == true)
+	check("studio grant product " .. product.key, act("StudioGrant", "product", product.key) == true)
 	h:advance(0.2)
 end
 for _, pass in Config.Passes do
@@ -406,13 +552,6 @@ h:advance(1300, 1) -- let every incubating egg finish
 act("HatchAll")
 h:advance(40, 0.2) -- cutscenes
 noErrors(h, "hatching many eggs")
-local function count(t)
-	local n = 0
-	for _ in t do
-		n += 1
-	end
-	return n
-end
 check("pen is in use", count(d.pen) >= 2, count(d.pen))
 local incomeBefore = Data.income(player)
 check("place best succeeds", act("PlaceBest") == true)
@@ -438,34 +577,30 @@ check("bad sell target refused", act("SellAnimal", "elsewhere", 1) == false)
 check("bad argument types refused", act("PlaceEgg", "one") == false)
 check("unknown action refused", act("GiveMeEverything") == false)
 openEveryWindow("(established player)")
+plainText(player.PlayerGui, "the windows with real data")
 
--- Prompts in someone else's base are unreachable for us; ours work.
-local ownPrompt = pen.upPrompt
-check("own prompt keeps its range", ownPrompt.MaxActivationDistance > 0)
-
--- Jumping over the water is still "in the ocean".
-h:moveTo(player, Vector3.new(0, 9, O.ShoreZ - 6))
-h:advance(0.3)
-check("jumping over closed water still pushes you back", h:positionOf(player).Z >= O.ShoreZ)
-sawEffect("pushed")
-h:advance(2)
-
--- With Double Carry, two eggs can be carried.
-startSplit(0, 1)
-h:advance(1.2)
+-- With Double Carry, two eggs can be carried and planted together.
+d.strength = 400 -- a deeper, longer-lasting corridor for a two-egg run
+h:advance(1)
+startSplit(0)
+sp = Ocean.active
+waitOutCutscene()
 eggSpots = Ocean.eggPositions()
-if #eggSpots >= 2 then
-	h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
-	h:advance(0.4)
-	h:moveTo(player, eggSpots[2] + Vector3.new(0, 3, 0))
-	h:advance(0.4)
-	eq("double carry holds two eggs", Ocean.carried, 2)
-	h:moveTo(player, Vector3.new(0, 3, O.ShoreZ + 8))
-	h:advance(0.4)
-	eq("both eggs banked", Ocean.carried, 0)
-end
+table.sort(eggSpots, function(a, b)
+	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)
+end)
+h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
+h:advance(0.4)
+h:moveTo(player, eggSpots[2] + Vector3.new(0, 3, 0))
+h:advance(0.4)
+eq("double carry holds two eggs", Ocean.carried, 2)
+local eggsBefore = d.stats.eggsCollected
+h:moveTo(player, Vector3.new(home.X, 3, home.Z - 20))
+h:advance(0.4)
+eq("both eggs planted at home", d.stats.eggsCollected, eggsBefore + 2)
+eq("hands empty after planting", Ocean.carried, 0)
 Ocean.close()
-h:advance(0.3)
+h:advance(0.5)
 noErrors(h, "double carry run")
 
 -- A player whose backpack has no staff (spawned before it existed) gets one.
@@ -480,20 +615,45 @@ w.serverModule("Split").ensureStaff(player)
 eq("staff is never duplicated", #player.Backpack:GetChildren(), 1)
 
 ----------------------------------------------------------------------------
--- 9. More players
+-- 9. A full server, and the leaderboards
 ----------------------------------------------------------------------------
 local others = {}
-for i = 2, 9 do
+for i = 2, 6 do
 	local p = h:addPlayer(i, "Guest" .. i)
 	h:advance(0.2)
-	h:spawnCharacter(p, Vector3.new(i * 5, 3, 140))
+	h:spawnCharacter(p, Vector3.new(i * 5, 3, SHORE + 30))
 	h:advance(0.2)
 	others[i] = p
 end
-noErrors(h, "nine players joining")
-check("second player has their own pen", Pens.get(others[2]) ~= nil and Pens.get(others[2]) ~= pen)
-check("eighth player has a pen", Pens.get(others[8]) ~= nil)
-check("ninth player has no pen but still has data", Pens.get(others[9]) == nil and Data.get(others[9]) ~= nil)
+noErrors(h, "six players joining")
+check("second player has their own base", Pens.get(others[2]) ~= nil and Pens.get(others[2]) ~= pen)
+check("fifth player has a base", Pens.get(others[5]) ~= nil)
+check("a sixth player has no base but still has data", Pens.get(others[6]) == nil and Data.get(others[6]) ~= nil)
+
+Data.get(others[2]).strength = 5
+w.serverModule("Leaderboards").refresh()
+h:advance(0.2)
+local function boardRows(key)
+	local face = ws.Map:FindFirstChild("Leaderboard" .. key).Face
+	local rows = {}
+	for _, frame in face:FindFirstChildOfClass("SurfaceGui"):GetChildren() do
+		local labels = {}
+		for _, l in frame:GetChildren() do
+			if l:IsA("TextLabel") then
+				table.insert(labels, l.Text)
+			end
+		end
+		table.insert(rows, table.concat(labels, " "))
+	end
+	return table.concat(rows, "\n")
+end
+check("strength board ranks the stronger player first", boardRows("Strength"):find("1 Tester") ~= nil, boardRows("Strength"))
+check("strength board lists the second player", boardRows("Strength"):find("2 Guest2") ~= nil)
+check("cash board lists the player", boardRows("Cash"):find("Tester") ~= nil)
+check("eggs board lists the player", boardRows("Eggs"):find("Tester") ~= nil)
+check("boards saved to the global store", count(h.orderedStores) == 3)
+noErrors(h, "leaderboards")
+
 h:removePlayer(others[3])
 h:advance(0.3)
 local freed = 0
@@ -502,18 +662,32 @@ for _, m in ws.Pens:GetChildren() do
 		freed += 1
 	end
 end
-eq("leaving frees the pen", freed, 1)
+eq("leaving frees the base", freed, 1)
 noErrors(h, "player leaving")
 
 ----------------------------------------------------------------------------
--- 10. Saving and coming back later
+-- 10. Saving and coming back later (carried eggs are kept)
 ----------------------------------------------------------------------------
+h:advance(1)
+startSplit(-100)
+sp = Ocean.active
+waitOutCutscene()
+eggSpots = Ocean.eggPositions()
+table.sort(eggSpots, function(a, b)
+	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)
+end)
+h:moveTo(player, eggSpots[1] + Vector3.new(0, 3, 0))
+h:advance(0.4)
+h:moveTo(player, Vector3.new(sp.cx, 3, SHORE + 8))
+h:advance(0.4)
+eq("carrying an egg on the beach before leaving", Ocean.carried, 1)
+local eggsOwned = #d.eggs + count(d.pen)
+
 local saved = {
 	luckLevel = d.luckLevel,
 	weightTier = d.weightTier,
 	baseSlots = d.baseSlots,
 	strength = d.strength,
-	penCount = count(d.pen),
 	hatched = d.stats.hatched,
 }
 local stores = h.dataStores
@@ -523,7 +697,7 @@ h:shutdown()
 noErrors(h, "save on leave + shutdown")
 check("save written", stores.SplitTheOcean_v1 ~= nil and stores.SplitTheOcean_v1.p_1 ~= nil)
 
-local w2 = boot({ dataStores = stores, epoch = h.epoch + h.clock + 2 * 3600 })
+local w2 = boot({ dataStores = stores, orderedStores = h.orderedStores, epoch = h.epoch + h.clock + 2 * 3600 })
 local h2 = w2.h
 local player2 = w2.join(1, "Tester")
 w2.startClient(player2)
@@ -541,11 +715,21 @@ eq("luck level restored", d2.luckLevel, saved.luckLevel)
 eq("weight restored", d2.weightTier, saved.weightTier)
 eq("base size restored", d2.baseSlots, saved.baseSlots)
 eq("strength restored", d2.strength, saved.strength)
-eq("pen contents restored", count(d2.pen), saved.penCount)
 eq("stats restored", d2.stats.hatched, saved.hatched)
+eq("the egg carried to safety was kept", #d2.eggs + count(d2.pen), eggsOwned + 1)
 check("offline earnings granted", offline)
 check("passes are per-session until real IDs exist", State2.data.passes.DoubleCash == nil)
-eq("pen rebuilt from save", #w2.serverModule("Pens").get(player2).contents:GetChildren(), saved.penCount)
+eq("pen rebuilt from save", #w2.serverModule("Pens").get(player2).contents:GetChildren(), count(d2.pen))
+w2.serverModule("Leaderboards").refresh()
+check("global board remembers players who aren't here", (function()
+	local face = h2.workspace.Map.LeaderboardStrength.Face
+	for _, l in face:GetDescendants() do
+		if l:IsA("TextLabel") and l.Text == "User2" then
+			return true
+		end
+	end
+	return false
+end)())
 local Ui2 = w2.clientModule("ui/Ui")
 for _, name in WINDOWS do
 	Ui2.open(name)

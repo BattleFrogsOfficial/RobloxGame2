@@ -160,28 +160,49 @@ local prev = Formulas.splitParams(0, 1)
 for _, s in { 1, 5, 20, 100, 1000, 10000, 1e6, 1e9 } do
 	local p = Formulas.splitParams(s, 1)
 	check("length grows with strength " .. s, p.length >= prev.length)
-	check("open time grows with strength " .. s, p.openTime >= prev.openTime)
-	check("length within ocean " .. s, p.length <= Config.Ocean.MaxLength)
+	check("duration grows with depth " .. s, p.duration >= prev.duration)
+	check("length within the ocean " .. s, p.length <= Config.Ocean.Reach)
 	check("width capped " .. s, p.width <= Config.Split.MaxWidth)
 	prev = p
 end
 local tap = Formulas.splitParams(100, 0)
 local full = Formulas.splitParams(100, 1)
 check("tap is shorter than full charge", tap.length < full.length)
-check("charge adds open time", math.abs(full.openTime - tap.openTime - Config.Split.ChargeOpenBonus) < 1e-6)
+check("a full charge lasts longer", full.duration > tap.duration)
 
 eq("ground at shore", Formulas.groundY(0), 0)
 eq("ground mid-ramp", Formulas.groundY(Config.Ocean.RampLength / 2), Config.Ocean.SeabedY / 2)
 eq("ground on seabed", Formulas.groundY(100), Config.Ocean.SeabedY)
-eq("ground at far shore", Formulas.groundY(Config.Ocean.ShoreZ * 2), 0)
+eq("ground far out", Formulas.groundY(Config.Ocean.Reach), Config.Ocean.SeabedY)
 
-local sp = { length = 100, openTime = 6, closeSpeed = 8 }
-eq("length at t=0", Formulas.currentLength(sp, 0), 0)
-eq("length after open anim", Formulas.currentLength(sp, Config.Ocean.OpenAnim), 100)
-eq("length while open", Formulas.currentLength(sp, Config.Ocean.OpenAnim + 5.9), 100)
-check("length shrinks while closing", Formulas.currentLength(sp, Config.Ocean.OpenAnim + 7) < 100)
-eq("closed at end", Formulas.currentLength(sp, Formulas.totalDuration(sp)), 0)
-eq("stays closed", Formulas.currentLength(sp, Formulas.totalDuration(sp) + 10), 0)
+-- The walls burst open during the cutscene, then close the whole time.
+local anim = Config.Ocean.OpenAnim
+local sp = { length = 100, width = 30, duration = 20 }
+eq("shut before it starts", Formulas.halfWidth(sp, 0), 0)
+eq("fully open when the cutscene ends", Formulas.halfWidth(sp, anim), 15)
+check("already closing a second later", Formulas.halfWidth(sp, anim + 1) < 15)
+eq("half closed halfway through", Formulas.halfWidth(sp, anim + 10), 7.5)
+eq("shut at the end", Formulas.halfWidth(sp, anim + 20), 0)
+eq("stays shut", Formulas.halfWidth(sp, anim + 99), 0)
+local last = 15
+for t = 0, 20, 0.5 do
+	local hw = Formulas.halfWidth(sp, anim + t)
+	check("walls never reopen (t=" .. t .. ")", hw <= last + 1e-9)
+	last = hw
+end
+check("open during the cutscene", Formulas.isOpen(sp, anim * 0.5))
+check("open while there's room", Formulas.isOpen(sp, anim + 10))
+check("closed once the gap is too small to stand in", not Formulas.isOpen(sp, anim + 19.5))
+eq("total duration", Formulas.totalDuration(sp), anim + 20)
+eq("corridor fully torn open by the end of the cutscene", Formulas.openLength(sp, anim), 100)
+check("corridor tears open progressively", Formulas.openLength(sp, anim * 0.2) < 100)
+
+-- Eggs are covered from the outside in.
+local edgeEgg, centerEgg = { x = 12 }, { x = 1 }
+check("no egg is covered during the cutscene", not Formulas.eggCovered(sp, edgeEgg, anim * 0.5))
+check("edge egg covered early", Formulas.eggCovered(sp, edgeEgg, anim + 5))
+check("center egg survives longer", not Formulas.eggCovered(sp, centerEgg, anim + 5))
+check("center egg covered near the end", Formulas.eggCovered(sp, centerEgg, anim + 19.5))
 
 ----------------------------------------------------------------------------
 -- Egg rolls
@@ -191,11 +212,15 @@ for _, strength in { 0, 50, 5000 } do
 	for _, luck in { 1, 3, 20 } do
 		local p = Formulas.splitParams(strength, 1)
 		p.cx = 0
+		p.t0 = 0
 		local eggs = Formulas.rollEggs(rng, p, luck)
 		check("egg count in range", #eggs >= 1 and #eggs <= Config.Split.MaxEggs, #eggs)
 		for _, e in eggs do
 			check("egg inside corridor (depth)", e.d >= 0 and e.d <= p.length, e.d .. " / " .. p.length)
 			check("egg inside corridor (side)", math.abs(e.x) <= p.width / 2, e.x)
+			-- Sprinting from the shore, you get there before the water does.
+			local arrive = Config.Ocean.OpenAnim + (e.d + 8) / 16
+			check("egg still uncovered when a sprinter arrives", not Formulas.eggCovered(p, e, arrive), e.d)
 			check("egg id valid", Config.EggById[e.egg] ~= nil)
 			check("variant valid", Config.Variants[e.variant] ~= nil)
 		end
@@ -236,19 +261,18 @@ eq("fast hatch halves", Formulas.hatchSeconds("Coral", true), math.ceil(Config.E
 eq("gold variant income", Formulas.animalIncome("Crab", "Gold"), Config.AnimalById.Crab.income * Config.Variants.Gold.mult)
 
 ----------------------------------------------------------------------------
--- Reachability: with a full charge, can a player run to the farthest point,
--- grab an egg and get home? (Walk speed 16, start ~8 studs behind the shore.)
+-- Round trips: sprint to the far end and back before the walls meet.
 ----------------------------------------------------------------------------
-print("\nstrength | depth | open s | close s | farthest egg reachable? | max tier there")
-for _, s in { 0, 10, 50, 200, 1000, 5000, 25000, 200000 } do
+print("\nstrength | depth | width | seconds to close | round trip | room left when home | max tier there")
+for _, s in { 0, 10, 50, 200, 1000, 5000, 25000, 200000, 7e6 } do
 	local p = Formulas.splitParams(s, 1)
-	local farthest = p.length - 6
-	local arrive = (farthest + 8) / 16
-	local wallAt = Formulas.currentLength(p, arrive)
-	local depth = farthest / (Config.Ocean.ShoreZ * 2)
+	local farthest = p.length - 4
+	local roundTrip = 2 * (farthest + 8) / 16
+	local home = Config.Ocean.OpenAnim + roundTrip
+	local depth = farthest / Config.Ocean.Reach
 	local maxTier = math.clamp(2 + math.floor(depth * 5.4), 2, #Config.Eggs)
-	print(string.format("%8d | %5d | %6.1f | %7.1f | %s | %s", s, p.length, p.openTime, p.length / p.closeSpeed, tostring(farthest <= wallAt), Config.Eggs[maxTier].id))
-	check("farthest egg reachable at strength " .. s, farthest <= wallAt + Config.Ocean.SweepGrace)
+	print(string.format("%8d | %5d | %5.1f | %16.1f | %10.1f | %19.1f | %s", s, p.length, p.width, p.duration, roundTrip, Formulas.halfWidth(p, home), Config.Eggs[maxTier].id))
+	check("round trip to the far end is survivable at strength " .. s, Formulas.isOpen(p, home))
 end
 
 print(string.format("\n%d passed, %d failed", passed, failed))

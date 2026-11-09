@@ -1,6 +1,9 @@
--- Builds the static map in code: ocean basin, beaches, ramps, cliffs,
--- border walls, decor and lighting. The WATER itself is drawn by each client
--- (see client/Ocean.luau) so a parted sea is only visible to its owner.
+-- Builds the static map in code. There is one shore (the line z = ShoreZ):
+-- beach and bases on the +z side behind tall walls, and an ocean that runs
+-- to the horizon on the -z side, framed by two rocky headlands.
+--
+-- The WATER itself is drawn by each client (see client/Ocean.luau) so a
+-- parted sea is only visible to the player who parted it.
 
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,36 +15,36 @@ local Voxel = require(Shared.Voxel)
 local World = {}
 
 local O = Config.Ocean
-local MAP_HALF_X = 215
-local MAP_HALF_Z = 265
-local BEACH_END = 150 -- beach sand runs from the shore (110) to here
+local W = Config.World
+local SHORE = O.ShoreZ
+local BACK = SHORE + W.LandDepth
+local BEACH_END = SHORE + W.BeachDepth
+local SEABED_END = SHORE - O.Reach - 40
+local WALL_T = 10
 
 World.PenWidth = Config.Pen.Width
 World.PenDepth = Config.Pen.Depth
-World.Pens = {} -- { cf: CFrame, side: number }
+World.Pens = {} -- { cf: CFrame }
+World.BoardSpots = {} -- CFrames for the three leaderboards (facing the ocean)
 
 local SAND = Color3.fromRGB(230, 200, 140)
-local SAND_LIGHT = Color3.fromRGB(245, 222, 170)
 local SAND_DARK = Color3.fromRGB(221, 190, 130)
+local SAND_LIGHT = Color3.fromRGB(245, 222, 170)
 local GRASS = Color3.fromRGB(95, 200, 70)
 local GRASS_DARK = Color3.fromRGB(86, 188, 62)
 local ROCK = Color3.fromRGB(150, 155, 165)
 
 local map: Folder
 
-local function block(name: string, minV: Vector3, maxV: Vector3, color: Color3, material: Enum.Material?, studs: boolean?): Part
+local function block(name: string, minV: Vector3, maxV: Vector3, color: Color3, material: Enum.Material?): Part
 	local p = Instance.new("Part")
 	p.Name = name
 	p.Anchored = true
 	p.Size = maxV - minV
-	p.Position = (minV + maxV) / 2
+	p.CFrame = CFrame.new((minV + maxV) / 2)
 	p.Color = color
-	p.Material = material or Enum.Material.Plastic
-	if studs then
-		p.TopSurface = Enum.SurfaceType.Studs
-	else
-		p.TopSurface = Enum.SurfaceType.Smooth
-	end
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.TopSurface = Enum.SurfaceType.Smooth
 	p.BottomSurface = Enum.SurfaceType.Smooth
 	p.Parent = map
 	return p
@@ -58,7 +61,7 @@ local function tiles(name: string, minV: Vector3, maxV: Vector3, colorA: Color3,
 		local z = minV.Z
 		while z < maxV.Z - 0.01 do
 			local z1 = math.min(z + tile, maxV.Z)
-			block(name, Vector3.new(x, minV.Y, z), Vector3.new(x1, maxV.Y, z1), (ix + iz) % 2 == 0 and colorA or colorB, Enum.Material.SmoothPlastic)
+			block(name, Vector3.new(x, minV.Y, z), Vector3.new(x1, maxV.Y, z1), (ix + iz) % 2 == 0 and colorA or colorB)
 			z = z1
 			iz += 1
 		end
@@ -85,81 +88,85 @@ local function surfaceText(part: BasePart, text: string, face: Enum.NormalId, co
 	label.Parent = gui
 end
 
-local function buildGround()
-	-- North and south land (beach + grass). Thick so nothing shows under it.
-	for _, s in { 1, -1 } do
-		local function zr(a, b)
-			return math.min(s * a, s * b), math.max(s * a, s * b)
-		end
-		local z0, z1 = zr(O.ShoreZ, BEACH_END)
-		tiles("Beach", Vector3.new(-MAP_HALF_X, -30, z0), Vector3.new(MAP_HALF_X, 0, z1), SAND, SAND_DARK, 20)
-		z0, z1 = zr(BEACH_END, MAP_HALF_Z)
-		tiles("Grass", Vector3.new(-MAP_HALF_X, -30, z0), Vector3.new(MAP_HALF_X, 0, z1), GRASS, GRASS_DARK, 23)
+local function buildLand()
+	local H = O.HalfX
+	tiles("Beach", Vector3.new(-H, -30, SHORE), Vector3.new(H, 0, BEACH_END), SAND, SAND_DARK, 20)
+	tiles("Grass", Vector3.new(-H, -30, BEACH_END), Vector3.new(H, 0, BACK), GRASS, GRASS_DARK, 23)
 
-		-- Split zone: a lighter sand strip along the shoreline.
-		z0, z1 = zr(O.ShoreZ + 1.5, O.ShoreZ + O.SplitZoneDepth)
-		local strip = block("SplitZone", Vector3.new(-O.HalfX, 0, z0), Vector3.new(O.HalfX, 0.06, z1), SAND_LIGHT, Enum.Material.SmoothPlastic)
-		strip.CanCollide = false
-		strip.CanQuery = false
+	-- Split zone: a lighter sand strip along the shoreline.
+	local strip = block("SplitZone", Vector3.new(-H, 0, SHORE + 1.5), Vector3.new(H, 0.06, SHORE + O.SplitZoneDepth), SAND_LIGHT)
+	strip.CanCollide = false
+	strip.CanQuery = false
+	-- Coral-red lip on the shore edge, like a warning stripe.
+	block("ShoreLip", Vector3.new(-H, 0, SHORE), Vector3.new(H, 0.3, SHORE + 1.5), Color3.fromRGB(235, 90, 75))
+	for x = -150, 150, 75 do
+		local label = Instance.new("Part")
+		label.Name = "SplitLabel"
+		label.Anchored = true
+		label.CanCollide = false
+		label.CanQuery = false
+		label.Transparency = 1
+		label.Size = Vector3.new(36, 0.1, 7)
+		label.CFrame = CFrame.new(x, 0.1, SHORE + O.SplitZoneDepth / 2 + 1)
+		label.Parent = map
+		surfaceText(label, "SPLIT ZONE", Enum.NormalId.Top, Color3.fromRGB(40, 120, 220))
+	end
 
-		-- Coral-red lip on the shore edge, like a warning stripe.
-		z0, z1 = zr(O.ShoreZ, O.ShoreZ + 1.5)
-		block("ShoreLip", Vector3.new(-O.HalfX, 0, z0), Vector3.new(O.HalfX, 0.3, z1), Color3.fromRGB(235, 90, 75), Enum.Material.SmoothPlastic)
+	-- Tall walls on the three land sides. The ocean side stays open.
+	local top = W.WallHeight
+	local blue, rim = Color3.fromRGB(45, 125, 235), Color3.fromRGB(120, 215, 60)
+	local walls = {
+		{ Vector3.new(-H - WALL_T, -2, BACK), Vector3.new(H + WALL_T, top, BACK + WALL_T) },
+		{ Vector3.new(-H - WALL_T, -2, SHORE), Vector3.new(-H, top, BACK) },
+		{ Vector3.new(H, -2, SHORE), Vector3.new(H + WALL_T, top, BACK) },
+	}
+	for _, w in walls do
+		block("Wall", w[1], w[2], blue)
+		block("WallRim", Vector3.new(w[1].X, top, w[1].Z), Vector3.new(w[2].X, top + 3, w[2].Z), rim)
+	end
+end
 
-		-- Labels painted on the split zone.
-		for x = -150, 150, 75 do
-			local label = Instance.new("Part")
-			label.Name = "SplitLabel"
-			label.Anchored = true
-			label.CanCollide = false
-			label.CanQuery = false
-			label.Transparency = 1
-			label.Size = Vector3.new(36, 0.1, 7)
-			label.CFrame = CFrame.new(x, 0.1, s * (O.ShoreZ + O.SplitZoneDepth / 2)) * CFrame.Angles(0, s > 0 and 0 or math.pi, 0)
-			label.Parent = map
-			surfaceText(label, "🌊 SPLIT ZONE 🌊", Enum.NormalId.Top, Color3.fromRGB(40, 120, 220))
+local function buildSea()
+	local H = O.HalfX
+	-- Seabed the corridors can reach, then a dark floor far beyond it so the
+	-- water has something under it all the way to the horizon.
+	tiles("Seabed", Vector3.new(-H, -30, SEABED_END), Vector3.new(H, O.SeabedY, SHORE), Color3.fromRGB(205, 180, 130), Color3.fromRGB(194, 168, 118), 20)
+	local deep = Color3.fromRGB(20, 60, 120)
+	for ix = -1, 1 do
+		for iz = 0, 1 do
+			local x0, z1 = ix * 2048 - 1024, SHORE - iz * 2048
+			local floor = block("DeepFloor", Vector3.new(x0, O.SeabedY - 5, z1 - 2048), Vector3.new(x0 + 2048, O.SeabedY - 1, z1), deep)
+			floor.CanQuery = false
+			floor.CastShadow = false
 		end
 	end
 
-	-- Seabed
-	tiles("Seabed", Vector3.new(-O.HalfX, -30, -O.ShoreZ), Vector3.new(O.HalfX, O.SeabedY, O.ShoreZ), Color3.fromRGB(205, 180, 130), Color3.fromRGB(194, 168, 118), 20)
-
-	-- Ramps from each shore down to the seabed (thin tilted slabs).
+	-- Ramp from the shore down to the seabed (a thin tilted slab).
 	local drop = -O.SeabedY
 	local len = math.sqrt(O.RampLength ^ 2 + drop ^ 2)
 	local angle = math.atan2(drop, O.RampLength)
-	for _, s in { 1, -1 } do
-		local midZ = s * (O.ShoreZ - O.RampLength / 2)
-		local ramp = Instance.new("Part")
-		ramp.Name = "Ramp"
-		ramp.Anchored = true
-		ramp.Size = Vector3.new(O.HalfX * 2, 1, len)
-		-- Tilt so the shore end is high. Positive X-rotation lowers the +Z end.
-		ramp.CFrame = CFrame.new(0, O.SeabedY / 2 - 0.5, midZ) * CFrame.Angles(s > 0 and -angle or angle, 0, 0)
-		ramp.Color = SAND
-		ramp.Material = Enum.Material.Plastic
-		ramp.TopSurface = Enum.SurfaceType.Smooth
-		ramp.Parent = map
-	end
+	local ramp = Instance.new("Part")
+	ramp.Name = "Ramp"
+	ramp.Anchored = true
+	ramp.Size = Vector3.new(H * 2, 1, len)
+	-- The shore (+Z) end is the high one; a negative X-rotation raises +Z.
+	ramp.CFrame = CFrame.new(0, O.SeabedY / 2 - 0.5, SHORE - O.RampLength / 2) * CFrame.Angles(-angle, 0, 0)
+	ramp.Color = SAND
+	ramp.Material = Enum.Material.SmoothPlastic
+	ramp.TopSurface = Enum.SurfaceType.Smooth
+	ramp.Parent = map
 
-	-- Rocky cliffs capping both ends of the ocean.
+	-- Rocky headlands on both sides of the bay, stepping down as they run out.
+	local rng = Random.new(11)
 	for _, sx in { 1, -1 } do
-		local x0, x1 = math.min(sx * O.HalfX, sx * MAP_HALF_X), math.max(sx * O.HalfX, sx * MAP_HALF_X)
-		block("Cliff", Vector3.new(x0, -30, -O.ShoreZ), Vector3.new(x1, 4, O.ShoreZ), ROCK, Enum.Material.Slate)
-	end
-
-	-- Border walls: blue sides with a green rim, like a toy box.
-	local H = 16
-	local T = 8
-	local walls = {
-		{ Vector3.new(-MAP_HALF_X - T, -2, -MAP_HALF_Z - T), Vector3.new(MAP_HALF_X + T, H, -MAP_HALF_Z) },
-		{ Vector3.new(-MAP_HALF_X - T, -2, MAP_HALF_Z), Vector3.new(MAP_HALF_X + T, H, MAP_HALF_Z + T) },
-		{ Vector3.new(-MAP_HALF_X - T, -2, -MAP_HALF_Z), Vector3.new(-MAP_HALF_X, H, MAP_HALF_Z) },
-		{ Vector3.new(MAP_HALF_X, -2, -MAP_HALF_Z), Vector3.new(MAP_HALF_X + T, H, MAP_HALF_Z) },
-	}
-	for _, w in walls do
-		block("Wall", w[1], w[2], Color3.fromRGB(45, 125, 235), Enum.Material.SmoothPlastic)
-		block("WallRim", Vector3.new(w[1].X, H, w[1].Z), Vector3.new(w[2].X, H + 2, w[2].Z), Color3.fromRGB(120, 215, 60), Enum.Material.SmoothPlastic)
+		for i = 0, 6 do
+			local z1 = SHORE + WALL_T - i * 30
+			local z0 = z1 - 30
+			local height = 58 - i * 8 + rng:NextNumber(-3, 3)
+			local depth = 46 - i * 4
+			local x0, x1 = sx * H, sx * (H + depth)
+			block("Headland", Vector3.new(math.min(x0, x1), -30, z0), Vector3.new(math.max(x0, x1), height, z1), ROCK:Lerp(Color3.new(0, 0, 0), rng:NextNumber(0, 0.25)), Enum.Material.Slate)
+		end
 	end
 end
 
@@ -168,14 +175,13 @@ local function buildDecor()
 	local decor = Instance.new("Folder")
 	decor.Name = "Decor"
 	decor.Parent = map
+	local H = O.HalfX
 
-	-- Palm trees along both beaches (kept away from the split zone).
-	for _, s in { 1, -1 } do
-		for x = -195, 195, 65 do
-			local palm = Voxel.palm(rng:NextInteger(1, 1e6))
-			palm:PivotTo(CFrame.new(x + rng:NextNumber(-8, 8), 0, s * (BEACH_END - 6)) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0))
-			palm.Parent = decor
-		end
+	-- Palm trees along the back of the beach.
+	for x = -H + 20, H - 20, 62 do
+		local palm = Voxel.palm(rng:NextInteger(1, 1e6))
+		palm:PivotTo(CFrame.new(x + rng:NextNumber(-8, 8), 0, BEACH_END - 5) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0))
+		palm.Parent = decor
 	end
 
 	-- Beach umbrellas and towels between the palms.
@@ -186,29 +192,27 @@ local function buildDecor()
 		Color3.fromRGB(190, 110, 255),
 	}
 	local n = 0
-	for _, s in { 1, -1 } do
-		for x = -162, 162, 65 do
-			n += 1
-			local m = Instance.new("Model")
-			m.Name = "Umbrella"
-			local c1 = brights[n % #brights + 1]
-			local base = CFrame.new(x + rng:NextNumber(-6, 6), 0, s * (BEACH_END - 9)) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0)
-			local pole = Voxel.addPart(m, Vector3.new(0.5, 8, 0.5), base * CFrame.new(0, 4, 0), Color3.fromRGB(240, 240, 240))
-			pole.CanCollide = true
-			for layer, size in { 10, 7, 4 } do
-				Voxel.addPart(m, Vector3.new(size, 0.7, size), base * CFrame.new(0, 7.3 + layer * 0.7, 0), layer % 2 == 1 and c1 or Color3.fromRGB(250, 250, 250))
-			end
-			Voxel.addPart(m, Vector3.new(4, 0.15, 8), base * CFrame.new(4.5, 0.08, 0), brights[(n + 1) % #brights + 1])
-			Voxel.addPart(m, Vector3.new(4, 0.16, 1.2), base * CFrame.new(4.5, 0.09, 2), Color3.fromRGB(250, 250, 250))
-			m.Parent = decor
+	for x = -H + 50, H - 50, 62 do
+		n += 1
+		local m = Instance.new("Model")
+		m.Name = "Umbrella"
+		local c1 = brights[n % #brights + 1]
+		local base = CFrame.new(x + rng:NextNumber(-6, 6), 0, BEACH_END - 12) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0)
+		local pole = Voxel.addPart(m, Vector3.new(0.5, 8, 0.5), base * CFrame.new(0, 4, 0), Color3.fromRGB(240, 240, 240))
+		pole.CanCollide = true
+		for layer, size in { 10, 7, 4 } do
+			Voxel.addPart(m, Vector3.new(size, 0.7, size), base * CFrame.new(0, 7.3 + layer * 0.7, 0), layer % 2 == 1 and c1 or Color3.fromRGB(250, 250, 250))
 		end
+		Voxel.addPart(m, Vector3.new(4, 0.15, 8), base * CFrame.new(4.5, 0.08, 0), brights[(n + 1) % #brights + 1])
+		Voxel.addPart(m, Vector3.new(4, 0.16, 1.2), base * CFrame.new(4.5, 0.09, 2), Color3.fromRGB(250, 250, 250))
+		m.Parent = decor
 	end
 
-	-- A lighthouse on the east cliff.
+	-- A lighthouse on the east headland.
 	do
 		local m = Instance.new("Model")
 		m.Name = "Lighthouse"
-		local base = CFrame.new((O.HalfX + MAP_HALF_X) / 2, 4, 0)
+		local base = CFrame.new(H + 22, 58, SHORE - 6)
 		local y = 0
 		for i = 1, 7 do
 			local w = 13 - i
@@ -220,23 +224,16 @@ local function buildDecor()
 		local lamp = Voxel.addPart(m, Vector3.new(4, 4, 4), base * CFrame.new(0, y + 3, 0), Color3.fromRGB(255, 240, 150), Enum.Material.Neon)
 		local light = Instance.new("PointLight")
 		light.Color = Color3.fromRGB(255, 240, 170)
-		light.Range = 40
+		light.Range = 50
 		light.Brightness = 2
 		light.Parent = lamp
 		for _, c in { { 2.5, 2.5 }, { -2.5, 2.5 }, { 2.5, -2.5 }, { -2.5, -2.5 } } do
 			Voxel.addPart(m, Vector3.new(0.6, 4, 0.6), base * CFrame.new(c[1], y + 3, c[2]), Color3.fromRGB(60, 60, 70))
 		end
-		Voxel.addPart(m, Vector3.new(8, 1.5, 8), base * CFrame.new(0, y + 5.75, 0), Color3.fromRGB(235, 70, 60))
-		Voxel.addPart(m, Vector3.new(5, 1.5, 5), base * CFrame.new(0, y + 7.25, 0), Color3.fromRGB(235, 70, 60))
-		Voxel.addPart(m, Vector3.new(2, 1.5, 2), base * CFrame.new(0, y + 8.75, 0), Color3.fromRGB(235, 70, 60))
+		for i, w in { 8, 5, 2 } do
+			Voxel.addPart(m, Vector3.new(w, 1.5, w), base * CFrame.new(0, y + 4.25 + i * 1.5, 0), Color3.fromRGB(235, 70, 60))
+		end
 		m.Parent = decor
-	end
-
-	-- Boulders on the west cliff.
-	for _ = 1, 9 do
-		local size = rng:NextNumber(4, 10)
-		local rock = Voxel.addPart(decor, Vector3.new(size, size * 0.7, size * 0.9), CFrame.new(-(O.HalfX + MAP_HALF_X) / 2 + rng:NextNumber(-10, 10), 4 + size * 0.3, rng:NextNumber(-95, 95)) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0), ROCK:Lerp(Color3.new(0, 0, 0), rng:NextNumber(0.05, 0.3)))
-		rock.CanCollide = true
 	end
 
 	-- Seabed: coral, rocks and kelp, only visible inside a parted corridor.
@@ -246,9 +243,9 @@ local function buildDecor()
 		Color3.fromRGB(170, 100, 255),
 		Color3.fromRGB(90, 220, 200),
 	}
-	for _ = 1, 90 do
-		local x = rng:NextNumber(-O.HalfX + 6, O.HalfX - 6)
-		local z = rng:NextNumber(-O.ShoreZ + O.RampLength + 4, O.ShoreZ - O.RampLength - 4)
+	for _ = 1, 150 do
+		local x = rng:NextNumber(-H + 6, H - 6)
+		local z = rng:NextNumber(SHORE - O.Reach - 20, SHORE - O.RampLength - 4)
 		local base = CFrame.new(x, O.SeabedY, z) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0)
 		local kind = rng:NextInteger(1, 3)
 		local m = Instance.new("Model")
@@ -274,14 +271,20 @@ local function buildDecor()
 	end
 end
 
-local function buildPensLayout()
-	for _, s in { 1, -1 } do
-		for _, x in { -153, -51, 51, 153 } do
-			local pos = Vector3.new(x, 0, s * 210)
-			-- Pen faces the beach: its local -Z (front/gate) points toward the ocean.
-			local cf = CFrame.lookAt(pos, pos + Vector3.new(0, 0, -s))
-			table.insert(World.Pens, { cf = cf, side = s })
-		end
+-- One row of bases along the back of the beach, gates facing the ocean.
+local function layoutPens()
+	local count = Config.MaxPlayers
+	local z = SHORE + Config.Pen.FrontZ + Config.Pen.Depth / 2
+	for i = 1, count do
+		local x = (i - (count + 1) / 2) * Config.Pen.Spacing
+		local pos = Vector3.new(x, 0, z)
+		-- A pen's local -Z (its front, where the gate is) points at the sea.
+		table.insert(World.Pens, { cf = CFrame.lookAt(pos, pos + Vector3.new(0, 0, -1)) })
+	end
+	-- Leaderboards stand against the back wall, facing the ocean.
+	for _, x in { -78, 0, 78 } do
+		local pos = Vector3.new(x, 0, BACK - 3)
+		table.insert(World.BoardSpots, CFrame.lookAt(pos, pos + Vector3.new(0, 0, -1)))
 	end
 end
 
@@ -294,9 +297,10 @@ local function setupLighting()
 	Lighting.EnvironmentSpecularScale = 0.4
 	Lighting.GlobalShadows = true
 	if not Lighting:FindFirstChildOfClass("Atmosphere") then
+		-- Haze blends the far ocean into the sky for an endless horizon.
 		local atm = Instance.new("Atmosphere")
-		atm.Density = 0.25
-		atm.Haze = 0.5
+		atm.Density = 0.3
+		atm.Haze = 1.2
 		atm.Color = Color3.fromRGB(200, 230, 255)
 		atm.Decay = Color3.fromRGB(120, 180, 230)
 		atm.Parent = Lighting
@@ -319,23 +323,24 @@ function World.build()
 	if baseplate then
 		baseplate:Destroy()
 	end
-	-- Template spawns (e.g. the Baseplate one at the origin) sit mid-ocean.
+	-- Template spawns (e.g. the Baseplate one at the origin) sit in the sea.
 	for _, inst in workspace:GetDescendants() do
 		if inst:IsA("SpawnLocation") and not inst:IsDescendantOf(map) then
 			inst:Destroy()
 		end
 	end
 
-	buildGround()
+	buildLand()
+	buildSea()
 	buildDecor()
-	buildPensLayout()
+	layoutPens()
 	setupLighting()
 
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "Spawn"
 	spawn.Anchored = true
 	spawn.Size = Vector3.new(10, 0.4, 10)
-	spawn.Position = Vector3.new(0, 0.2, O.ShoreZ + 30)
+	spawn.CFrame = CFrame.new(0, 0.2, SHORE + 30)
 	spawn.Transparency = 1
 	spawn.CanCollide = false
 	spawn.Neutral = true
@@ -344,14 +349,15 @@ function World.build()
 end
 
 -- Geometry helpers shared with the split logic.
+
+-- Anywhere seaward of the shoreline counts, at any height, so jumping over
+-- the water is not "dry land".
 function World.inOcean(pos: Vector3): boolean
-	-- No height test: jumping over the water must not count as dry land.
-	return math.abs(pos.X) < O.HalfX and math.abs(pos.Z) < O.ShoreZ
+	return pos.Z < SHORE and math.abs(pos.X) <= O.HalfX
 end
 
 function World.inSplitZone(pos: Vector3): boolean
-	local az = math.abs(pos.Z)
-	return az >= O.ShoreZ and az <= O.ShoreZ + O.SplitZoneDepth + 2 and math.abs(pos.X) <= O.HalfX - 2 and pos.Y > -3
+	return pos.Z >= SHORE and pos.Z <= SHORE + O.SplitZoneDepth + 2 and math.abs(pos.X) <= O.HalfX - 24 and pos.Y > -3
 end
 
 return World

@@ -156,42 +156,55 @@ Config.Variants = {
 
 ----------------------------------------------------------------------------
 -- World / ocean geometry (studs). Ground top is y = 0.
--- Ocean spans x in [-OceanHalfX, OceanHalfX], z in [-ShoreZ, ShoreZ].
--- Shores are on the north (+z) and south (-z) sides.
+-- There is one shore, along the line z = ShoreZ. Land (beach, bases) is on
+-- the +z side; the ocean runs off to the horizon on the -z side.
 ----------------------------------------------------------------------------
 Config.Ocean = {
-	HalfX = 180,
-	ShoreZ = 110,
+	HalfX = 215, -- the shore spans x in [-HalfX, HalfX]
+	ShoreZ = 0,
 	RampLength = 20, -- sand slope from the shore down to the seabed
 	SeabedY = -12,
 	WaterTopY = -1.5,
-	WallTopY = 18, -- height the parted water walls rise to
+	WallTopY = 26, -- height the parted water walls rise to
 	SplitZoneDepth = 18, -- beach band (from the shoreline) where you can part the sea
-	OpenAnim = 0.9, -- seconds for the corridor to open
-	CloseSpeed = 8, -- studs/s the sea rolls back toward the shore
-	MaxLength = 214, -- can almost reach the far shore
+	OpenAnim = 2.6, -- seconds of the parting cutscene before the walls start closing
+	Reach = 300, -- the deepest a corridor can ever go
 	GrabRadius = 6,
-	SweepGrace = 3, -- studs of forgiveness at the closing wall (covers network delay)
+	SweepGrace = 2, -- studs of forgiveness at the closing walls (covers network delay)
+	MinGap = 1.2, -- once each wall is this close to the corridor center, it's shut
 }
 
+Config.World = {
+	LandDepth = 190, -- from the shore to the back wall
+	BeachDepth = 45,
+	WallHeight = 70, -- walls around the land
+}
+
+Config.MaxPlayers = 5 -- one base each; set the same number in Game Settings
+
 ----------------------------------------------------------------------------
--- Splitting. Strength drives distance + open time. Charge adds to both.
+-- Splitting. Strength drives how deep the corridor goes. The side walls
+-- start closing as soon as it opens and meet after `duration` seconds.
 ----------------------------------------------------------------------------
 Config.Split = {
 	BaseLength = 30,
-	LengthPerDoubling = 9, -- extra studs every time (1 + strength/5) doubles; full depth needs ~7M strength
+	LengthPerDoubling = 13.2, -- extra studs every time (1 + strength/5) doubles; full depth needs ~7M strength
 	MinChargeFactor = 0.45, -- a tap gives 45% of the distance
-	BaseOpenTime = 5,
-	OpenTimePerDoubling = 1.4,
-	ChargeOpenBonus = 4, -- full charge = +4s open time
+	BaseDuration = 6, -- seconds until the walls meet...
+	DurationPerStud = 0.15, -- ...plus this per stud of depth (a round trip at walk speed is 0.125/stud)
+	ChargeOpenBonus = 4, -- full charge = +4s before the walls meet
 	ChargeTime = 1.4, -- seconds of holding for a full bar
-	BaseWidth = 20,
-	MaxWidth = 30,
+	BaseWidth = 26,
+	WidthPerLevel = 0.9,
+	MaxWidth = 44,
 	BaseEggs = 2,
 	EggsPerStuds = 34,
 	MaxEggs = 16,
 	BaseCarry = 1,
 }
+
+-- Animal size multiplier per rarity tier: late-game pets tower over a base.
+Config.SizeByTier = { 1, 1.5, 2.2, 3.2, 4.8, 7, 10 }
 
 -- Base hatch weights per rarity tier; luck and depth push toward the right.
 Config.RarityWeights = { 1000, 360, 160, 50, 14, 3, 0.4 }
@@ -202,23 +215,24 @@ Config.Odds = { LuckPower = 0.35, DepthPower = 0.6, DepthBoost = 2.5 }
 ----------------------------------------------------------------------------
 -- Progression
 ----------------------------------------------------------------------------
+-- Strength gained per rep on the training pad.
 Config.Weights = {
-	{ name = "Driftwood Dumbbell", cost = 0, gain = 1 },
-	{ name = "Shell Barbell", cost = 250, gain = 3 },
-	{ name = "Coral Kettlebell", cost = 3000, gain = 8 },
-	{ name = "Iron Anchor", cost = 30000, gain = 20 },
-	{ name = "Ship Cannon", cost = 300000, gain = 50 },
-	{ name = "Pirate Chest", cost = 3000000, gain = 125 },
-	{ name = "Kraken Tentacle", cost = 30000000, gain = 320 },
-	{ name = "Trident of Tides", cost = 300000000, gain = 800 },
+	{ name = "Driftwood Dumbbell", cost = 0, gain = 4 },
+	{ name = "Shell Barbell", cost = 250, gain = 10 },
+	{ name = "Coral Kettlebell", cost = 3000, gain = 28 },
+	{ name = "Iron Anchor", cost = 30000, gain = 70 },
+	{ name = "Ship Cannon", cost = 300000, gain = 175 },
+	{ name = "Pirate Chest", cost = 3000000, gain = 440 },
+	{ name = "Kraken Tentacle", cost = 30000000, gain = 1100 },
+	{ name = "Trident of Tides", cost = 300000000, gain = 2800 },
 }
 
 Config.Luck = { BaseCost = 120, Growth = 1.45, PerLevel = 0.12, MaxLevel = 150 }
 Config.Base = { StartSlots = 4, SlotsPerLevel = 2, MaxSlots = 20, BaseCost = 500, Growth = 2.9 }
 
-Config.Training = { AutoLiftInterval = 1.1, MinClickInterval = 0.18, PadRadius = 7 }
+Config.Training = { RepTime = 0.9, PadRadius = 7 } -- one rep = one push up and back down
 
-Config.Pen = { Width = 84, Depth = 72, Gate = 9 } -- studs; the gate faces the beach
+Config.Pen = { Width = 70, Depth = 72, Gate = 9, Spacing = 84, FrontZ = 66 } -- studs; gates face the ocean
 
 Config.Offline = { Rate = 0.5, MaxSeconds = 4 * 3600, MinSeconds = 60 }
 Config.SellAnimalSeconds = 25 -- an animal sells for 25s of its income
@@ -261,20 +275,20 @@ Config.IndexRewardSeconds = 120
 -- 0, purchases are granted for free in Studio (for testing) and disabled live.
 ----------------------------------------------------------------------------
 Config.Passes = {
-	{ key = "DoubleStrength", id = 0, price = 99, name = "x2 Strength", desc = "Double Strength from every lift.", icon = "💪" },
-	{ key = "DoubleLuck", id = 0, price = 149, name = "x2 Luck", desc = "Permanently doubles your Luck.", icon = "🍀" },
-	{ key = "DoubleCash", id = 0, price = 199, name = "x2 Cash", desc = "All animals earn double.", icon = "💵" },
-	{ key = "ExtraCarry", id = 0, price = 129, name = "Double Carry", desc = "Carry 2 eggs per run.", icon = "🥚" },
-	{ key = "FastHatch", id = 0, price = 99, name = "Fast Hatch", desc = "Eggs hatch twice as fast.", icon = "⏩" },
+	{ key = "DoubleStrength", id = 0, price = 99, name = "x2 Strength", desc = "Double Strength from every rep.", icon = "strength" },
+	{ key = "DoubleLuck", id = 0, price = 149, name = "x2 Luck", desc = "Permanently doubles your Luck.", icon = "luck" },
+	{ key = "DoubleCash", id = 0, price = 199, name = "x2 Cash", desc = "All animals earn double.", icon = "cash" },
+	{ key = "ExtraCarry", id = 0, price = 129, name = "Double Carry", desc = "Carry 2 eggs per run.", icon = "egg" },
+	{ key = "FastHatch", id = 0, price = 99, name = "Fast Hatch", desc = "Eggs hatch twice as fast.", icon = "hatch" },
 }
 
 Config.Products = {
-	{ key = "StarterPack", id = 0, price = 10, name = "Starter Pack", desc = "$2,500 + a Treasure Egg!", icon = "🎁" },
-	{ key = "CashSmall", id = 0, price = 25, name = "Pile of Cash", desc = "10 minutes of income (min $1K).", icon = "💵" },
-	{ key = "CashLarge", id = 0, price = 99, name = "Vault of Cash", desc = "1 hour of income (min $10K).", icon = "💰" },
-	{ key = "LuckPotion", id = 0, price = 35, name = "Luck Potion", desc = "x2 Luck for 15 minutes.", icon = "🧪" },
-	{ key = "InstantHatch", id = 0, price = 29, name = "Instant Hatch", desc = "Every egg in your pen is ready now.", icon = "⚡" },
-	{ key = "SkipPlaytime", id = 0, price = 95, name = "Skip Playtime", desc = "Unlock every playtime reward.", icon = "⏱️" },
+	{ key = "StarterPack", id = 0, price = 10, name = "Starter Pack", desc = "$2,500 + a Treasure Egg!", icon = "gift" },
+	{ key = "CashSmall", id = 0, price = 25, name = "Pile of Cash", desc = "10 minutes of income (min $1K).", icon = "cash" },
+	{ key = "CashLarge", id = 0, price = 99, name = "Vault of Cash", desc = "1 hour of income (min $10K).", icon = "chest" },
+	{ key = "LuckPotion", id = 0, price = 35, name = "Luck Potion", desc = "x2 Luck for 15 minutes.", icon = "potion" },
+	{ key = "InstantHatch", id = 0, price = 29, name = "Instant Hatch", desc = "Every egg in your pen is ready now.", icon = "hatch" },
+	{ key = "SkipPlaytime", id = 0, price = 95, name = "Skip Playtime", desc = "Unlock every playtime reward.", icon = "clock" },
 }
 
 Config.LuckPotionSeconds = 15 * 60

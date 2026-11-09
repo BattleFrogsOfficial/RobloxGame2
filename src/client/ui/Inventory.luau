@@ -185,7 +185,7 @@ local function renderPets()
 		emptyNote(pets.grid, "No pets yet! Part the sea, grab an egg and hatch it.")
 	end
 	pets.info.Text = string.format(
-		"Base: %d/%d slots   •   Income: %s/s   •   Stored: %d",
+		"Base: %d/%d slots   |   Income: %s/s   |   Stored: %d",
 		penUsed(d),
 		d.baseSlots,
 		Format.cash(d.income),
@@ -220,7 +220,7 @@ local function tickEggTimers()
 			t.label.TextColor3 = C.Cash
 			t.hatch.Visible = true
 		else
-			t.label.Text = "⏳ " .. Format.time(left)
+			t.label.Text = "Hatches in " .. Format.time(left)
 			t.label.TextColor3 = C.Yellow
 			t.hatch.Visible = false
 		end
@@ -274,7 +274,7 @@ local function renderEggs()
 	if order == 0 then
 		emptyNote(eggs.grid, "No eggs! Walk to the shoreline and part the sea.")
 	end
-	eggs.info.Text = string.format("Base: %d/%d slots   •   Stored eggs: %d", penUsed(d), d.baseSlots, #d.eggs)
+	eggs.info.Text = string.format("Base: %d/%d slots   |   Stored eggs: %d", penUsed(d), d.baseSlots, #d.eggs)
 	tickEggTimers()
 end
 
@@ -346,8 +346,8 @@ end
 ----------------------------------------------------------------------------
 -- Init
 ----------------------------------------------------------------------------
-local function windowWithGrid(gui: ScreenGui, name: string, title: string, color: Color3)
-	local win = Ui.window(gui, name, title, color, Vector2.new(840, 560))
+local function windowWithGrid(gui: ScreenGui, name: string, title: string, color: Color3, icon: string)
+	local win = Ui.window(gui, name, title, color, Vector2.new(840, 560), icon)
 	local info = Ui.text({
 		Text = "",
 		Size = UDim2.new(1, -260, 0, 26),
@@ -369,7 +369,7 @@ end
 
 function Inventory.init(gui: ScreenGui)
 	local win
-	win, pets.info, pets.grid = windowWithGrid(gui, "Pets", "🐾 Pets", C.Orange)
+	win, pets.info, pets.grid = windowWithGrid(gui, "Pets", "Pets", C.Orange, "pets")
 	win.onOpen = function()
 		pets.sig = nil
 		renderPets()
@@ -387,7 +387,7 @@ function Inventory.init(gui: ScreenGui)
 		end,
 	})
 
-	win, eggs.info, eggs.grid = windowWithGrid(gui, "Eggs", "🥚 Eggs", C.Teal)
+	win, eggs.info, eggs.grid = windowWithGrid(gui, "Eggs", "Eggs", C.Teal, "egg")
 	win.onOpen = function()
 		eggs.sig = nil
 		renderEggs()
@@ -405,7 +405,7 @@ function Inventory.init(gui: ScreenGui)
 		end,
 	})
 
-	win, sell.info, sell.grid = windowWithGrid(gui, "Sell", "💰 Sell", C.Orange)
+	win, sell.info, sell.grid = windowWithGrid(gui, "Sell", "Sell", C.Orange, "cash")
 	sell.info.Text = "Sell pets and eggs you don't need for cash."
 	win.onOpen = function()
 		sell.sig = nil

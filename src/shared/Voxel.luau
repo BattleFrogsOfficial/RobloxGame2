@@ -274,9 +274,10 @@ end
 function Voxel.animalScale(animalId: string): number
 	local a = Config.AnimalById[animalId]
 	local tier = rarityTier(a.rarity)
-	local s = 0.32 * (1 + (tier - 1) * 0.12)
+	-- Rarer animals are much bigger, so a strong base is obvious at a glance.
+	local s = 0.32 * (Config.SizeByTier[tier] or 1)
 	if a.opts and a.opts.huge then
-		s *= 1.35
+		s *= 1.3
 	end
 	return s
 end
@@ -448,6 +449,120 @@ function Voxel.palm(seed: number): Model
 		local yaw = k * math.pi * 2 / 3
 		addPart(model, Vector3.new(0.8, 0.8, 0.8), CFrame.new(top) * CFrame.Angles(0, yaw, 0) * CFrame.new(0, -1, -0.9), Color3.fromRGB(110, 70, 35))
 	end
+	return model
+end
+
+----------------------------------------------------------------------------
+-- Icons: small models shown in ViewportFrames wherever the UI needs a picture.
+----------------------------------------------------------------------------
+local Icons = {}
+
+function Icons.cash(b)
+	local green, light, band = Color3.fromRGB(70, 190, 80), Color3.fromRGB(150, 235, 140), Color3.fromRGB(245, 240, 200)
+	for i = 0, 2 do
+		b(8, 1.6, 4, i * 0.6 - 0.6, 0.8 + i * 1.7, i * 0.5 - 0.5, i % 2 == 0 and green or light)
+		b(1.6, 1.7, 4.1, i * 0.6 - 0.6, 0.8 + i * 1.7, i * 0.5 - 0.5, band)
+	end
+end
+
+function Icons.luck(b)
+	local g, dark = Color3.fromRGB(80, 210, 90), Color3.fromRGB(45, 150, 60)
+	for _, c in { { -1.6, 6.6 }, { 1.6, 6.6 }, { -1.6, 3.4 }, { 1.6, 3.4 } } do
+		b(3, 3, 1.2, c[1], c[2], 0, g)
+		b(1, 1, 1.3, c[1], c[2], 0, dark)
+	end
+	b(1, 1, 1.2, 0, 5, 0, dark)
+	b(1, 3, 1, 0.6, 1.5, 0, dark)
+end
+
+function Icons.book(b)
+	local cover, page = Color3.fromRGB(60, 130, 235), Color3.fromRGB(250, 250, 245)
+	b(7, 9, 1, 0, 4.5, 0.8, cover)
+	b(7, 9, 1, 0, 4.5, -0.8, cover)
+	b(6, 8, 1.2, 0.3, 4.5, 0, page)
+	b(1, 9, 2.6, -3.5, 4.5, 0, Color3.fromRGB(40, 95, 190))
+	b(3, 1, 0.3, 0.5, 6.5, -1.4, Color3.fromRGB(255, 215, 80))
+end
+
+function Icons.chest(b)
+	local wood, dark, gold = Color3.fromRGB(150, 95, 50), Color3.fromRGB(105, 65, 35), Color3.fromRGB(255, 205, 60)
+	b(9, 4, 6, 0, 2, 0, wood)
+	b(9, 2, 6, 0, 5, 0, dark)
+	b(9.2, 1, 6.2, 0, 4, 0, gold)
+	b(1.6, 2, 0.6, 0, 3.6, -3.1, gold)
+	for _, c in { { -2, 6.3, 0 }, { 0.5, 6.6, 1 }, { 2.2, 6.3, -0.6 }, { -0.4, 7.2, -0.5 } } do
+		b(1.6, 0.6, 1.6, c[1], c[2], c[3], gold)
+	end
+end
+
+function Icons.gift(b)
+	local red, ribbon = Color3.fromRGB(235, 65, 70), Color3.fromRGB(255, 215, 70)
+	b(7, 5, 7, 0, 2.5, 0, red)
+	b(7.6, 1.6, 7.6, 0, 5.8, 0, Color3.fromRGB(250, 95, 100))
+	b(1.4, 6.8, 7.8, 0, 3.4, 0, ribbon)
+	b(7.8, 6.8, 1.4, 0, 3.4, 0, ribbon)
+	b(2.2, 1.6, 1.2, -1.4, 7.6, 0, ribbon)
+	b(2.2, 1.6, 1.2, 1.4, 7.6, 0, ribbon)
+end
+
+function Icons.calendar(b)
+	local page, red, ink = Color3.fromRGB(250, 250, 250), Color3.fromRGB(230, 70, 70), Color3.fromRGB(70, 75, 90)
+	b(8, 8, 1, 0, 4, 0, page)
+	b(8, 2.4, 1.1, 0, 7.6, 0, red)
+	b(0.8, 1.6, 1.4, -2.2, 8.8, 0, ink)
+	b(0.8, 1.6, 1.4, 2.2, 8.8, 0, ink)
+	for row = 0, 1 do
+		for col = 0, 2 do
+			b(1.2, 1.2, 0.3, -2.2 + col * 2.2, 4.6 - row * 2.2, -0.6, ink)
+		end
+	end
+end
+
+function Icons.potion(b)
+	local glass, liquid = Color3.fromRGB(215, 235, 250), Color3.fromRGB(175, 90, 240)
+	b(6, 5, 6, 0, 2.5, 0, liquid)
+	b(4, 1, 4, 0, 5.5, 0, liquid)
+	b(2, 2.4, 2, 0, 7.2, 0, glass)
+	b(2.6, 1, 2.6, 0, 8.8, 0, Color3.fromRGB(160, 110, 60))
+	b(1.2, 1.2, 0.4, -1.4, 3.6, -3, Color3.fromRGB(235, 200, 255))
+end
+
+function Icons.clock(b)
+	local rim, face, ink = Color3.fromRGB(70, 75, 90), Color3.fromRGB(250, 250, 250), Color3.fromRGB(230, 70, 70)
+	b(9, 9, 1, 0, 4.5, 0.2, rim)
+	b(7.4, 7.4, 1.2, 0, 4.5, 0, face)
+	b(0.9, 3.2, 0.4, 0, 5.8, -0.7, rim)
+	b(2.6, 0.9, 0.4, 1, 4.5, -0.7, ink)
+	b(1, 1, 0.5, 0, 4.5, -0.75, rim)
+end
+
+function Icons.wave(b)
+	local blue, light = Color3.fromRGB(45, 140, 235), Color3.fromRGB(235, 250, 255)
+	b(10, 2, 2, 0, 1, 0, blue)
+	b(8, 2, 2, 0.5, 3, 0, blue)
+	b(5, 2, 2, 1.5, 5, 0, blue)
+	b(3, 1.6, 2, -0.5, 6.6, 0, light)
+	b(2, 1.4, 2, -2.2, 5.4, 0, light)
+end
+
+-- Builds the icon model called `name`. Some icons reuse game models.
+function Voxel.icon(name: string): Model
+	if name == "strength" then
+		return Voxel.barbell(3)
+	elseif name == "egg" then
+		return Voxel.egg("Shell", "Normal", false)
+	elseif name == "hatch" then
+		return Voxel.egg("Treasure", "Normal", false)
+	elseif name == "pets" then
+		return Voxel.animal("Turtle", "Normal")
+	elseif name == "staff" then
+		local staff = Voxel.staff()
+		staff.PrimaryPart = staff:FindFirstChild("Handle") :: BasePart
+		return staff
+	end
+	local model = newModel("Icon_" .. name)
+	local build = Icons[name] or Icons.gift
+	build(pixelBuilder(model, 0.4))
 	return model
 end
 

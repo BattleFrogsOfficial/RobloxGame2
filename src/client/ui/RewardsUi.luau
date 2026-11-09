@@ -31,14 +31,7 @@ local function rewardIcon(holder: Instance, r)
 	elseif r.kind == "animal" then
 		Viewport.animal(holder, r.animal, "Normal")
 	else
-		Ui.new("TextLabel", {
-			BackgroundTransparency = 1,
-			Text = "💵",
-			TextScaled = true,
-			Size = UDim2.fromScale(1, 1),
-			ZIndex = 24,
-			Parent = holder,
-		})
+		Ui.icon(holder, "cash", { ZIndex = 24 })
 	end
 end
 
@@ -79,7 +72,7 @@ local function tickPlaytime()
 end
 
 local function buildPlaytime(gui: ScreenGui)
-	local win = Ui.window(gui, "Playtime", "Playtime Rewards", C.Green, Vector2.new(760, 600))
+	local win = Ui.window(gui, "Playtime", "Playtime Rewards", C.Green, Vector2.new(760, 600), "gift")
 	local gridFrame = Ui.new("Frame", {
 		BackgroundColor3 = Color3.fromRGB(30, 31, 38),
 		Size = UDim2.new(1, 0, 1, -80),
@@ -136,16 +129,7 @@ local function buildPlaytime(gui: ScreenGui)
 			ZIndex = 26,
 			Parent = btn,
 		})
-		Ui.new("TextLabel", {
-			BackgroundTransparency = 1,
-			Text = "✅",
-			TextScaled = true,
-			Size = UDim2.fromScale(0.6, 0.6),
-			Position = UDim2.fromScale(0.5, 0.5),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			ZIndex = 27,
-			Parent = done,
-		})
+		Ui.check(done)
 		btn.Activated:Connect(function()
 			Ui.click()
 			State.action("ClaimPlaytime", i)
@@ -224,7 +208,7 @@ local function renderDaily()
 			card.amount.Text = Format.cash(cashAmount(r))
 		end
 	end
-	daily.streak.Text = "🔥 Streak: " .. (canClaim and day - 1 or day) .. " day" .. ((canClaim and day - 1 or day) == 1 and "" or "s")
+	daily.streak.Text = "Streak: " .. (canClaim and day - 1 or day) .. " day" .. ((canClaim and day - 1 or day) == 1 and "" or "s")
 	if canClaim then
 		Ui.setButtonText(daily.claim, "Claim Day " .. day .. "!")
 		Ui.setButtonColor(daily.claim, C.Green)
@@ -236,7 +220,7 @@ local function renderDaily()
 end
 
 local function buildDaily(gui: ScreenGui)
-	local win = Ui.window(gui, "Daily", "📅 Daily Rewards", C.Purple, Vector2.new(860, 440))
+	local win = Ui.window(gui, "Daily", "Daily Rewards", C.Purple, Vector2.new(860, 440), "calendar")
 	local row = Ui.new("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 220),
@@ -274,16 +258,7 @@ local function buildDaily(gui: ScreenGui)
 			Parent = f,
 		})
 		Ui.corner(done, 10)
-		Ui.new("TextLabel", {
-			BackgroundTransparency = 1,
-			Text = "✅",
-			TextScaled = true,
-			Size = UDim2.fromScale(0.6, 0.4),
-			Position = UDim2.fromScale(0.5, 0.5),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			ZIndex = 27,
-			Parent = done,
-		})
+		Ui.check(done)
 		daily.cards[i] = { frame = f, amount = amount, done = done }
 	end
 	daily.streak = Ui.text({

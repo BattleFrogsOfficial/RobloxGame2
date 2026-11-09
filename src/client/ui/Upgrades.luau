@@ -33,15 +33,14 @@ end
 local function row(parent: Instance, order: number, icon: string, title: string, color: Color3)
 	local f = Ui.card(parent, order)
 	f.Size = UDim2.new(1, 0, 0, 96)
-	Ui.new("TextLabel", {
+	local holder = Ui.new("Frame", {
 		BackgroundTransparency = 1,
-		Text = icon,
-		TextScaled = true,
 		Size = UDim2.fromOffset(70, 70),
 		Position = UDim2.fromOffset(12, 13),
 		ZIndex = 23,
 		Parent = f,
 	})
+	Ui.icon(holder, icon, { ZIndex = 23 })
 	Ui.text({
 		Text = title,
 		Size = UDim2.new(1, -420, 0, 34),
@@ -73,25 +72,25 @@ local function render()
 	local luckMax = d.luckLevel >= Config.Luck.MaxLevel
 	local nextLuck = Formulas.luck(d.luckLevel + 1, d.passes.DoubleLuck, d.boosts.luckUntil > d.osTime)
 	rows.luckDesc.Text = luckMax and string.format("x%.2f Luck (max)", d.luck)
-		or string.format("Level %d:  x%.2f → x%.2f Luck", d.luckLevel, d.luck, nextLuck)
+		or string.format("Level %d:  x%.2f -> x%.2f Luck", d.luckLevel, d.luck, nextLuck)
 	Ui.setButtonText(rows.luckBtn, luckMax and "MAX" or Format.cash(Formulas.luckCost(d.luckLevel)))
 	rows.luckBtn5.Visible = not luckMax
 
 	-- Weight
 	local w = Config.Weights[d.weightTier]
 	local nw = Config.Weights[d.weightTier + 1]
-	rows.weightDesc.Text = nw and string.format("%s (+%d) → %s (+%d) per lift", w.name, w.gain, nw.name, nw.gain)
-		or (w.name .. " (+" .. w.gain .. ") — heaviest!")
+	rows.weightDesc.Text = nw and string.format("%s (+%d) -> %s (+%d) per rep", w.name, w.gain, nw.name, nw.gain)
+		or (w.name .. " (+" .. w.gain .. ") is the heaviest!")
 	Ui.setButtonText(rows.weightBtn, nw and Format.cash(nw.cost) or "MAX")
 
 	-- Base
 	local maxed = d.baseSlots >= Config.Base.MaxSlots
-	rows.baseDesc.Text = maxed and (d.baseSlots .. " slots (max)") or string.format("%d → %d pen slots", d.baseSlots, d.baseSlots + Config.Base.SlotsPerLevel)
+	rows.baseDesc.Text = maxed and (d.baseSlots .. " slots (max)") or string.format("%d -> %d pen slots", d.baseSlots, d.baseSlots + Config.Base.SlotsPerLevel)
 	Ui.setButtonText(rows.baseBtn, maxed and "MAX" or Format.cash(Formulas.baseCost(d.baseSlots)))
 
 	-- Rarity odds for an egg at the far end of a full-charge split.
 	local full = Formulas.splitParams(d.strength, 1)
-	local depth = (full.length - 6) / (Config.Ocean.ShoreZ * 2)
+	local depth = (full.length - 6) / Config.Ocean.Reach
 	local odds = Formulas.tierOdds(depth, d.luck)
 	oddsTitle.Text = string.format("Egg odds at your deepest point (%d studs out):", math.floor(full.length))
 	for tier, label in oddsLabels do
@@ -101,9 +100,9 @@ local function render()
 	-- What a fully charged split gives you right now.
 	local sp = Formulas.splitParams(d.strength, 1)
 	statsLabel.Text = string.format(
-		"Full-charge split: %d studs deep  •  open %.1fs  •  carry %d egg%s  •  Strength %s",
+		"Full-charge split: %d studs deep  |  %.1fs until it closes  |  carry %d egg%s  |  Strength %s",
 		math.floor(sp.length),
-		sp.openTime,
+		sp.duration,
 		d.carry,
 		d.carry > 1 and "s" or "",
 		Format.short(d.strength)
@@ -111,7 +110,7 @@ local function render()
 end
 
 function Upgrades.init(gui: ScreenGui)
-	local win = Ui.window(gui, "Upgrades", "🛍️ Upgrades", C.Blue, Vector2.new(820, 560))
+	local win = Ui.window(gui, "Upgrades", "Upgrades", C.Blue, Vector2.new(820, 560), "chest")
 	local list = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 22, Parent = win.body })
 	Ui.new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 12), Parent = list })
 
@@ -125,7 +124,7 @@ function Upgrades.init(gui: ScreenGui)
 	})
 
 	local f
-	f, rows.luckDesc = row(list, 1, "🍀", "Luck", Color3.fromRGB(150, 255, 150))
+	f, rows.luckDesc = row(list, 1, "luck", "Luck", Color3.fromRGB(150, 255, 150))
 	rows.luckBtn = Ui.button({ Text = "", Color = C.Green, Size = UDim2.fromOffset(170, 56), Position = UDim2.new(1, -196, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), ZIndex = 24, Parent = f, OnClick = function()
 		State.action("BuyLuck", 1)
 	end })
@@ -133,18 +132,18 @@ function Upgrades.init(gui: ScreenGui)
 		State.action("BuyLuck", 5)
 	end })
 
-	f, rows.weightDesc = row(list, 2, "🏋️", "Heavier Weight", C.Yellow)
+	f, rows.weightDesc = row(list, 2, "strength", "Heavier Weight", C.Yellow)
 	rows.weightBtn = Ui.button({ Text = "", Color = C.Green, Size = UDim2.fromOffset(260, 56), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), ZIndex = 24, Parent = f, OnClick = function()
 		State.action("BuyWeight")
 	end })
 
-	f, rows.baseDesc = row(list, 3, "🏡", "Bigger Base", C.Orange)
+	f, rows.baseDesc = row(list, 3, "pets", "Bigger Base", C.Orange)
 	rows.baseBtn = Ui.button({ Text = "", Color = C.Green, Size = UDim2.fromOffset(260, 56), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), ZIndex = 24, Parent = f, OnClick = function()
 		State.action("UpgradeBase")
 	end })
 
 	Ui.text({
-		Text = "Train on the pink pad in your base to gain Strength: deeper splits, longer open time.",
+		Text = "Step onto the pink pad in your base to train Strength. More Strength parts the sea deeper.",
 		Size = UDim2.new(1, 0, 0, 22),
 		TextColor3 = Color3.fromRGB(200, 200, 210),
 		LayoutOrder = 4,
