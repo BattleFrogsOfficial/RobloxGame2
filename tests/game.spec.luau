@@ -313,6 +313,29 @@ check("joints return to rest after the cast", player.Character.RightUpperArm.Rig
 check("camera glides back to exactly where it was", (camera.CFrame.Position - cameraHome.Position).Magnitude < 0.01)
 eq("player can walk again", player.Character.Humanoid.WalkSpeed, 16)
 check("HUD back after the cutscene", player.PlayerGui.Hud.Enabled == true)
+
+-- While the sea is open: the zone bar replaces Buy/Base/Sell, and a counter
+-- floats over your head.
+local hud = player.PlayerGui.Hud
+check("zone bar shown while the sea is open", hud.ZoneBar.Visible == true and hud.TopBar.Visible == false)
+check("head counter shows 0/1", player.PlayerGui.CarryTag.Enabled == true and player.PlayerGui.CarryTag:FindFirstChildOfClass("TextLabel").Text == "0/1")
+check("default player list is switched off", h.coreGui.PlayerList == false)
+
+-- The inside of the sea is dressed: kelp, mist, fish in the walls.
+local depths = ws.Depths
+local function countNamed(name)
+	local n = 0
+	for _, c in depths:GetChildren() do
+		if c.Name == name then
+			n += 1
+		end
+	end
+	return n
+end
+check("fish swim in the walls", countNamed("Fish") >= 6, countNamed("Fish"))
+check("floor mist is on", depths:FindFirstChild("Mist") ~= nil and depths.Mist.ParticleEmitter.Enabled)
+h:advance(0.6)
+check("water falls from the wall tops", countNamed("Drip") > 0, countNamed("Drip"))
 noErrors(h, "parting cutscene")
 
 local ocean = ws:FindFirstChild("LocalOcean")
@@ -403,6 +426,8 @@ Ocean.close()
 h:advance(0.5)
 check("split is over", Ocean.active == nil)
 check("closed sea is back", ocean.Main.Transparency < 1 and ocean.WallL1.Transparency == 1)
+check("top bar returns and the zone bar hides", player.PlayerGui.Hud.TopBar.Visible == true and player.PlayerGui.Hud.ZoneBar.Visible == false)
+check("interior dressing is cleared", ws.Depths:FindFirstChild("Fish") == nil and ws.Depths:FindFirstChild("Mist") == nil)
 check("walls stop colliding when hidden", not ocean.WallL1.CanCollide and not ocean.BarrierL.CanCollide)
 noErrors(h, "close ocean")
 
@@ -525,8 +550,29 @@ h:advance(8, 0.1)
 check("server published a walk", animalModel:GetAttribute("WalkStart") ~= nil and animalModel:GetAttribute("WalkDuration") > 0)
 noErrors(h, "income and wandering")
 
-check("index reward claimed", act("ClaimIndex", firstAnimal) == true and d.index[firstAnimal] == 2)
-check("index reward can't be claimed twice", act("ClaimIndex", firstAnimal) == false)
+-- Index: completing an egg (all three animals, in one variant) boosts income.
+eq("no Index bonus with one animal", Formulas.indexBonus(d.index), 1)
+local keep = table.clone(d.index)
+for _, a in Config.AnimalsByEgg.Shell do
+	d.index[a.id] = 1
+end
+eq("one complete egg is +10%", Formulas.indexBonus(d.index), 1 + Config.IndexBonusPerEgg)
+local plain = 0
+for _, item in d.pen do
+	if item.kind == "animal" then
+		plain += Formulas.animalIncome(item.animal, item.variant)
+	end
+end
+check("the Index bonus is applied to income", math.abs(Data.income(player) - plain * (1 + Config.IndexBonusPerEgg)) < 1e-6)
+for _, a in Config.AnimalsByEgg.Shell do
+	d.index[Formulas.indexKey(a.id, "Gold")] = 1
+end
+eq("variants count as separate eggs", Formulas.indexCompleted(d.index), 2)
+table.clear(d.index)
+for k, v in keep do
+	d.index[k] = v
+end
+check("removed claim action is refused", act("ClaimIndex", firstAnimal) == false)
 
 -- Rare animals are far bigger than common ones.
 local Voxel = w.sharedModule("Voxel")
@@ -679,6 +725,33 @@ h:advance(1)
 startSplit(0)
 sp = Ocean.active
 waitOutCutscene()
+-- A corridor this deep crosses into the second luck zone.
+check("corridor reaches the Reef zone", sp.length > Config.Zones[2].from, sp.length)
+local line = ws.Depths:FindFirstChild("ZoneLine")
+check("a glowing line marks the zone on the seabed", line ~= nil and line.Transparency < 1 and line.Size.X > 10)
+local sign = line and line:FindFirstChildOfClass("BillboardGui")
+local signText = ""
+for _, l in (sign and sign:GetChildren() or {}) do
+	signText ..= l.Text .. " "
+end
+check("the zone sign gives its luck", signText:find("x2 LUCK") ~= nil, signText)
+check("kelp lines the corridor", ws.Depths:FindFirstChild("Kelp") ~= nil)
+local hudNow = player.PlayerGui.Hud
+check("zones past the corridor are locked on the bar", (function()
+	local locked = 0
+	for _, seg in hudNow.ZoneBar:GetDescendants() do
+		if seg.Name == "Lock" and seg.Visible then
+			locked += 1
+		end
+	end
+	local expected = 0
+	for _, zone in Config.Zones do
+		if zone.from >= sp.length then
+			expected += 1
+		end
+	end
+	return locked == expected and expected > 0
+end)())
 eggSpots = Ocean.eggPositions()
 table.sort(eggSpots, function(a, b)
 	return math.abs(a.X - sp.cx) < math.abs(b.X - sp.cx)

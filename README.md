@@ -80,6 +80,7 @@ src/client/      StarterPlayerScripts.Client
   init.client.luau boot
   State.luau       client copy of player state + server actions
   Ocean.luau       draws the ocean, the parting cutscene, the closing corridor, your eggs; charging
+  Depths.luau      the inside of a parted sea: zone lines, kelp, mist, fish, falling water
   Ragdoll.luau     goes limp and flies back to shore when the sea catches you
   Poses.luau       limb animation for the staff cast and barbell reps (R6 and R15)
   Guide.luau       new-player objective text and the trail of arrows on the ground
@@ -137,7 +138,8 @@ Almost everything is in `src/shared/Config.luau`:
 - `Config.Split` controls how Strength turns into depth and width, how long the walls take to close, the egg count,
   and how long a full charge takes.
 - `Config.SizeByTier` sets how much bigger each rarity tier's animals are.
-- `Config.RarityWeights` sets the base rarity odds. Depth and Luck both shift them toward rarer eggs.
+- `Config.RarityWeights` sets the base rarity odds, and `Config.Zones` the luck zones by depth (name, luck
+  multiplier, color). Luck and the zone's luck shift the odds toward rarer eggs.
 - `Config.Eggs` and `Config.Animals` set hatch times, incomes, colours and the voxel template for each animal.
 - `Config.Weights`, `Config.Luck` and `Config.Base` set the upgrade costs.
 

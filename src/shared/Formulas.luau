@@ -115,24 +115,66 @@ local function pickWeighted(rng: Random, weights: { number }): number
 	return #weights
 end
 
+-- The luck zone `d` studs out from the shore.
+function Formulas.zoneAt(d: number)
+	local zones = Config.Zones
+	for i = #zones, 1, -1 do
+		if d >= zones[i].from then
+			return zones[i]
+		end
+	end
+	return zones[1]
+end
+
 -- Chance of each rarity tier (array of probabilities summing to 1) for an
--- egg found `depth` (0..1 of the whole ocean) out with this much luck.
+-- egg found `depth` (0..1 of the ocean's reach) out with this much luck.
 function Formulas.tierOdds(depth: number, luck: number): { number }
-	local maxTier = math.clamp(2 + math.floor(depth * 5.4), 2, #Config.Eggs)
+	local zone = Formulas.zoneAt(depth * Config.Ocean.Reach)
+	local effective = luck * zone.luck
 	local weights = {}
 	local total = 0
-	for tier = 1, maxTier do
-		local w = Config.RarityWeights[tier]
-		-- Luck and depth each push weight toward rarer tiers.
-		w *= luck ^ ((tier - 1) * Config.Odds.LuckPower)
-		w *= (1 + depth * Config.Odds.DepthBoost) ^ ((tier - 1) * Config.Odds.DepthPower)
+	for tier = 1, zone.maxTier do
+		local w = Config.RarityWeights[tier] * effective ^ ((tier - 1) * Config.Odds.LuckPower)
 		weights[tier] = w
 		total += w
 	end
-	for tier = 1, maxTier do
+	for tier = 1, zone.maxTier do
 		weights[tier] /= total
 	end
 	return weights
+end
+
+-- Index key for an animal in a variant ("Crab", "Crab|Gold").
+function Formulas.indexKey(animalId: string, variant: string?): string
+	if variant and variant ~= "Normal" then
+		return animalId .. "|" .. variant
+	end
+	return animalId
+end
+
+-- How many eggs are complete (all three animals found) across all variants.
+function Formulas.indexCompleted(index): number
+	local done = 0
+	for _, variant in Config.VariantOrder do
+		for _, egg in Config.Eggs do
+			local all = true
+			for _, a in Config.AnimalsByEgg[egg.id] do
+				if not index[Formulas.indexKey(a.id, variant)] then
+					all = false
+					break
+				end
+			end
+			if all then
+				done += 1
+			end
+		end
+	end
+	return done
+end
+
+-- Income multiplier earned from the Index (1 = no bonus).
+function Formulas.indexBonus(index): number
+	return 1 + Config.IndexBonusPerEgg * Formulas.indexCompleted(index)
 end
 
 -- Rarity tier for an egg found `depth` (0..1 of the whole ocean) out.

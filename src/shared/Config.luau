@@ -4,7 +4,7 @@ local Config = {}
 
 -- Shown in small print at the top of the screen and used in the place
 -- file's name, so it is always clear which build is running.
-Config.Build = 16
+Config.Build = 17
 
 ----------------------------------------------------------------------------
 -- Rarities
@@ -212,11 +212,27 @@ Config.Split = {
 -- Animal size multiplier per rarity tier: late-game pets tower over a base.
 Config.SizeByTier = { 1, 1.5, 2.2, 3.2, 4.8, 7, 10 }
 
--- Base hatch weights per rarity tier; luck and depth push toward the right.
+-- Base hatch weights per rarity tier; luck pushes them toward the right.
 Config.RarityWeights = { 1000, 360, 160, 50, 14, 3, 0.4 }
--- Each tier's weight is multiplied by luck^(LuckPower * (tier-1)) and
--- (1 + DepthBoost * depth)^(DepthPower * (tier-1)), depth being 0..1 across the ocean.
-Config.Odds = { LuckPower = 0.35, DepthPower = 0.6, DepthBoost = 2.5 }
+-- Each tier's weight is multiplied by (luck x zone luck)^(LuckPower * (tier-1)).
+Config.Odds = { LuckPower = 0.35 }
+
+-- Luck zones: bands of depth, each with a luck multiplier and one more egg
+-- tier unlocked than the band before. Shown on the bar at the top of the
+-- screen and as glowing lines across the seabed.
+Config.Zones = {
+	{ name = "Shallows", luck = 1, color = Color3.fromRGB(240, 205, 130) },
+	{ name = "Reef", luck = 2, color = Color3.fromRGB(110, 230, 90) },
+	{ name = "Kelp Forest", luck = 3.5, color = Color3.fromRGB(60, 215, 235) },
+	{ name = "Twilight", luck = 5.5, color = Color3.fromRGB(215, 100, 240) },
+	{ name = "Trench", luck = 8, color = Color3.fromRGB(255, 200, 45) },
+	{ name = "Abyss", luck = 11, color = Color3.fromRGB(255, 80, 95) },
+}
+for i, zone in Config.Zones do
+	zone.index = i
+	zone.from = (i - 1) * Config.Ocean.Reach / 5.4 -- studs out from the shore
+	zone.maxTier = math.min(i + 1, #Config.Eggs)
+end
 
 ----------------------------------------------------------------------------
 -- Progression
@@ -273,8 +289,10 @@ Config.Daily = {
 	{ kind = "egg", egg = "Treasure" },
 }
 
--- Index reward: cash = animal income * this, claimed once per animal.
-Config.IndexRewardSeconds = 120
+-- Index: every egg whose three animals have all been discovered, counted
+-- separately for each variant, adds this much to all income.
+Config.IndexBonusPerEgg = 0.10
+Config.VariantOrder = { "Normal", "Gold", "Rainbow" }
 
 ----------------------------------------------------------------------------
 -- Monetization. Fill in real IDs from the Creator Dashboard. While an ID is

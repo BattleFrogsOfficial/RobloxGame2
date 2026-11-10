@@ -35,7 +35,8 @@ stand against the back wall. A server holds 5 players, one base each.
    - If the walls meet while you're between them, you're caught.
 5. **Grab an egg.** Your eggs sit on the seabed and only you can see them.
    - **Count:** `2 + length/34 + log2(Luck)`, up to 16.
-   - **Rarity:** deeper eggs can be rarer. Luck and depth both shift the odds toward rare eggs.
+   - **Rarity:** the sea is divided into six luck zones by depth (see Progression). Each zone unlocks one more egg
+     tier than the last and multiplies your Luck for eggs found there.
    - **Placement:** every egg is placed where a sprint from the shore reaches it before the water does.
    - **Variants:** Gold (×2.5) and Rainbow (×6) chances scale with √Luck.
    - Walk up to an egg and hold **E** for a third of a second to pick it up (a tap-and-hold prompt on touch, the
@@ -91,8 +92,21 @@ The server is authoritative for everything that matters:
 
 ## Progression
 
-Depth gates rarity. As a fraction of the 300-stud reach: Kelp eggs start about 56 studs out, Pearl at 111, Treasure at
-167, Abyss at 222 and Leviathan at 278.
+The sea is divided into six **luck zones** by depth. Each zone multiplies your Luck for eggs found in it and unlocks
+one more egg tier than the zone before:
+
+| Zone | Starts at | Luck | Rarest egg |
+|---|---|---|---|
+| Shallows | shore | x1 | Coral |
+| Reef | 56 studs | x2 | Kelp |
+| Kelp Forest | 111 studs | x3.5 | Pearl |
+| Twilight | 167 studs | x5.5 | Treasure |
+| Trench | 222 studs | x8 | Abyss |
+| Abyss | 278 studs | x11 | Leviathan |
+
+An egg's rarity odds are its tier's base weight times `(Luck x zone luck)^(0.35 x (tier - 1))`. Each zone's start is
+marked by a glowing line across the seabed with a sign, and the bar at the top of the screen shows all six zones, which
+ones your corridor reaches, and where you are.
 
 | Egg | Rarity | Hatch | Animals (income $/s) | Size |
 |---|---|---|---|---|
@@ -138,14 +152,30 @@ layers on top.
 The build number (`Config.Build`) is shown in small print at the top of the screen and is part of the place file's
 name, so it is always clear which build is running.
 
+## Inside the sea
+
+Everything inside a parted sea is drawn only for the player who parted it (`client/Depths.luau`):
+
+- **Zone lines:** a glowing strip across the seabed where each luck zone starts, with a sign giving its name and luck.
+- **Kelp** sways along both sides and is swallowed as the walls close in.
+- **Bubble vents** send streams of bubbles up from the floor.
+- **Mist** rolls along the corridor floor.
+- **Fish** swim inside the water walls, and every second or two one leaps across the gap over your head.
+- **Falling water:** chunks break off the tops of the walls and drop into the corridor.
+- **Light:** the view turns bluer and dimmer the deeper you go.
+
 ## Feedback while you play
 
 - **Guide:** until a new player has planted an egg, hatched one and trained once, a line of text says what to do next
   and a trail of green arrows on the ground leads there (routing through the base gate). While carrying, it always
   points you home.
-- **Sea bar:** while your sea is open, a bar at the top drains from both ends like the walls, with the seconds left. It
-  turns red in the last 5 seconds, a tick sounds each second, and the screen edge pulses red as the walls get close.
-- **Egg counter:** "Eggs 1/1" stays up from the grab until the egg is planted, red in the sea and green on land.
+- **Zone bar:** while your sea is open it replaces Buy/Base/Sell at the top: one colored segment per luck zone with its
+  multiplier, the rarest egg that zone can hold underneath, zones beyond your corridor greyed out, and your face
+  marking how deep you are.
+- **Sea bar:** under the zone bar, a bar drains from both ends like the walls, with the seconds left. It turns red in
+  the last 5 seconds, a tick sounds each second, and the screen edge pulses red as the walls get close.
+- **Egg counter:** "0/1" floats over your head while a sea is open, and a panel reading "Eggs 1/1" stays up from the
+  grab until the egg is planted, red in the sea and green on land.
 - **Banners:** large centered messages for the moments that matter (the sea parting, SAFE, SWEPT AWAY, offline cash).
 - **Egg odds:** the Buy menu shows the chance of each rarity at the deepest point you can currently reach.
 - **Touch:** phones and tablets get a large HOLD button for charging, so it doesn't fight the camera.
@@ -161,6 +191,13 @@ Icons are small 3D models built by `Voxel.icon` (cash stack, barbell, clover, eg
 clock) and shown in viewports. There are no emoji in the interface; the playthrough test scans every label to keep it
 that way.
 
+- **Left:** Pets and Eggs tiles, then Cash, Strength and Luck with large icons, then a feed of income ticks.
+- **Right:** a round Starter Pack badge with the prize bursting out of it, a rainbow pass banner under it (desktop
+  only), then four tiles (Index, Shop, Gifts, Daily). Tile icons are larger than their frames and spill out of the
+  top; tiles can carry a tag ribbon and a round count badge.
+- **Player list:** Roblox's default player list is switched off, because it would sit on top of the right column and
+  the world has its own leaderboards.
+
 ## Systems
 
 - **Bases:** 5 per server, assigned on join. You start with 4 slots, and each upgrade adds 2 (up to 20). Animals and eggs
@@ -170,8 +207,10 @@ that way.
 - **Leaderboards:** three boards on the back wall rank Most Cash Earned, Strongest and Most Eggs. They are global
   (OrderedDataStores), merged with live numbers for everyone in the server, and refresh every minute. Without DataStore
   access they rank the current server only. Cash, Strength and Eggs also show in the Roblox player list.
-- **Index:** a book of all 21 animals. Undiscovered ones are dark silhouettes, and each new discovery pays a one-time
-  reward of 120 seconds of that animal's income.
+- **Index:** a book with a tab for each variant (Normal, Gold, Rainbow). Each row is an egg, an arrow, and the three
+  animals it hatches, on backgrounds in the egg's rarity color; animals you haven't hatched in that variant are dark
+  silhouettes. Every egg you complete (all three animals in one variant) adds +10% to all your income, permanently,
+  up to +210%.
 - **Playtime gifts:** 12 rewards unlock at 1 to 60 minutes of play in a session, and the progress resets when you leave.
   "Skip All" is a developer product.
 - **Daily streak:** a 7-day cycle based on UTC days. Missing a day resets the streak.

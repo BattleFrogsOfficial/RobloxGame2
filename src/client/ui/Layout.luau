@@ -15,26 +15,28 @@ local Layout = {}
 Layout.Elements = {
 	Build = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 0 }, size = { 200, 10 } },
 	TopBar = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 10 }, size = { 546, 56 } },
-	Status = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 74 }, size = { 480, 84 } },
-	Objective = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 164 }, size = { 680, 30 }, touch = { size = { 560, 30 } } },
-	Toasts = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 198 }, size = { 680, 52 } },
-	Promo = {
-		anchor = { 0, 0 }, pivot = { 0, 0 }, offset = { 16, 112 }, size = { 150, 92 },
-		touch = { anchor = { 1, 0 }, pivot = { 1, 0 }, offset = { -16, 112 } },
-	},
-	Menu = { anchor = { 0, 0 }, pivot = { 0, 0 }, offset = { 16, 214 }, size = { 186, 88 }, touch = { offset = { 16, 120 } } },
-	Stats = { anchor = { 0, 0 }, pivot = { 0, 0 }, offset = { 16, 312 }, size = { 230, 132 }, touch = { offset = { 16, 216 }, size = { 230, 108 } } },
-	Feed = { anchor = { 0, 0 }, pivot = { 0, 0 }, offset = { 254, 312 }, size = { 120, 132 }, touch = { offset = { 210, 120 }, size = { 120, 76 } } },
-	RightGrid = {
-		anchor = { 1, 0.5 }, pivot = { 1, 0 }, offset = { -16, -40 }, size = { 186, 186 },
-		touch = { anchor = { 1, 0 }, offset = { -16, 214 } },
-	},
+	-- Luck zones and your depth; takes the top bar's place while a sea is open.
+	ZoneBar = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 10 }, size = { 720, 64 }, touch = { size = { 600, 64 } } },
+	Status = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 80 }, size = { 480, 84 } },
+	Objective = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 170 }, size = { 680, 30 }, touch = { size = { 560, 30 } } },
+	Toasts = { anchor = { 0.5, 0 }, pivot = { 0.5, 0 }, offset = { 0, 204 }, size = { 680, 52 } },
+
+	-- Left column.
+	Menu = { anchor = { 0, 0 }, pivot = { 0, 0 }, offset = { 16, 112 }, size = { 190, 90 }, touch = { offset = { 16, 120 }, size = { 186, 88 } } },
+	Stats = { anchor = { 0, 0 }, pivot = { 0, 0 }, offset = { 16, 214 }, size = { 240, 144 }, touch = { offset = { 16, 216 }, size = { 230, 108 } } },
+	Feed = { anchor = { 0, 0 }, pivot = { 0, 0 }, offset = { 16, 364 }, size = { 240, 80 }, touch = { offset = { 210, 120 }, size = { 120, 76 } } },
+
+	-- Right column: round Starter Pack promo, a pass banner, then the tiles.
+	Promo = { anchor = { 1, 0 }, pivot = { 1, 0 }, offset = { -16, 64 }, size = { 190, 150 }, touch = { size = { 150, 104 } } },
+	Promo2 = { anchor = { 1, 0 }, pivot = { 1, 0 }, offset = { -16, 222 }, size = { 190, 58 }, desktopOnly = true },
+	RightGrid = { anchor = { 1, 0 }, pivot = { 1, 0 }, offset = { -16, 292 }, size = { 190, 190 }, touch = { offset = { -16, 176 } } },
+
 	Carry = { anchor = { 0.5, 1 }, pivot = { 0.5, 1 }, offset = { 0, -176 }, size = { 320, 60 } },
 	Train = { anchor = { 0.5, 1 }, pivot = { 0.5, 1 }, offset = { 0, -244 }, size = { 420, 40 } },
 	Charge = {
-		anchor = { 0.5, 0.5 }, pivot = { 0, 0.5 }, offset = { 120, 20 }, size = { 200, 250 },
+		anchor = { 0.5, 0.5 }, pivot = { 0, 0.5 }, offset = { 120, 26 }, size = { 200, 250 },
 		-- On touch: left of the character, clear of the HOLD button and thumbstick.
-		touch = { pivot = { 1, 0.5 }, offset = { -90, 20 }, size = { 150, 250 } },
+		touch = { pivot = { 1, 0.5 }, offset = { -90, 26 }, size = { 150, 250 } },
 	},
 	Hold = { anchor = { 1, 1 }, pivot = { 1, 1 }, offset = { -300, -170 }, size = { 170, 170 }, touchOnly = true },
 }
@@ -42,15 +44,20 @@ Layout.Elements = {
 -- Pairs that can never be on screen together, so they may share space:
 -- the charge meter and HOLD button only show while you can part the sea,
 -- which is never while a sea is open, while carrying an egg, or while
--- training (the pad is inside your base, not on the shoreline).
+-- training (the pad is inside your base, not on the shoreline). The zone bar
+-- replaces the top bar for as long as a sea is open.
 Layout.NeverTogether = {
+	{ "TopBar", "ZoneBar" },
 	{ "Charge", "Status" },
+	{ "Charge", "ZoneBar" },
 	{ "Charge", "Carry" },
 	{ "Charge", "Train" },
 	{ "Hold", "Status" },
+	{ "Hold", "ZoneBar" },
 	{ "Hold", "Carry" },
 	{ "Hold", "Train" },
 	{ "Train", "Status" },
+	{ "Train", "ZoneBar" },
 }
 
 -- Screen areas used by Roblox's own UI, in real pixels.
@@ -63,7 +70,7 @@ function Layout.reserved(width: number, height: number, touch: boolean)
 		list.JumpButton = { width - 150, height - 150, 150, 150 }
 		list.Hotbar = { width / 2 - 150, height - 80, 300, 80 }
 	else
-		list.PlayerList = { width - 200, 58, 200, 230 }
+		-- (The default player list is switched off; the world has leaderboards.)
 		list.Hotbar = { width / 2 - 160, height - 90, 320, 90 }
 	end
 	return list

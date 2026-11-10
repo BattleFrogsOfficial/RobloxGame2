@@ -187,6 +187,111 @@ function Ui.setButtonText(btn: GuiObject, text: string)
 	end
 end
 
+-- A square tile button in the HUD style: the 3D icon is bigger than the
+-- frame and spills out of its top, the label sits along the bottom, and an
+-- optional tag ribbon ("NEW!", "FREE!") hangs off the top-right corner.
+function Ui.tile(props: { [string]: any }): TextButton
+	local color = props.Color or Ui.Colors.Blue
+	local btn = Ui.new("TextButton", {
+		Name = props.Name or "Tile",
+		Size = props.Size or UDim2.fromOffset(88, 88),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		AutoButtonColor = false,
+		Text = "",
+		LayoutOrder = props.LayoutOrder or 0,
+		ZIndex = props.ZIndex or 1,
+		Parent = props.Parent,
+	})
+	Ui.corner(btn, 10)
+	Ui.stroke(btn, 4)
+	local grad = Ui.gradient(btn, color)
+	grad.Name = "Gradient"
+	-- Inner darker panel, so the icon sits in a recessed frame.
+	local inner = Ui.new("Frame", {
+		BackgroundColor3 = color:Lerp(Color3.new(0, 0, 0), 0.45),
+		BackgroundTransparency = 0.35,
+		Size = UDim2.new(1, -12, 1, -12),
+		Position = UDim2.fromOffset(6, 6),
+		ZIndex = btn.ZIndex,
+		Parent = btn,
+	})
+	Ui.corner(inner, 6)
+	local holder = Ui.new("Frame", {
+		Name = "Icon",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.36),
+		Size = UDim2.fromScale(1.12, 1.0),
+		ZIndex = btn.ZIndex + 1,
+		Parent = btn,
+	})
+	Ui.icon(holder, props.Icon, { ZIndex = btn.ZIndex + 1 })
+	local label = Ui.text({
+		Name = "Label",
+		Text = props.Text or "",
+		Size = UDim2.new(1, -4, 0.3, 0),
+		Position = UDim2.new(0.5, 0, 1, -3),
+		AnchorPoint = Vector2.new(0.5, 1),
+		ZIndex = btn.ZIndex + 2,
+		StrokeThickness = 3,
+		Parent = btn,
+	})
+	label.Name = "Label"
+	if props.Tag then
+		local tag = Ui.text({
+			Name = "Tag",
+			Text = props.Tag,
+			Size = UDim2.fromScale(0.62, 0.24),
+			Position = UDim2.new(1, 6, 0, -8),
+			AnchorPoint = Vector2.new(1, 0),
+			BackgroundTransparency = 0,
+			BackgroundColor3 = props.TagColor or Ui.Colors.Green,
+			Rotation = 6,
+			ZIndex = btn.ZIndex + 3,
+			Parent = btn,
+		})
+		Ui.corner(tag, 5)
+	end
+	local scale = Ui.new("UIScale", { Parent = btn })
+	btn.MouseEnter:Connect(function()
+		TweenService:Create(scale, TweenInfo.new(0.1), { Scale = 1.06 }):Play()
+	end)
+	btn.MouseLeave:Connect(function()
+		TweenService:Create(scale, TweenInfo.new(0.1), { Scale = 1 }):Play()
+	end)
+	btn.MouseButton1Down:Connect(function()
+		TweenService:Create(scale, TweenInfo.new(0.05), { Scale = 0.94 }):Play()
+	end)
+	btn.MouseButton1Up:Connect(function()
+		TweenService:Create(scale, TweenInfo.new(0.1), { Scale = 1 }):Play()
+	end)
+	if props.OnClick then
+		btn.Activated:Connect(function()
+			Ui.click()
+			props.OnClick()
+		end)
+	end
+	return btn
+end
+
+-- A round red badge with a count or "!" in a button's top-left corner.
+function Ui.countBadge(parent: GuiObject, text: string?): TextLabel
+	local b = Ui.text({
+		Name = "Badge",
+		Text = text or "!",
+		Size = UDim2.fromOffset(30, 30),
+		Position = UDim2.fromOffset(-10, -10),
+		BackgroundTransparency = 0,
+		BackgroundColor3 = Ui.Colors.Red,
+		ZIndex = 12,
+		Visible = false,
+		Parent = parent,
+	})
+	Ui.corner(b, 15)
+	Ui.stroke(b, 3)
+	return b
+end
+
 -- A picture made from a 3D model (see Voxel.icon), filling `parent`.
 function Ui.icon(parent: Instance, name: string, props: { [string]: any }?): ViewportFrame
 	return Viewport.show(parent, Voxel.icon(name), props)

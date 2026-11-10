@@ -681,6 +681,10 @@ end
 
 -- Builds the icon model called `name`. Some icons reuse game models.
 function Voxel.icon(name: string): Model
+	local eggId = string.match(name, "^egg:(.+)$")
+	if eggId and Config.EggById[eggId] then
+		return Voxel.egg(eggId, "Normal", false)
+	end
 	if name == "strength" then
 		return Voxel.barbell(3)
 	elseif name == "egg" then

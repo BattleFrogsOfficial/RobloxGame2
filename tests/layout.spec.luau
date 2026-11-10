@@ -46,7 +46,7 @@ for _, screen in SCREENS do
 	local label, w, h, touch = screen[1], screen[2], screen[3], screen[4]
 	local rects = {}
 	for name, element in Layout.Elements do
-		if touch or not element.touchOnly then
+		if (touch or not element.touchOnly) and not (touch and element.desktopOnly) then
 			rects[name] = Layout.rect(name, w, h, touch)
 		end
 	end

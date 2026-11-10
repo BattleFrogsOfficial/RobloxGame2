@@ -476,11 +476,14 @@ local function freeSlot(d): string?
 	return nil
 end
 
-local function discover(player: Player, animalId: string)
+-- Record an animal in the Index (each variant is its own entry).
+local function discover(player: Player, animalId: string, variant: string?)
 	local d = Data.get(player)
-	if d.index[animalId] == nil then
-		d.index[animalId] = 1
-		Data.effect(player, "discover", { animal = animalId })
+	local key = Formulas.indexKey(animalId, variant)
+	if d.index[key] == nil then
+		local before = Formulas.indexCompleted(d.index)
+		d.index[key] = 1
+		Data.effect(player, "discover", { animal = animalId, variant = variant or "Normal", completedEgg = Formulas.indexCompleted(d.index) > before })
 	end
 end
 
@@ -525,7 +528,7 @@ end
 function Pens.addAnimal(player: Player, animal: string, variant: string?): string
 	local d = Data.get(player)
 	variant = variant or "Normal"
-	discover(player, animal)
+	discover(player, animal, variant)
 	local item = { uid = Data.newUid(player), animal = animal, variant = variant }
 	local key = freeSlot(d)
 	local where
@@ -554,7 +557,7 @@ function Pens.hatch(player: Player, key: string): boolean
 	end
 	local animal = Formulas.rollAnimal(rng, item.egg, Data.luck(player))
 	local variant = item.variant or "Normal"
-	discover(player, animal)
+	discover(player, animal, variant)
 	local uid = Data.newUid(player)
 	d.pen[key] = { kind = "animal", uid = uid, animal = animal, variant = variant }
 	d.stats.hatched += 1

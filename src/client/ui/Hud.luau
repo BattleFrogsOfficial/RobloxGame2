@@ -6,11 +6,13 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Format = require(Shared.Format)
+local Formulas = require(Shared.Formulas)
 
 local Ui = require(script.Parent.Ui)
 local Layout = require(script.Parent.Layout)
@@ -271,6 +273,7 @@ local function buildTopBar()
 		Parent = slot("Build"),
 	})
 	local bar = slot("TopBar")
+	refs.topBar = bar
 	Ui.new("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,
 		HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -350,36 +353,23 @@ local function buildStatus()
 end
 
 local function buildLeft()
-	-- Starter pack promo.
-	local promo = slot("Promo")
-	refs.starter = Ui.button({
-		Text = "Starter Pack  R$" .. Config.Products[1].price,
-		Icon = "gift",
-		Color = C.Red,
-		Size = UDim2.fromScale(1, 1),
-		Parent = promo,
-		OnClick = function()
-			Ui.open("Store")
-		end,
-	})
-
 	local menu = slot("Menu")
 	Ui.new("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,
-		Padding = UDim.new(0, 10),
+		Padding = UDim.new(0, 12),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		Parent = menu,
 	})
-	local pets = Ui.button({ Text = "Pets", Icon = "pets", Color = C.Orange, Size = UDim2.fromOffset(88, 88), LayoutOrder = 1, Parent = menu, OnClick = function()
+	local pets = Ui.tile({ Text = "Pets", Icon = "pets", Color = C.Orange, LayoutOrder = 1, Parent = menu, OnClick = function()
 		Ui.toggle("Pets")
 	end })
-	local eggs = Ui.button({ Text = "Eggs", Icon = "egg", Color = C.Teal, Size = UDim2.fromOffset(88, 88), LayoutOrder = 2, Parent = menu, OnClick = function()
+	local eggs = Ui.tile({ Text = "Eggs", Icon = "egg", Color = C.Teal, LayoutOrder = 2, Parent = menu, OnClick = function()
 		Ui.toggle("Eggs")
 	end })
-	refs.petsBadge = Ui.badge(pets, "!")
-	refs.eggsBadge = Ui.badge(eggs, "!")
+	refs.petsBadge = Ui.countBadge(pets)
+	refs.eggsBadge = Ui.countBadge(eggs)
 
-	-- Cash, Strength and Luck, each with its icon.
+	-- Cash, Strength and Luck: a big icon and a big number each.
 	local stats = slot("Stats")
 	local _, _, _, size = Layout.place("Stats", touch)
 	local rowHeight = size[2] / 3
@@ -390,15 +380,16 @@ local function buildLeft()
 			Position = UDim2.fromOffset(0, (row - 1) * rowHeight),
 			Parent = stats,
 		})
-		local holder = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(rowHeight, rowHeight), Parent = frame })
+		local holder = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(rowHeight + 8, rowHeight + 8), Position = UDim2.fromOffset(-4, -4), Parent = frame })
 		Ui.icon(holder, icon)
 		return Ui.text({
 			Text = "0",
-			Size = UDim2.new(1, -rowHeight - 8, 1, -6),
-			Position = UDim2.fromOffset(rowHeight + 8, 3),
+			Size = UDim2.new(1, -rowHeight - 10, 1, -4),
+			Position = UDim2.fromOffset(rowHeight + 10, 2),
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextColor3 = color,
-			StrokeThickness = 3.5,
+			StrokeThickness = 4,
+			Rotation = -3,
 			Parent = frame,
 		})
 	end
@@ -410,31 +401,197 @@ local function buildLeft()
 	Ui.new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Top, Parent = refs.feed })
 end
 
+-- A row of text under a promo: a white title and a yellow price.
+local function promoText(parent: Instance, y: number, height: number, text: string, color: Color3)
+	return Ui.text({
+		Text = text,
+		Size = UDim2.new(1, 0, 0, height),
+		Position = UDim2.fromOffset(0, y),
+		TextColor3 = color,
+		StrokeThickness = 3,
+		ZIndex = 4,
+		Parent = parent,
+	})
+end
+
 local function buildRight()
+	-- Starter Pack: a round badge with the prize bursting out of it.
+	local promo = slot("Promo")
+	local _, _, _, promoSize = Layout.place("Promo", touch)
+	local circleSize = promoSize[2] - 46
+	local starter = Ui.new("TextButton", {
+		Name = "StarterPack",
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Parent = promo,
+	})
+	local circle = Ui.new("Frame", {
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.fromOffset(circleSize, circleSize),
+		Parent = starter,
+	})
+	Ui.corner(circle, circleSize)
+	Ui.stroke(circle, 4)
+	Ui.gradient(circle, C.Red)
+	local prize = Ui.new("Frame", {
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(1.25, 1.25),
+		ZIndex = 2,
+		Parent = circle,
+	})
+	Ui.icon(prize, "chest", { ZIndex = 2 })
+	promoText(starter, circleSize - 6, 26, "STARTER PACK!", C.White)
+	promoText(starter, circleSize + 20, 22, "ONLY R$" .. Config.Products[1].price, C.Yellow)
+	starter.Activated:Connect(function()
+		Ui.click()
+		Ui.open("Store")
+	end)
+	refs.starter = promo
+
+	-- Pass banner under it (desktop only; phones don't have the room).
+	if not touch then
+		local pass = Config.Passes[1]
+		local banner = Ui.new("TextButton", {
+			Name = "PassBanner",
+			Text = "",
+			AutoButtonColor = false,
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			Size = UDim2.fromScale(1, 1),
+			Parent = slot("Promo2"),
+		})
+		Ui.corner(banner, 10)
+		Ui.stroke(banner, 4)
+		Ui.new("UIGradient", {
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 120, 120)),
+				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 215, 90)),
+				ColorSequenceKeypoint.new(0.5, Color3.fromRGB(120, 235, 130)),
+				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(110, 200, 255)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(215, 130, 255)),
+			}),
+			Parent = banner,
+		})
+		local art = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(74, 74), Position = UDim2.fromOffset(-12, -8), ZIndex = 2, Parent = banner })
+		Ui.icon(art, pass.icon, { ZIndex = 2 })
+		Ui.text({ Text = string.upper(pass.name), Size = UDim2.new(1, -58, 0, 28), Position = UDim2.fromOffset(54, 3), StrokeThickness = 3, ZIndex = 3, Parent = banner })
+		Ui.text({ Text = "ONLY R$" .. pass.price, Size = UDim2.new(1, -58, 0, 22), Position = UDim2.fromOffset(54, 31), TextColor3 = C.Yellow, StrokeThickness = 3, ZIndex = 3, Parent = banner })
+		banner.Activated:Connect(function()
+			Ui.click()
+			Ui.open("Store")
+		end)
+		refs.passBanner = banner
+		refs.passKey = pass.key
+	end
+
+	-- The four tiles.
 	local grid = slot("RightGrid")
 	Ui.new("UIGridLayout", {
 		CellSize = UDim2.fromOffset(88, 88),
-		CellPadding = UDim2.fromOffset(10, 10),
+		CellPadding = UDim2.fromOffset(14, 14),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		HorizontalAlignment = Enum.HorizontalAlignment.Right,
 		Parent = grid,
 	})
-	local index = Ui.button({ Text = "Index", Icon = "book", Color = C.Blue, LayoutOrder = 1, Parent = grid, OnClick = function()
+	local index = Ui.tile({ Text = "Index", Icon = "book", Color = C.Blue, LayoutOrder = 1, Parent = grid, OnClick = function()
 		Ui.toggle("Index")
 	end })
-	Ui.button({ Text = "Shop", Icon = "chest", Color = C.Yellow, LayoutOrder = 2, Parent = grid, OnClick = function()
+	Ui.tile({ Text = "Shop", Icon = "chest", Color = C.Yellow, LayoutOrder = 2, Tag = "DEALS!", TagColor = C.Green, Parent = grid, OnClick = function()
 		Ui.toggle("Store")
 	end })
-	local gift = Ui.button({ Text = "Gifts", Icon = "gift", Color = C.Pink, LayoutOrder = 3, Parent = grid, OnClick = function()
+	local gift = Ui.tile({ Text = "Gifts", Icon = "gift", Color = C.Pink, LayoutOrder = 3, Parent = grid, OnClick = function()
 		Ui.toggle("Playtime")
 	end })
-	local daily = Ui.button({ Text = "Daily", Icon = "calendar", Color = C.Purple, LayoutOrder = 4, Parent = grid, OnClick = function()
+	local daily = Ui.tile({ Text = "Daily", Icon = "calendar", Color = C.Purple, LayoutOrder = 4, Parent = grid, OnClick = function()
 		Ui.toggle("Daily")
 	end })
-	refs.indexBadge = Ui.badge(index, "!")
+	refs.indexBadge = Ui.countBadge(index)
 	refs.giftLabel = gift:FindFirstChild("Label")
-	refs.giftBadge = Ui.badge(gift, "!")
-	refs.dailyBadge = Ui.badge(daily, "!")
+	refs.giftBadge = Ui.countBadge(gift)
+	refs.dailyBadge = Ui.countBadge(daily)
+end
+
+-- Luck zones across the top while your sea is open: one colored segment per
+-- zone with its luck multiplier and the best egg found there, zones past the
+-- end of your corridor greyed out, and your face marking how deep you are.
+local function buildZoneBar()
+	local bar = slot("ZoneBar")
+	bar.Visible = false
+	local zones = Config.Zones
+	local track = Ui.new("Frame", { BackgroundColor3 = C.Darker, Size = UDim2.new(1, 0, 0, 36), Parent = bar })
+	Ui.corner(track, 9)
+	Ui.stroke(track, 4)
+	refs.zoneLocks = {}
+	for i, zone in zones do
+		local seg = Ui.new("Frame", {
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BorderSizePixel = 0,
+			Position = UDim2.new((i - 1) / #zones, 2, 0, 3),
+			Size = UDim2.new(1 / #zones, -4, 1, -6),
+			Parent = track,
+		})
+		Ui.corner(seg, 5)
+		Ui.gradient(seg, zone.color)
+		local clover = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(28, 28), Position = UDim2.fromOffset(2, 1), ZIndex = 2, Parent = seg })
+		Ui.icon(clover, "luck", { ZIndex = 2 })
+		Ui.text({ Text = "x" .. zone.luck, Size = UDim2.new(1, -34, 1, -4), Position = UDim2.fromOffset(32, 2), StrokeThickness = 3, ZIndex = 2, Parent = seg })
+		local lock = Ui.new("Frame", { Name = "Lock", BackgroundColor3 = Color3.fromRGB(20, 20, 26), BackgroundTransparency = 0.3, Size = UDim2.fromScale(1, 1), ZIndex = 3, Visible = false, Parent = seg })
+		Ui.corner(lock, 5)
+		refs.zoneLocks[i] = lock
+
+		-- The rarest egg this zone can hold, shown under its segment.
+		local egg = Ui.new("Frame", {
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(0.5, 0),
+			Position = UDim2.new((i - 0.5) / #zones, 0, 0, 36),
+			Size = UDim2.fromOffset(30, 30),
+			Parent = bar,
+		})
+		Ui.icon(egg, "egg:" .. Config.Eggs[zone.maxTier].id)
+	end
+	-- Your face on the bar.
+	local marker = Ui.new("ImageLabel", {
+		BackgroundColor3 = C.Green,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0, 0, 0, 18),
+		Size = UDim2.fromOffset(34, 34),
+		Image = "",
+		ZIndex = 5,
+		Parent = bar,
+	})
+	Ui.corner(marker, 17)
+	Ui.stroke(marker, 3)
+	task.spawn(function()
+		local ok, image = pcall(function()
+			return Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+		end)
+		if ok then
+			marker.Image = image
+		end
+	end)
+	refs.zoneBar = bar
+	refs.zoneMarker = marker
+end
+
+-- "0/1" floating over your own head while a sea is open or you're carrying.
+local function buildHeadCounter()
+	local tag = Ui.new("BillboardGui", {
+		Name = "CarryTag",
+		Size = UDim2.fromScale(4.5, 1.5),
+		StudsOffsetWorldSpace = Vector3.new(0, 3, 0),
+		AlwaysOnTop = true,
+		LightInfluence = 0,
+		ResetOnSpawn = false,
+		Enabled = false,
+		Parent = player:WaitForChild("PlayerGui"),
+	})
+	refs.headText = Ui.text({ Text = "0/1", Size = UDim2.fromScale(1, 1), StrokeThickness = 3, Parent = tag })
+	refs.headTag = tag
 end
 
 -- "Eggs 1/1": stays up from the moment you grab an egg until it's planted.
@@ -611,16 +768,11 @@ local function onState(d)
 	refs.luck.Text = luckText
 	refs.eggsBadge.Visible = #d.eggs > 0
 	refs.petsBadge.Visible = #d.animals > 0
-	local unclaimed = false
-	for _, v in d.index do
-		if v == 1 then
-			unclaimed = true
-			break
-		end
-	end
-	refs.indexBadge.Visible = unclaimed
 	refs.dailyBadge.Visible = d.daily.last < d.serverDay
 	refs.starter.Visible = not d.starterPackBought
+	if refs.passBanner then
+		refs.passBanner.Visible = d.passes[refs.passKey] ~= true
+	end
 end
 
 local function playtimeStatus(): (boolean, number?)
@@ -671,6 +823,25 @@ local function perFrame(dt: number)
 	-- Sea status: the bar drains from both ends, like the walls closing in.
 	local phase, left, room = Ocean.timing()
 	refs.status.Visible = phase ~= nil and not Ocean.cutscene
+
+	-- Zone bar replaces the top bar while a sea is open.
+	local sp = Ocean.active
+	local showZones = sp ~= nil and not Ocean.cutscene
+	refs.zoneBar.Visible = showZones
+	refs.topBar.Visible = not showZones
+	if showZones then
+		local zones = Config.Zones
+		for i, zone in zones do
+			refs.zoneLocks[i].Visible = zone.from >= sp.length
+		end
+		local char0 = player.Character
+		local root0 = char0 and char0:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local d = root0 and math.clamp(Config.Ocean.ShoreZ - root0.Position.Z, 0, Config.Ocean.Reach) or 0
+		local zone = Formulas.zoneAt(d)
+		local nextFrom = zones[zone.index + 1] and zones[zone.index + 1].from or Config.Ocean.Reach
+		local along = (zone.index - 1 + math.clamp((d - zone.from) / (nextFrom - zone.from), 0, 1)) / #zones
+		refs.zoneMarker.Position = UDim2.new(along, 0, 0, 18)
+	end
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local onLand = root ~= nil and root.Position.Z >= Config.Ocean.ShoreZ
@@ -696,6 +867,15 @@ local function perFrame(dt: number)
 	local carried = Ocean.carried
 	local cap = State.data and State.data.carry or 1
 	refs.carry.Visible = carried > 0
+	-- The same count floats over your head while it matters.
+	local head = char and char:FindFirstChild("Head")
+	refs.headTag.Enabled = head ~= nil and (carried > 0 or (phase ~= nil and not Ocean.cutscene))
+	if refs.headTag.Enabled then
+		refs.headTag.Adornee = head
+		refs.headTag.StudsOffsetWorldSpace = Vector3.new(0, carried > 0 and 3 + carried * 3.2 or 3, 0)
+		refs.headText.Text = carried .. "/" .. cap
+		refs.headText.TextColor3 = carried >= cap and C.Cash or C.White
+	end
 	if carried > 0 then
 		refs.carryCount.Text = carried .. "/" .. cap
 		if onLand then
@@ -736,6 +916,11 @@ local function perFrame(dt: number)
 end
 
 local function perSecond()
+	-- The Index tile is badged from a new discovery until the book is opened.
+	if Ui.isOpen("Index") then
+		refs.newInIndex = false
+	end
+	refs.indexBadge.Visible = refs.newInIndex == true
 	local ready, left = playtimeStatus()
 	refs.giftBadge.Visible = ready
 	if refs.giftLabel then
@@ -750,7 +935,12 @@ local function perSecond()
 end
 
 local function onEffect(kind: string, payload: any)
-	if kind == "income" then
+	if kind == "discover" then
+		refs.newInIndex = true
+		if payload.completedEgg then
+			Hud.toast("Egg complete in your Index! +" .. math.floor(Config.IndexBonusPerEgg * 100 + 0.5) .. "% cash forever", C.Cash)
+		end
+	elseif kind == "income" then
 		feed(payload)
 	elseif kind == "lift" then
 		Hud.pop("+" .. Format.short(payload.gain) .. " Strength", C.Yellow, UDim2.new(0.5, math.random(-120, 120), 0.5, math.random(-40, 40)))
@@ -798,6 +988,22 @@ function Hud.init()
 	buildCharge()
 	buildHoldButton()
 	buildDanger()
+	buildZoneBar()
+	buildHeadCounter()
+
+	-- The world has its own leaderboards, so the default player list (which
+	-- would sit on top of the right-hand column) is switched off.
+	task.spawn(function()
+		for _ = 1, 10 do
+			local ok = pcall(function()
+				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+			end)
+			if ok then
+				break
+			end
+			task.wait(1)
+		end
+	end)
 
 	State.toast:Connect(Hud.toast)
 	State.changed:Connect(onState)

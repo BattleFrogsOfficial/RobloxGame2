@@ -243,6 +243,40 @@ for _, strength in { 0, 50, 5000 } do
 	end
 end
 
+-- Luck zones.
+eq("six luck zones", #Config.Zones, 6)
+eq("zone at the shore", Formulas.zoneAt(0).name, "Shallows")
+eq("zone at the far end", Formulas.zoneAt(Config.Ocean.Reach).name, "Abyss")
+for i = 2, #Config.Zones do
+	local z = Config.Zones[i]
+	check("zone " .. i .. " starts deeper", z.from > Config.Zones[i - 1].from)
+	check("zone " .. i .. " is luckier", z.luck > Config.Zones[i - 1].luck)
+	eq("zone " .. i .. " unlocks one more egg tier", z.maxTier, Config.Zones[i - 1].maxTier + 1)
+	eq("boundary belongs to the deeper zone", Formulas.zoneAt(z.from).index, i)
+end
+local rareShallow = Formulas.tierOdds(0.01, 3)[2]
+local rareDeeper = Formulas.tierOdds(0.25, 3)[2]
+check("a luckier zone shifts odds off the common egg", Formulas.tierOdds(0.25, 3)[1] < Formulas.tierOdds(0.01, 3)[1], rareShallow .. " " .. rareDeeper)
+for _, depth in { 0, 0.2, 0.5, 0.8, 1 } do
+	local sum = 0
+	for _, pr in Formulas.tierOdds(depth, 4) do
+		sum += pr
+	end
+	check("odds sum to 1 at depth " .. depth, math.abs(sum - 1) < 1e-9)
+end
+
+-- Index bonus.
+eq("empty Index gives no bonus", Formulas.indexBonus({}), 1)
+eq("index key, normal", Formulas.indexKey("Crab", "Normal"), "Crab")
+eq("index key, variant", Formulas.indexKey("Crab", "Gold"), "Crab|Gold")
+local full = {}
+for _, v in Config.VariantOrder do
+	for _, a in Config.Animals do
+		full[Formulas.indexKey(a.id, v)] = 1
+	end
+end
+eq("a full Index completes every egg in every variant", Formulas.indexCompleted(full), #Config.Eggs * #Config.VariantOrder)
+
 -- Near the shore only the first two tiers can appear.
 local maxNear = 0
 for _ = 1, 3000 do

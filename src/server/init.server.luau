@@ -93,12 +93,6 @@ local actions = {
 	ClaimDaily = function(player)
 		return Rewards.claimDaily(player)
 	end,
-	ClaimIndex = function(player, animalId)
-		if type(animalId) ~= "string" then
-			return false
-		end
-		return Rewards.claimIndex(player, animalId)
-	end,
 	TeleportHome = function(player)
 		Pens.teleportHome(player)
 		return true

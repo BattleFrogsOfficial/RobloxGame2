@@ -311,6 +311,10 @@ local function registerMocks()
 	method("DataModel", "BindToClose", function(_, fn)
 		table.insert(current.closers, fn)
 	end)
+	method("StarterGui", "SetCoreGuiEnabled", function(_, kind, enabled)
+		assert(typeof(kind) == "EnumItem" and type(enabled) == "boolean", "SetCoreGuiEnabled(CoreGuiType, boolean)")
+		current.coreGui[kind.Name] = enabled
+	end)
 	method("GuiService", "IsTenFootInterface", function()
 		return false
 	end)
@@ -522,6 +526,7 @@ function Harness.new(options)
 	self.prompts = {}
 	self.dataStores = options.dataStores or {}
 	self.orderedStores = options.orderedStores or {}
+	self.coreGui = {}
 	self.dataStoreFails = options.dataStoreFails or false
 	self.errors = {}
 	self.warnings = {}

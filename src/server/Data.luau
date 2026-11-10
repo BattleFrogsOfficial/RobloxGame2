@@ -42,7 +42,7 @@ local function defaultData()
 		eggs = {}, -- stored eggs: { egg, variant }
 		animals = {}, -- stored animals: { uid, animal, variant }
 		pen = {}, -- ["1".."20"] = { kind = "egg", egg, variant, start, dur } | { kind = "animal", uid, animal, variant }
-		index = {}, -- [animalId] = 1 (discovered) | 2 (reward claimed)
+		index = {}, -- [Formulas.indexKey(animal, variant)] = 1 once discovered
 		daily = { last = 0, streak = 0 },
 		boosts = { luckUntil = 0 },
 		stats = { eggsCollected = 0, hatched = 0, totalEarned = 0, splits = 0 },
@@ -127,7 +127,7 @@ function Data.income(player: Player): number
 	if Data.hasPass(player, "DoubleCash") then
 		total *= 2
 	end
-	return total
+	return total * Formulas.indexBonus(d.index)
 end
 
 function Data.addCash(player: Player, amount: number)
@@ -164,6 +164,7 @@ local function buildState(player: Player)
 		animals = d.animals,
 		pen = d.pen,
 		index = d.index,
+		indexBonus = Formulas.indexBonus(d.index),
 		daily = d.daily,
 		boosts = d.boosts,
 		stats = d.stats,

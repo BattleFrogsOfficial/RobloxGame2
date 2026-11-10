@@ -83,18 +83,6 @@ function Rewards.claimDaily(player: Player): (boolean, string?)
 	return true, "Day " .. d.daily.streak .. " reward: " .. what .. "!"
 end
 
-function Rewards.claimIndex(player: Player, animalId: string): (boolean, string?)
-	local d = Data.get(player)
-	local a = Config.AnimalById[animalId]
-	if not d or not a or d.index[animalId] ~= 1 then
-		return false
-	end
-	d.index[animalId] = 2
-	local cash = a.income * Config.IndexRewardSeconds
-	Data.addCash(player, cash)
-	return true, "Index reward: " .. Format.cash(cash) .. "!"
-end
-
 function Rewards.init()
 	Shop.callbacks.skipPlaytime = Rewards.skipPlaytime
 	Data.Loaded.Event:Connect(function(player)

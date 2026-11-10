@@ -22,6 +22,7 @@ local Remotes = require(Shared.Remotes)
 local Voxel = require(Shared.Voxel)
 
 local State = require(script.Parent.State)
+local Depths = require(script.Parent.Depths)
 
 local Ocean = {}
 
@@ -127,8 +128,10 @@ end
 
 local function addSpray(p: BasePart, rate: number): ParticleEmitter
 	local e = Instance.new("ParticleEmitter")
+	e.Texture = "rbxasset://textures/particles/smoke_main.dds" -- soft puffs read as spray
+	e.Rotation = NumberRange.new(0, 360)
 	e.Color = ColorSequence.new(FOAM)
-	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0) })
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.6), NumberSequenceKeypoint.new(1, 3.2) })
 	e.Transparency = NumberSequence.new(0.3, 1)
 	e.Lifetime = NumberRange.new(0.8, 1.4)
 	e.Speed = NumberRange.new(4, 10)
@@ -636,6 +639,7 @@ function Ocean.start(sp)
 	pendingGrab = nil
 	lastTick = -1
 	spawnEggs(sp)
+	Depths.start(sp)
 	beginCutscene(sp)
 	playSound("rbxasset://sounds/swoosh.wav", 1, 0.5)
 	playSound("rbxasset://sounds/swoosh.wav", 0.8, 0.35)
@@ -647,6 +651,7 @@ function Ocean.finish()
 	Ocean.active = nil
 	pendingGrab = nil
 	clearEggs()
+	Depths.stop()
 end
 
 function Ocean.close()
@@ -783,6 +788,7 @@ local function update()
 		end
 	end
 	layout(sp, elapsed, t)
+	Depths.update(sp, elapsed, root)
 
 	if sp then
 		-- Tick down the last five seconds before the walls meet.
@@ -851,6 +857,7 @@ end
 
 function Ocean.init()
 	build()
+	Depths.init()
 	RunService.RenderStepped:Connect(update)
 
 	UserInputService.InputBegan:Connect(function(input, processed)
