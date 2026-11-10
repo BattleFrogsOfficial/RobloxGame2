@@ -1,4 +1,5 @@
--- Index (collection book). One tab per variant (Normal / Gold / Rainbow);
+-- Index (collection book). One tab per variant (Normal / Gold / Platinum /
+-- Rainbow);
 -- each row is an egg, an arrow, and the three animals it can hatch. Animals
 -- you haven't hatched in that variant are dark silhouettes. Every egg you
 -- complete (all three animals, in one variant) adds to all your income.
@@ -20,6 +21,7 @@ local C = Ui.Colors
 local TAB_COLORS = {
 	Normal = Color3.fromRGB(175, 182, 195),
 	Gold = Color3.fromRGB(235, 190, 45),
+	Platinum = Color3.fromRGB(150, 205, 235),
 	Rainbow = Color3.fromRGB(200, 110, 245),
 }
 

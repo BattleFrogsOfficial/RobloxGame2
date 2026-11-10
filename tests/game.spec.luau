@@ -583,6 +583,49 @@ end
 check("a Secret pet towers over a Common one", height("Golden Kraken") > height("Crab") * 6, height("Golden Kraken") .. " vs " .. height("Crab"))
 check("a Mythic pet is bigger than a Legendary one", height("Kraken") > height("Parrot"))
 
+-- Platinum sits between Gold and Rainbow, for eggs and the animals in them.
+local platEgg, goldEgg = Voxel.egg("Shell", "Platinum", false), Voxel.egg("Shell", "Gold", false)
+local function shell(model)
+	for _, p in model:GetChildren() do
+		if p:IsA("BasePart") and p.Name ~= "Root" then
+			return p
+		end
+	end
+end
+check("platinum egg is silvery, not gold", shell(platEgg).Color.B > 0.8 and shell(goldEgg).Color.B < 0.6, tostring(shell(platEgg).Color))
+check("platinum egg is shinier than gold", shell(platEgg).Reflectance > shell(goldEgg).Reflectance)
+local platCrab = Voxel.animal("Crab", "Platinum")
+check("platinum animals are recolored", shell(platCrab).Color.B > 0.7, tostring(shell(platCrab).Color))
+Pens.addAnimal(player, "Crab", "Platinum")
+h:advance(0.8)
+check("a platinum pet is recorded under its own Index entry", d.index["Crab|Platinum"] == 1)
+local platKey
+for key, item in d.pen do
+	if item.kind == "animal" and item.variant == "Platinum" then
+		platKey = key
+	end
+end
+check("the platinum pet is in the base, labelled", platKey ~= nil and (function()
+	for _, l in pen.slotModels[platKey].model:GetDescendants() do
+		if l:IsA("TextLabel") and l.Text == "Platinum" then
+			return true
+		end
+	end
+	return false
+end)())
+Ui.open("Index")
+h:advance(0.5)
+local tabNames = {}
+for _, b in player.PlayerGui.Windows.Index:GetChildren() do
+	local lbl = b:IsA("TextButton") and b:FindFirstChild("Label")
+	if lbl then
+		table.insert(tabNames, lbl.Text)
+	end
+end
+check("Index has a PLATINUM tab between GOLD and RAINBOW", table.concat(tabNames, ","):find("GOLD,PLATINUM,RAINBOW") ~= nil, table.concat(tabNames, ","))
+Ui.close("Index")
+noErrors(h, "platinum variant")
+
 ----------------------------------------------------------------------------
 -- 6. Training: automatic on the pad, a rep at a time, no staff
 ----------------------------------------------------------------------------

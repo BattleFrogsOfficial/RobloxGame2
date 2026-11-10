@@ -360,12 +360,13 @@ local function rarityTier(rarity: string): number
 end
 
 local function applyVariant(model: Model, variant: string?)
-	if variant == "Gold" then
-		local gold = Config.Variants.Gold.color
+	local v = variant and Config.Variants[variant]
+	if v and v.tint then
+		-- Gold, Platinum: wash every part toward the metal's color.
 		for _, p in model:GetDescendants() do
 			if p:IsA("BasePart") and p.Name ~= "Root" and not p:GetAttribute("Keep") then
-				p.Color = p.Color:Lerp(gold, 0.7)
-				p.Reflectance = 0.15
+				p.Color = p.Color:Lerp(v.color, v.tint)
+				p.Reflectance = v.shine
 			end
 		end
 	elseif variant == "Rainbow" then
@@ -373,7 +374,7 @@ local function applyVariant(model: Model, variant: string?)
 		for _, p in model:GetDescendants() do
 			if p:IsA("BasePart") and p.Name ~= "Root" and not p:GetAttribute("Keep") then
 				i += 1
-				local hue = (p.Position.Y * 0.09 + i * 0.03) % 1
+				local hue = (p.CFrame.Position.Y * 0.09 + i * 0.03) % 1
 				p.Color = Color3.fromHSV(hue, 0.7, 1)
 			end
 		end
@@ -451,9 +452,12 @@ function Voxel.egg(eggId: string, variant: string?, withNest: boolean?): Model
 	local b = pixelBuilder(model, P)
 	local baseY = withNest and 1.4 or 0
 	local base, spot = e.base, e.spot
-	if variant == "Gold" then
-		base = base:Lerp(Config.Variants.Gold.color, 0.75)
-		spot = spot:Lerp(Color3.fromRGB(255, 240, 160), 0.6)
+	local v = variant and Config.Variants[variant]
+	local metal = v ~= nil and v.tint ~= nil
+	if metal then
+		-- Gold, Platinum: a metal shell with pale speckles.
+		base = base:Lerp(v.color, 0.75)
+		spot = spot:Lerp(v.color:Lerp(Color3.new(1, 1, 1), 0.6), 0.6)
 	end
 	local rainbow = variant == "Rainbow"
 
@@ -495,6 +499,13 @@ function Voxel.egg(eggId: string, variant: string?, withNest: boolean?): Model
 		b(size, size, size, x, y, z, rainbow and WHITE or spot)
 	end
 
+	if metal then -- shine the shell (before the nest is added)
+		for _, p in model:GetChildren() do
+			if p:IsA("BasePart") and p.Name ~= "Root" then
+				p.Reflectance = v.shine
+			end
+		end
+	end
 	if withNest then
 		local browns = { Color3.fromRGB(120, 70, 35), Color3.fromRGB(150, 90, 45), Color3.fromRGB(100, 58, 30) }
 		b(10, 1, 10, 0, 0.5, 0, browns[3])

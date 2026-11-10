@@ -4,7 +4,7 @@ local Config = {}
 
 -- Shown in small print at the top of the screen and used in the place
 -- file's name, so it is always clear which build is running.
-Config.Build = 17
+Config.Build = 18
 
 ----------------------------------------------------------------------------
 -- Rarities
@@ -154,7 +154,10 @@ end
 ----------------------------------------------------------------------------
 Config.Variants = {
 	Normal = { mult = 1 },
-	Gold = { mult = 2.5, chance = 0.05, cap = 0.3, color = Color3.fromRGB(255, 205, 50) },
+	-- `tint` variants recolor the model toward `color`; `shine` is how
+	-- reflective it becomes.
+	Gold = { mult = 2.5, chance = 0.05, cap = 0.3, color = Color3.fromRGB(255, 205, 50), tint = 0.7, shine = 0.15 },
+	Platinum = { mult = 4, chance = 0.018, cap = 0.12, color = Color3.fromRGB(205, 225, 245), tint = 0.8, shine = 0.4 },
 	Rainbow = { mult = 6, chance = 0.006, cap = 0.06, color = Color3.fromRGB(255, 120, 255) },
 }
 
@@ -292,7 +295,7 @@ Config.Daily = {
 -- Index: every egg whose three animals have all been discovered, counted
 -- separately for each variant, adds this much to all income.
 Config.IndexBonusPerEgg = 0.10
-Config.VariantOrder = { "Normal", "Gold", "Rainbow" }
+Config.VariantOrder = { "Normal", "Gold", "Platinum", "Rainbow" } -- common to rare
 
 ----------------------------------------------------------------------------
 -- Monetization. Fill in real IDs from the Creator Dashboard. While an ID is

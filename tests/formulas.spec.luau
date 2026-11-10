@@ -243,6 +243,26 @@ for _, strength in { 0, 50, 5000 } do
 	end
 end
 
+-- Variants: Normal < Gold < Platinum < Rainbow, each rarer and worth more.
+eq("four variants, common to rare", table.concat(Config.VariantOrder, ","), "Normal,Gold,Platinum,Rainbow")
+for i = 2, #Config.VariantOrder do
+	local v, prevV = Config.Variants[Config.VariantOrder[i]], Config.Variants[Config.VariantOrder[i - 1]]
+	check(Config.VariantOrder[i] .. " is worth more than the one before", v.mult > prevV.mult)
+	if prevV.chance then
+		check(Config.VariantOrder[i] .. " is rarer than the one before", v.chance < prevV.chance and v.cap < prevV.cap)
+	end
+end
+local seen = { Normal = 0, Gold = 0, Platinum = 0, Rainbow = 0 }
+for _ = 1, 40000 do
+	local name = Formulas.rollVariant(rng, 4)
+	seen[name] += 1
+end
+check("every variant can be rolled", seen.Gold > 0 and seen.Platinum > 0 and seen.Rainbow > 0)
+check("rolls follow the rarity order", seen.Normal > seen.Gold and seen.Gold > seen.Platinum and seen.Platinum > seen.Rainbow, seen.Gold .. "/" .. seen.Platinum .. "/" .. seen.Rainbow)
+check("platinum rate is about 1.8% x sqrt(luck)", math.abs(seen.Platinum / 40000 - 0.036) < 0.006, seen.Platinum / 40000)
+eq("platinum income", Formulas.animalIncome("Crab", "Platinum"), Config.AnimalById.Crab.income * 4)
+eq("platinum index key", Formulas.indexKey("Crab", "Platinum"), "Crab|Platinum")
+
 -- Luck zones.
 eq("six luck zones", #Config.Zones, 6)
 eq("zone at the shore", Formulas.zoneAt(0).name, "Shallows")

@@ -184,14 +184,16 @@ end
 
 function Formulas.rollVariant(rng: Random, luck: number): string
 	local s = math.sqrt(math.max(1, luck))
-	local rainbow = Config.Variants.Rainbow
-	local gold = Config.Variants.Gold
 	local r = rng:NextNumber()
-	if r < math.min(rainbow.cap, rainbow.chance * s) then
-		return "Rainbow"
-	end
-	if r < math.min(rainbow.cap, rainbow.chance * s) + math.min(gold.cap, gold.chance * s) then
-		return "Gold"
+	-- Rarest first: each variant takes its slice of the roll.
+	local used = 0
+	for i = #Config.VariantOrder, 2, -1 do
+		local name = Config.VariantOrder[i]
+		local v = Config.Variants[name]
+		used += math.min(v.cap, v.chance * s)
+		if r < used then
+			return name
+		end
 	end
 	return "Normal"
 end

@@ -38,7 +38,8 @@ stand against the back wall. A server holds 5 players, one base each.
    - **Rarity:** the sea is divided into six luck zones by depth (see Progression). Each zone unlocks one more egg
      tier than the last and multiplies your Luck for eggs found there.
    - **Placement:** every egg is placed where a sprint from the shore reaches it before the water does.
-   - **Variants:** Gold (×2.5) and Rainbow (×6) chances scale with √Luck.
+   - **Variants:** an egg can be Gold (×2.5 income, 5% base chance), Platinum (×4, 1.8%) or Rainbow (×6, 0.6%). The
+     chances scale with √Luck, and the animal that hatches keeps the egg's variant.
    - Walk up to an egg and hold **E** for a third of a second to pick it up (a tap-and-hold prompt on touch, the
      prompt button on gamepad). Walking over it does nothing. You can carry 1 egg (2 with the Double Carry pass).
 6. **Carry it home.** The egg stays on your head, and an "Eggs 1/1" counter stays on screen, until you walk into your
@@ -207,10 +208,10 @@ that way.
 - **Leaderboards:** three boards on the back wall rank Most Cash Earned, Strongest and Most Eggs. They are global
   (OrderedDataStores), merged with live numbers for everyone in the server, and refresh every minute. Without DataStore
   access they rank the current server only. Cash, Strength and Eggs also show in the Roblox player list.
-- **Index:** a book with a tab for each variant (Normal, Gold, Rainbow). Each row is an egg, an arrow, and the three
+- **Index:** a book with a tab for each variant (Normal, Gold, Platinum, Rainbow). Each row is an egg, an arrow, and the three
   animals it hatches, on backgrounds in the egg's rarity color; animals you haven't hatched in that variant are dark
   silhouettes. Every egg you complete (all three animals in one variant) adds +10% to all your income, permanently,
-  up to +210%.
+  up to +280%.
 - **Playtime gifts:** 12 rewards unlock at 1 to 60 minutes of play in a session, and the progress resets when you leave.
   "Skip All" is a developer product.
 - **Daily streak:** a 7-day cycle based on UTC days. Missing a day resets the streak.
@@ -224,8 +225,8 @@ Everything is built from blocks in code. Roblox no longer draws the old stud tex
 checkered tiles on the ground, seabed and base floors.
 
 - **Models:** pixel eggs stacked layer by layer on twig nests; animals from a few templates (crab, bird, fish,
-  quadruped, seal, octopus, turtle, frog, serpent); voxel palms, umbrellas, barbells and a lighthouse. Gold and Rainbow
-  variants recolor the model.
+  quadruped, seal, octopus, turtle, frog, serpent); voxel palms, umbrellas, barbells and a lighthouse. Gold, Platinum
+  and Rainbow variants recolor the model (Platinum is a pale, highly reflective silver-blue).
 - **Resolution:** a Common animal's pixel is 0.16 studs and an egg's is 0.21. Bodies, heads and shells are rounded
   lumps stacked from one-pixel layers with clipped corners; details are single pixels (eyes with highlights, toes,
   feather tips, fins, teeth, shell plates, speckles). Animals are 32 to 73 parts each and eggs 70 with their nest.
