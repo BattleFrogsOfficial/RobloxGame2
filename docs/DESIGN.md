@@ -25,6 +25,20 @@ stand against the back wall. A server holds 5 players, one base each.
      chunks of water are flung up and out to both sides.
    - Letterbox bars and a title show the depth and the number of eggs revealed.
    - The camera then glides back to exactly where your own camera was, so control returns without a cut.
+   - **Three casts.** Each split rolls which one you get. The rarer two multiply your Luck for the eggs in that split:
+
+     | Cast | Chance | Luck | Cutscene | Walls |
+     |---|---|---|---|---|
+     | Split | 85% | x1 | 4s | 26 studs |
+     | Super Split | 12% | x5 | 5.2s | 44 studs |
+     | Poseidon's Wrath | 3% | x10 | 8s | 78 studs |
+
+     A **Super Split** shows its name huge and tilted across the screen while lightning strikes around you; you spin
+     as you leap about twice as high, hit the ground harder, and "5x LUCK!" fills the screen. **Poseidon's Wrath** flies
+     you far into the sky, where you hang with both arms raised in a lightning storm, then dive and land hard: a ring
+     of bolts, rolling shockwaves, nine times the flung water, the tallest walls, and "10x LUCK!". The bonus stays on
+     the sea bar for the whole split. In Studio, `player:SetAttribute("ForceCast", "Super")` (or `"Poseidon"`) forces
+     one for previewing.
    - **Depth** grows with Strength: `length = (30 + 13.2 · log2(1 + Strength/5)) × chargeFactor`, up to 300 studs, which
      takes about 7M Strength.
    - **Width** starts at 26 studs and grows to 44 with Strength.
@@ -42,7 +56,7 @@ stand against the back wall. A server holds 5 players, one base each.
      chances scale with √Luck, and the animal that hatches keeps the egg's variant.
    - Walk up to an egg and hold **E** for a third of a second to pick it up (a tap-and-hold prompt on touch, the
      prompt button on gamepad). Walking over it does nothing. You can carry 1 egg (2 with the Double Carry pass).
-6. **Carry it home.** The egg stays on your head, and an "Eggs 1/1" counter stays on screen, until you walk into your
+6. **Carry it home.** Stepping back onto land flashes the screen green with a small shake. The egg stays on your head, and an "Eggs 1/1" counter stays on screen, until you walk into your
    own base. Reaching the beach makes it safe, but it is only planted when you step inside your fence. With full hands
    you can't grab another egg or part the sea again.
 7. **Hatch.** Planted eggs incubate in a base slot. When the timer reads *Ready!*, use the egg's prompt (or *Hatch All
@@ -54,8 +68,10 @@ stand against the back wall. A server holds 5 players, one base each.
      punches overhead, holds the lockout with shaking arms, and lowers it. Each lockout sends a shockwave ring and
      debris out from the feet, kicks your camera, and adds Strength. Step off to stop. The staff is put away while you
      train.
-   - **Heavier weights:** buy them on the yellow pad for more Strength per rep.
-   - **Luck:** buy it in the **Buy** menu.
+   - **Heavier weights:** the weights stall in your base opens a menu of all eight barbells; buy the next one for
+     more Strength per rep. The barbell rests on the pad when you aren't training and is in your hands when you are.
+   - **Luck and Speed:** sold at the shop stall on the beach (the **Buy** button takes you there). Speed raises your
+     walk speed from 16 by 1 per level, up to 30, so you can get deeper and back before the sea closes.
    - **Base size:** upgrade it at the sign by the gate.
 
 ### Getting caught
@@ -147,6 +163,8 @@ layers on top.
 - **Rigs:** R15 uses every joint. R6 has no elbows, knees or waist, so it gets the shoulders, hips and whole-body
   movement.
 - **Barbell:** placed at the midpoint of the two hands each frame, so it is always in the character's grip.
+- **Staying put:** while your own character is casting or training and you aren't steering, it is pinned where it
+  stands, so the moving body can't nudge it off the pad.
 - **Diagnostics:** each move prints one `[Poses]` line (avatar type, number and type of joints found) to the Output
   window.
 
@@ -177,7 +195,8 @@ Everything inside a parted sea is drawn only for the player who parted it (`clie
   the last 5 seconds, a tick sounds each second, and the screen edge pulses red as the walls get close.
 - **Egg counter:** "0/1" floats over your head while a sea is open, and a panel reading "Eggs 1/1" stays up from the
   grab until the egg is planted, red in the sea and green on land.
-- **Banners:** large centered messages for the moments that matter (the sea parting, SAFE, SWEPT AWAY, offline cash).
+- **Banners:** large centered messages for the moments that matter (the sea parting, a special cast's luck, SWEPT
+  AWAY, offline cash). Reaching land safely is a green flash and a shake, with no banner.
 - **Egg odds:** the Buy menu shows the chance of each rarity at the deepest point you can currently reach.
 - **Touch:** phones and tablets get a large HOLD button for charging, so it doesn't fight the camera.
 

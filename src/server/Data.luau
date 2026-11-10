@@ -37,6 +37,7 @@ local function defaultData()
 		cash = 0,
 		strength = 0,
 		luckLevel = 0,
+		speedLevel = 0,
 		weightTier = 1,
 		baseSlots = Config.Base.StartSlots,
 		eggs = {}, -- stored eggs: { egg, variant }
@@ -157,6 +158,8 @@ local function buildState(player: Player)
 		cash = d.cash,
 		strength = d.strength,
 		luckLevel = d.luckLevel,
+		speedLevel = d.speedLevel,
+		walkSpeed = Formulas.walkSpeed(d.speedLevel),
 		luck = Data.luck(player),
 		weightTier = d.weightTier,
 		baseSlots = d.baseSlots,

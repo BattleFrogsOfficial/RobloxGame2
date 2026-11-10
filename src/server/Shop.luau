@@ -66,6 +66,34 @@ function Shop.buyLuck(player: Player, times: number?): (boolean, string?)
 	return true, "+" .. bought .. " Luck level" .. (bought > 1 and "s" or "") .. "!"
 end
 
+-- Walk speed comes from the Speed level.
+function Shop.applySpeed(player: Player)
+	local d = Data.get(player)
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if d and humanoid then
+		humanoid.WalkSpeed = Formulas.walkSpeed(d.speedLevel)
+	end
+end
+
+function Shop.buySpeed(player: Player): (boolean, string?)
+	local d = Data.get(player)
+	if not d then
+		return false
+	end
+	if d.speedLevel >= Config.Speed.MaxLevel then
+		return false, "Speed is maxed!"
+	end
+	local cost = Formulas.speedCost(d.speedLevel)
+	if not Data.trySpend(player, cost) then
+		return false, "You need " .. Format.cash(cost) .. "."
+	end
+	d.speedLevel += 1
+	Shop.applySpeed(player)
+	Data.markDirty(player)
+	return true, "Speed up! You now run at " .. Formulas.walkSpeed(d.speedLevel) .. "."
+end
+
 local function grantPass(player: Player, key: string)
 	local s = Data.session(player)
 	if not s then
@@ -181,6 +209,19 @@ function Shop.init()
 		end
 	end)
 	Data.Loaded.Event:Connect(loadPasses)
+
+	-- Apply the bought walk speed on load and on every respawn.
+	Data.Loaded.Event:Connect(Shop.applySpeed)
+	local function hook(player: Player)
+		player.CharacterAdded:Connect(function(char)
+			char:WaitForChild("Humanoid", 10)
+			Shop.applySpeed(player)
+		end)
+	end
+	Players.PlayerAdded:Connect(hook)
+	for _, p in Players:GetPlayers() do
+		hook(p)
+	end
 end
 
 return Shop

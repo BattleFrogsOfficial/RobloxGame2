@@ -87,6 +87,7 @@ src/client/      StarterPlayerScripts.Client
   PenAnimals.luau  hops the animals along the walks the server publishes
   ui/              HUD and windows (Pets, Eggs, Sell, Buy, Index, Shop, Gifts, Daily, hatch cutscene)
   ui/Layout.luau   where every HUD element sits, as data
+  ui/Weights.luau  the weights stall's barbell menu
 tests/
   formulas.spec.luau  tests for the balance math and number formatting
   game.spec.luau      a full playthrough of the real server + client code
@@ -137,6 +138,8 @@ Almost everything is in `src/shared/Config.luau`:
 
 - `Config.Split` controls how Strength turns into depth and width, how long the walls take to close, the egg count,
   and how long a full charge takes.
+- `Config.Casts` sets the three casts (basic split, Super Split, Poseidon's Wrath): chance, Luck multiplier, cutscene
+  length and wall height.
 - `Config.SizeByTier` sets how much bigger each rarity tier's animals are.
 - `Config.RarityWeights` sets the base rarity odds, and `Config.Zones` the luck zones by depth (name, luck
   multiplier, color). Luck and the zone's luck shift the odds toward rarer eggs.

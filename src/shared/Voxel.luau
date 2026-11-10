@@ -559,6 +559,40 @@ function Voxel.staff(): Model
 	return model
 end
 
+-- A market stall, built at the origin with its counter facing -Z. The part
+-- named "Counter" is where customers stand; "Sign" is the board on top.
+function Voxel.stall(width: number, depth: number, stripe: Color3): Model
+	local model = newModel("Stall")
+	local wood, dark = Color3.fromRGB(165, 110, 60), Color3.fromRGB(120, 75, 40)
+	local function solid(size: Vector3, at: CFrame, color: Color3): Part
+		local p = addPart(model, size, at, color)
+		p.CanCollide = true
+		return p
+	end
+	local counter = solid(Vector3.new(width, 3, 2), CFrame.new(0, 1.5, -depth / 2 + 1), wood)
+	counter.Name = "Counter"
+	solid(Vector3.new(width + 0.6, 0.5, 2.6), CFrame.new(0, 3.2, -depth / 2 + 1), dark)
+	solid(Vector3.new(width, 7, 0.6), CFrame.new(0, 3.5, depth / 2 - 0.3), wood)
+	for _, sx in { -1, 1 } do
+		for _, sz in { -1, 1 } do
+			solid(Vector3.new(0.8, 9.4, 0.8), CFrame.new(sx * (width / 2 - 0.4), 4.7, sz * (depth / 2 - 0.4)), dark)
+		end
+		solid(Vector3.new(0.6, 5, depth - 1.6), CFrame.new(sx * (width / 2 - 0.3), 2.5, 0), wood)
+	end
+	-- Striped awning with a hanging front lip.
+	local n = math.max(3, math.floor(width / 1.6))
+	local w = (width + 2) / n
+	for i = 1, n do
+		local x = -(width + 2) / 2 + (i - 0.5) * w
+		local color = i % 2 == 0 and stripe or Color3.fromRGB(250, 250, 250)
+		addPart(model, Vector3.new(w, 0.6, depth + 3), CFrame.new(x, 9.7, -0.8), color)
+		addPart(model, Vector3.new(w, 1.3, 0.6), CFrame.new(x, 8.9, -depth / 2 - 2), color)
+	end
+	local sign = addPart(model, Vector3.new(width * 0.8, 2.6, 0.5), CFrame.new(0, 11.6, -depth / 2 - 1), dark)
+	sign.Name = "Sign"
+	return model
+end
+
 function Voxel.barbell(tier: number): Model
 	local model = newModel("Barbell")
 	local hue = ((tier - 1) * 0.13) % 1

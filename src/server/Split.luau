@@ -203,6 +203,16 @@ local function onRequestSplit(player: Player, charge: any)
 		return nil, "Your hands are full! Plant your egg in your base first."
 	end
 
+	-- Which cast is this? Usually a plain split; sometimes a Super Split or
+	-- Poseidon's Wrath, which multiply Luck for this split's eggs. In Studio
+	-- a player attribute can force one for previewing:
+	--   game.Players.LocalPlayer:SetAttribute("ForceCast", "Poseidon")
+	local cast = Formulas.rollCast(rng:NextNumber())
+	local forced = player:GetAttribute("ForceCast")
+	if RunService:IsStudio() and type(forced) == "string" and Config.CastByKey[forced] then
+		cast = Config.CastByKey[forced]
+	end
+
 	local params = Formulas.splitParams(d.strength, math.clamp(charge, 0, 1))
 	local half = params.width / 2
 	local sp = {
@@ -211,14 +221,21 @@ local function onRequestSplit(player: Player, charge: any)
 		length = params.length,
 		duration = params.duration,
 		t0 = now(),
+		cast = cast.key,
+		anim = cast.seconds,
+		slam = cast.slam,
+		wallTop = cast.wallTop,
+		luck = cast.luck,
 	}
-	local eggs = Formulas.rollEggs(rng, sp, Data.luck(player))
+	local eggs = Formulas.rollEggs(rng, sp, Data.luck(player) * cast.luck)
 	sp.eggs = {}
 	for _, e in eggs do
 		sp.eggs[e.id] = e
 	end
 	splits[player] = sp
 	-- Every client plays the staff-raising animation from this timestamp.
+	player:SetAttribute("CastKey", cast.key)
+	player:SetAttribute("CastSeconds", cast.seconds)
 	player:SetAttribute("CastStart", sp.t0)
 	d.stats.splits += 1
 	Data.markDirty(player)
@@ -229,6 +246,11 @@ local function onRequestSplit(player: Player, charge: any)
 		length = sp.length,
 		duration = sp.duration,
 		t0 = sp.t0,
+		cast = sp.cast,
+		anim = sp.anim,
+		slam = sp.slam,
+		wallTop = sp.wallTop,
+		luck = sp.luck,
 		eggs = eggs,
 	}
 end
@@ -253,7 +275,7 @@ local function onGrab(player: Player, id: any)
 	local elapsed = now() - sp.t0
 	local pos = eggWorldPos(sp, egg)
 	local flat = Vector3.new(root.Position.X - pos.X, 0, root.Position.Z - pos.Z).Magnitude
-	if flat > O.GrabRadius + 3 or elapsed < O.OpenAnim * 0.5 then
+	if flat > O.GrabRadius + 3 or elapsed < Formulas.anim(sp) then
 		return
 	end
 	-- A little slack past "covered" so a grab at the last instant still counts.

@@ -237,8 +237,18 @@ local function startSplit(x, holdSeconds)
 	h:advance(0.1)
 end
 local function waitOutCutscene()
-	h:advance(O.OpenAnim + 0.2)
+	-- Until the cutscene hands control back, then one beat more.
+	for _ = 1, 200 do
+		if not Ocean.cutscene then
+			break
+		end
+		h:advance(0.1)
+	end
+	h:advance(0.2)
 end
+-- Most scenarios use the plain split so they are deterministic; the special
+-- casts get their own section.
+player:SetAttribute("ForceCast", "Split")
 
 check("no split before charging", Ocean.active == nil)
 camera.CFrame = roblox.CFrame.new(10, 12, SHORE + 26) -- the player's own view
@@ -391,13 +401,22 @@ check("egg counter shown", player.PlayerGui.Hud.Carry.Visible == true)
 
 -- A second egg can't be picked up with full hands.
 local secondPrompt = grabAt(eggSpots[2])
-check("prompts switch off with full hands", secondPrompt ~= nil and secondPrompt.Enabled == false)
+-- (If the walls already swallowed that egg there is no prompt to check.)
+check("prompts switch off with full hands", secondPrompt == nil or secondPrompt.Enabled == false)
 eq("still carrying one egg (hands full)", Ocean.carried, 1)
 
 -- Back on the beach the egg is safe but NOT planted yet.
 h:moveTo(player, Vector3.new(sp.cx, 3, SHORE + 8))
 h:advance(0.4)
 check("safe effect on reaching land", sawEffect("safe"))
+check("reaching land shows no banner", player.PlayerGui.Overlay:FindFirstChild("Banner") == nil)
+local flashed = false
+for _, c in player.PlayerGui.Overlay:GetChildren() do
+	if c:IsA("Frame") and c.BackgroundColor3.G > 0.8 and c.BackgroundColor3.R < 0.5 then
+		flashed = true
+	end
+end
+check("reaching land flashes the screen green", flashed)
 eq("still carrying on the beach", Ocean.carried, 1)
 eq("nothing planted yet", count(d.pen), 0)
 eq("egg not counted until planted", d.stats.eggsCollected, 0)
@@ -636,6 +655,7 @@ check("holding the staff before training", player.Character:FindFirstChild("Sea 
 h:moveTo(player, padPos + Vector3.new(0, 3, 0))
 h:advance(0.4)
 check("training starts by stepping on the pad", player:GetAttribute("Training") == true)
+check("the pad's barbell is picked up (not also left on the ground)", pen.barbell.Parent == nil)
 h:advance(0.1)
 local bar = ws.Poses:FindFirstChild("TrainingBarbell")
 check("barbell appears", bar ~= nil)
@@ -654,6 +674,21 @@ check("shockwave on the lockout", (function()
 	return ws.Poses:FindFirstChild("Shockwave") ~= nil
 end)())
 h:advance(Config.Training.RepTime * 1.8 + 0.3)
+
+-- Standing still, the workout can't nudge you off the pad...
+local rootPart = player.Character.HumanoidRootPart
+local stood = rootPart.CFrame.Position
+rootPart.CFrame = rootPart.CFrame + Vector3.new(1.5, 0, -1)
+rootPart.Position = rootPart.CFrame.Position
+h:advance(0.1)
+check("drift is pinned back while training", (rootPart.CFrame.Position - stood).Magnitude < 0.05, (rootPart.CFrame.Position - stood).Magnitude)
+-- ...but steering still moves you.
+h.moveVelocity[player.Character.Humanoid] = Vector3.new(16, 0, 0)
+rootPart.CFrame = rootPart.CFrame + Vector3.new(1, 0, 0)
+rootPart.Position = rootPart.CFrame.Position
+h:advance(0.1)
+check("walking is not pinned", (rootPart.CFrame.Position - stood).Magnitude > 0.9)
+h.moveVelocity[player.Character.Humanoid] = nil
 local gain = Config.Weights[1].gain
 check("strength comes one rep at a time", d.strength >= gain * 2 and d.strength <= gain * 4, d.strength)
 check("lift effect per rep", sawEffect("lift"))
@@ -661,6 +696,8 @@ check("training banner shown", player.PlayerGui.Hud.Train.Visible == true)
 h:moveTo(player, Vector3.new(home.X, 3, home.Z + 10))
 h:advance(0.4)
 check("stepping off stops training", player:GetAttribute("Training") == false)
+check("the barbell is back on the pad", pen.barbell.Parent == pen.model)
+check("the resting barbell sits on top of the pad, not in the ground", pen.barbell:GetPivot().Position.Y > 1.9, pen.barbell:GetPivot().Position.Y)
 check("barbell removed", ws.Poses:FindFirstChild("TrainingBarbell") == nil)
 check("joints return to rest after training", elbow.C0 == roblox.CFrame.new() and player.Character.RightUpperArm.RightShoulder.C0 == roblox.CFrame.new())
 
@@ -672,7 +709,27 @@ check("rep hops at the lockout", Poses.rep(0.52, 0).root.y > 0.8)
 check("arms travel well over 100 degrees in a rep", lockout.rShoulder.f - squat.rShoulder.f > 100)
 check("cast winds the staff far back", Poses.cast(0.12, 0).rShoulder.f < -120)
 check("cast leaps high", Poses.cast(0.24, 0).root.y > 3)
-check("cast slams forward into a lunge", Poses.cast(Poses.SLAM, 0).root.lean > 25 and Poses.cast(Poses.SLAM, 0).root.y < 0)
+local slamK = Config.CastByKey.Split.slam
+check("cast slams forward into a lunge", Poses.cast(slamK, 0).root.lean > 25 and Poses.cast(slamK, 0).root.y < 0)
+
+-- The three casts escalate.
+local super, poseidon = Config.CastByKey.Super, Config.CastByKey.Poseidon
+check("casts get longer", super.seconds > Config.CastByKey.Split.seconds and poseidon.seconds > super.seconds)
+check("casts raise taller walls", super.wallTop > Config.CastByKey.Split.wallTop and poseidon.wallTop > super.wallTop * 1.5)
+eq("Super Split is 5x luck", super.luck, 5)
+eq("Poseidon's Wrath is 10x luck", poseidon.luck, 10)
+local function peak(key)
+	local top = 0
+	for k = 0, 1, 0.01 do
+		top = math.max(top, Poses.castHeight(k, key))
+	end
+	return top
+end
+check("Super Split leaps about twice as high", peak("Super") > peak("Split") * 1.8, peak("Super"))
+check("Poseidon's Wrath flies far into the air", peak("Poseidon") > 20, peak("Poseidon"))
+check("Poseidon's Wrath hangs in the sky before diving", Poses.castHeight(0.4, "Poseidon") > 20)
+check("Poseidon's Wrath lands hard", Poses.cast(poseidon.slam, 0, "Poseidon").root.y < -1.5 and Poses.cast(poseidon.slam, 0, "Poseidon").root.lean > 40)
+check("the bigger casts spin", Poses.cast(super.slam, 0, "Super").root.yaw > 300)
 local frozen = d.strength
 h:advance(3)
 eq("no more strength once off the pad", d.strength, frozen)
@@ -821,6 +878,114 @@ w.serverModule("Split").ensureStaff(player)
 check("missing staff is handed out", player.Backpack:FindFirstChild("Sea Staff") ~= nil)
 w.serverModule("Split").ensureStaff(player)
 eq("staff is never duplicated", #player.Backpack:GetChildren(), 1)
+
+----------------------------------------------------------------------------
+-- 8b. The shops
+----------------------------------------------------------------------------
+local PromptService = h.game:GetService("ProximityPromptService")
+
+-- Weights stall in the base.
+local weightsStall = pen.model:FindFirstChild("WeightsStall")
+check("weights stall replaces the yellow pad", weightsStall ~= nil and pen.model:FindFirstChild("UpgradePad") == nil)
+local weightsPrompt = weightsStall and weightsStall.Counter:FindFirstChildOfClass("ProximityPrompt")
+check("its prompt opens the Weights menu", weightsPrompt ~= nil and weightsPrompt:GetAttribute("Menu") == "Weights")
+h:fire(PromptService, "PromptTriggered", weightsPrompt, player)
+h:advance(0.3)
+check("Weights menu opens from the stall", Ui.isOpen("Weights"))
+local tierBefore = d.weightTier
+check("buying the next barbell from the menu", act("BuyWeight") == true and d.weightTier == tierBefore + 1)
+h:advance(0.3)
+check("the new barbell rests on the pad, above the ground", pen.barbell.Parent == pen.model and pen.barbell:GetPivot().Position.Y > 1.9, pen.barbell:GetPivot().Position.Y)
+Ui.close("Weights")
+-- Someone else's stall does nothing for us.
+weightsPrompt:SetAttribute("OwnerId", 999)
+h:fire(PromptService, "PromptTriggered", weightsPrompt, player)
+h:advance(0.2)
+check("another player's stall doesn't open a menu", not Ui.isOpen("Weights"))
+weightsPrompt:SetAttribute("OwnerId", player.UserId)
+
+-- The shop on the beach: Luck and Speed.
+local shop = ws.Map:FindFirstChild("Shop")
+check("a shop stands on the beach", shop ~= nil and shop:GetPivot().Position.Z > SHORE and shop:GetPivot().Position.Z < SHORE + Config.World.BeachDepth)
+local shopPrompt = shop and shop.Counter:FindFirstChildOfClass("ProximityPrompt")
+check("the Buy button takes you to the shop", act("TeleportShop") == true and (h:positionOf(player) - shop:GetPivot().Position).Magnitude < 20, (h:positionOf(player) - shop:GetPivot().Position).Magnitude)
+h:fire(PromptService, "PromptTriggered", shopPrompt, player)
+h:advance(0.3)
+check("the shop's prompt opens its menu", Ui.isOpen("Upgrades"))
+eq("base walk speed", player.Character.Humanoid.WalkSpeed, Config.Speed.Base)
+check("buy Speed", act("BuySpeed") == true and d.speedLevel == 1)
+eq("walk speed goes up", player.Character.Humanoid.WalkSpeed, Config.Speed.Base + Config.Speed.PerLevel)
+check("client sees the new speed", State.data.walkSpeed == Config.Speed.Base + Config.Speed.PerLevel)
+local luckWas = d.luckLevel
+check("buy Luck at the shop", act("BuyLuck", 1) == true and d.luckLevel == luckWas + 1)
+Ui.close("Upgrades")
+noErrors(h, "shops")
+
+----------------------------------------------------------------------------
+-- 8c. Super Split and Poseidon's Wrath
+----------------------------------------------------------------------------
+local function overlayText()
+	local texts = {}
+	for _, l in player.PlayerGui.Overlay:GetDescendants() do
+		if l:IsA("TextLabel") then
+			table.insert(texts, l.Text)
+		end
+	end
+	return table.concat(texts, " | ")
+end
+local function countParts(folder, name)
+	local n = 0
+	for _, c in folder:GetChildren() do
+		if c.Name == name then
+			n += 1
+		end
+	end
+	return n
+end
+local function runCast(key)
+	local cast = Config.CastByKey[key]
+	player:SetAttribute("ForceCast", key)
+	h:advance(1.5)
+	startSplit(20)
+	local run = Ocean.active
+	check(key .. ": split started with that cast", run ~= nil and run.cast == key and run.luck == cast.luck)
+	eq(key .. ": cutscene length", run.anim, cast.seconds)
+	h:advance(cast.seconds * 0.2)
+	check(key .. ": its name fills the screen", overlayText():find(cast.name, 1, true) ~= nil, overlayText())
+	check(key .. ": lightning comes down", countParts(ws.Poses, "Lightning") > 0 or countParts(ws.Poses, "LightningFlash") > 0)
+	check(key .. ": sea not torn yet", ws.LocalOcean.UpperL1.Transparency == 1)
+	local rootJoint2 = player.Character:FindFirstChild("Root", true)
+	local top = 0
+	for _ = 1, 40 do
+		if (State.serverNow() - run.t0) / cast.seconds >= cast.slam - 0.02 then
+			break
+		end
+		h:advance(0.1)
+		top = math.max(top, rootJoint2.C0.Position.Y)
+	end
+	h:advance(cast.seconds * 0.08)
+	check(key .. ": luck banner after the slam", overlayText():find(cast.luck .. "x LUCK!", 1, true) ~= nil, overlayText())
+	check(key .. ": shockwave", countParts(ws.Poses, "Shockwave") > 0)
+	waitOutCutscene()
+	check(key .. ": walls rise higher than a basic split", ws.LocalOcean.UpperL1.Size.Y + ws.LocalOcean.WallL1.Size.Y > Config.Ocean.WallTopY + 20, ws.LocalOcean.UpperL1.Size.Y + ws.LocalOcean.WallL1.Size.Y)
+	local statusText = ""
+	for _, l in player.PlayerGui.Hud.Status:GetDescendants() do
+		if l:IsA("TextLabel") then
+			statusText ..= l.Text
+		end
+	end
+	check(key .. ": luck shown while the sea is open", statusText:find(cast.luck .. "x LUCK", 1, true) ~= nil, statusText)
+	noErrors(h, key .. " cast")
+	Ocean.close()
+	h:advance(0.5)
+	return top, #run.eggs
+end
+local superTop, superEggs = runCast("Super")
+local poseidonTop, poseidonEggs = runCast("Poseidon")
+check("Super Split leaps high", superTop > 4, superTop)
+check("Poseidon's Wrath flies far higher", poseidonTop > 18, poseidonTop)
+check("extra luck reveals more eggs", poseidonEggs >= superEggs and superEggs > 2, superEggs .. " / " .. poseidonEggs)
+player:SetAttribute("ForceCast", "Split")
 
 ----------------------------------------------------------------------------
 -- 9. A full server, and the leaderboards

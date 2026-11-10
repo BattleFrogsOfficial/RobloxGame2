@@ -66,6 +66,7 @@ function Training.stop(player: Player)
 	end
 	training[player] = nil
 	player:SetAttribute("Training", false)
+	Pens.showPadBarbell(player, true) -- back on the pad
 end
 
 function Training.start(player: Player)
@@ -80,6 +81,7 @@ function Training.start(player: Player)
 	player:SetAttribute("WeightTier", d.weightTier)
 	player:SetAttribute("RepStart", workspace:GetServerTimeNow())
 	player:SetAttribute("Training", true)
+	Pens.showPadBarbell(player, false) -- it's in their hands now
 
 	-- One rep = up and back down; the Strength lands as the bar comes down.
 	task.spawn(function()

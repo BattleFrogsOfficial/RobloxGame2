@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -222,8 +223,55 @@ end
 ----------------------------------------------------------------------------
 -- The parting cutscene's screen layer: letterbox bars, a flash, a title.
 ----------------------------------------------------------------------------
+-- Shake the local camera for a moment.
+function Hud.shake(amount: number, seconds: number)
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	local finish = os.clock() + seconds
+	task.spawn(function()
+		while os.clock() < finish and humanoid.Parent do
+			local k = (finish - os.clock()) / seconds
+			humanoid.CameraOffset = Vector3.new(math.random() - 0.5, math.random() - 0.5, 0) * amount * k
+			RunService.RenderStepped:Wait()
+		end
+		if humanoid.Parent then
+			humanoid.CameraOffset = Vector3.zero
+		end
+	end)
+end
+
+-- The name of a special cast, huge and tilted across the screen.
+local function castTitle(text: string, color: Color3, seconds: number)
+	local label = Ui.text({
+		Name = "CastTitle",
+		Text = text,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.3),
+		Size = UDim2.new(0.9, 0, 0, 150),
+		TextColor3 = color,
+		StrokeThickness = 7,
+		Rotation = -9,
+		ZIndex = 72,
+		Parent = overlay,
+	})
+	local scale = Ui.new("UIScale", { Scale = 2.4, Parent = label })
+	TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+	task.delay(seconds, function()
+		if label.Parent then
+			fadeOut(label, 0.3)
+			task.wait(0.35)
+			label:Destroy()
+		end
+	end)
+end
+
 local function playCutsceneOverlay(sp)
-	local seconds = Config.Ocean.OpenAnim
+	local seconds = sp.anim or Config.Ocean.OpenAnim
+	local slam = sp.slam or Config.Ocean.SlamAt
+	local cast = Config.CastByKey[sp.cast or "Split"]
 	local bars = {}
 	for _, top in { true, false } do
 		local bar = Ui.new("Frame", {
@@ -239,10 +287,20 @@ local function playCutsceneOverlay(sp)
 		table.insert(bars, bar)
 	end
 	gui.Enabled = false
-	task.delay(seconds * Config.Ocean.SlamAt, function()
-		Hud.flash(Color3.new(1, 1, 1), 0.85, 0.6)
+	if cast.name then
+		-- Announce a special cast while it winds up.
+		local color = cast.tier == 3 and Color3.fromRGB(255, 215, 90) or Color3.fromRGB(120, 235, 255)
+		task.delay(0.15, castTitle, cast.name .. "!", color, seconds * slam - 0.3)
+	end
+	task.delay(seconds * slam, function()
+		Hud.flash(Color3.new(1, 1, 1), 0.85, 0.6 + cast.tier * 0.15)
 		local eggs = #sp.eggs
-		Hud.banner("THE SEA PARTS!", string.format("%d studs deep   -   %d egg%s revealed", math.floor(sp.length), eggs, eggs == 1 and "" or "s"), SEA_BLUE, seconds * 0.48)
+		local detail = string.format("%d studs deep   -   %d egg%s revealed", math.floor(sp.length), eggs, eggs == 1 and "" or "s")
+		if cast.luck > 1 then
+			Hud.banner(cast.luck .. "x LUCK!", detail, C.Yellow, seconds * (1 - slam) * 0.75)
+		else
+			Hud.banner("THE SEA PARTS!", detail, SEA_BLUE, seconds * (1 - slam) * 0.75)
+		end
 	end)
 	task.delay(seconds - 0.3, function()
 		for _, bar in bars do
@@ -285,7 +343,7 @@ local function buildTopBar()
 		Ui.button({ Text = text, Color = color, Size = UDim2.fromOffset(170, 56), LayoutOrder = order, Radius = 4, Parent = bar, OnClick = onClick })
 	end
 	top("Buy", C.Blue, 1, function()
-		Ui.toggle("Upgrades")
+		State.action("TeleportShop") -- the shop on the beach sells Luck and Speed
 	end)
 	top("Base", C.Brown, 2, function()
 		State.action("TeleportHome")
@@ -849,7 +907,8 @@ local function perFrame(dt: number)
 		local urgent = left <= 5 or room < 0.25
 		refs.statusFill.Size = UDim2.fromScale(math.clamp(room, 0, 1), 1)
 		refs.statusFill.BackgroundColor3 = urgent and Color3.fromRGB(255, 90, 80) or SEA_BLUE
-		refs.statusText.Text = string.format("Sea closing in %.1fs", left)
+		local bonus = Ocean.active and (Ocean.active.luck or 1) > 1 and ("     " .. Ocean.active.luck .. "x LUCK") or ""
+		refs.statusText.Text = string.format("Sea closing in %.1fs", left) .. bonus
 		refs.closeBtn.Visible = onLand
 	end
 
@@ -952,7 +1011,11 @@ local function onEffect(kind: string, payload: any)
 		local e = Config.EggById[payload.egg]
 		Hud.pop((payload.variant ~= "Normal" and payload.variant .. " " or "") .. e.name .. "!", Config.Rarities[e.tier].color, UDim2.fromScale(0.5, 0.36), 52)
 	elseif kind == "safe" then
-		Hud.banner("SAFE!", "Carry your egg to your base to plant it", C.Cash, 2.2)
+		-- Made it back to land: a green flash and a small shake, no banner.
+		Hud.flash(Color3.fromRGB(70, 230, 90), 0.4, 0.5)
+		Hud.shake(0.5, 0.35)
+	elseif kind == "bolt" then
+		Hud.flash(Color3.fromRGB(215, 235, 255), 0.22, 0.14)
 	elseif kind == "planted" then
 		for _, b in payload do
 			local e = Config.EggById[b.egg]
@@ -1044,6 +1107,16 @@ function Hud.init()
 		filterPrompt(d)
 	end
 	pensFolder.DescendantAdded:Connect(filterPrompt)
+
+	-- Shop prompts in the world open a menu here (see the "Menu" attribute).
+	ProximityPromptService.PromptTriggered:Connect(function(prompt)
+		local menu = prompt:GetAttribute("Menu")
+		local owner = prompt:GetAttribute("OwnerId")
+		if type(menu) == "string" and (owner == nil or owner == player.UserId) then
+			Ui.click()
+			Ui.open(menu)
+		end
+	end)
 end
 
 Hud.touch = function(): boolean

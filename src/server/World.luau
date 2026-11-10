@@ -26,6 +26,7 @@ World.PenWidth = Config.Pen.Width
 World.PenDepth = Config.Pen.Depth
 World.Pens = {} -- { cf: CFrame }
 World.BoardSpots = {} -- CFrames for the three leaderboards (facing the ocean)
+World.ShopSpot = CFrame.new() -- where the Buy button drops you, facing the shop
 
 local SAND = Color3.fromRGB(230, 200, 140)
 local SAND_DARK = Color3.fromRGB(221, 190, 130)
@@ -139,6 +140,63 @@ local function buildSea()
 			block("Cliff", Vector3.new(math.min(x0, x1), -30, z0), Vector3.new(math.max(x0, x1), height, z1), ROCK:Lerp(Color3.new(0, 0, 0), rng:NextNumber(0, 0.22)), Enum.Material.Slate)
 		end
 	end
+end
+
+local function signText(part: BasePart, title: string, subtitle: string?)
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 30
+	gui.LightInfluence = 0
+	gui.Parent = part
+	local function line(text: string, y: number, h: number, color: Color3)
+		local l = Instance.new("TextLabel")
+		l.BackgroundTransparency = 1
+		l.Position = UDim2.fromScale(0.04, y)
+		l.Size = UDim2.fromScale(0.92, h)
+		l.Font = Enum.Font.FredokaOne
+		l.TextScaled = true
+		l.Text = text
+		l.TextColor3 = color
+		l.TextStrokeTransparency = 0
+		l.Parent = gui
+	end
+	if subtitle then
+		line(title, 0.04, 0.56, Color3.new(1, 1, 1))
+		line(subtitle, 0.6, 0.36, Color3.fromRGB(255, 225, 110))
+	else
+		line(title, 0.1, 0.8, Color3.new(1, 1, 1))
+	end
+end
+World.signText = signText
+
+-- The shop on the beach: Luck and Speed. Its prompt opens the menu on the
+-- client (see the "Menu" attribute).
+local function buildShop()
+	local pos = Vector3.new(-O.HalfX + 24, 0, SHORE + 30)
+	local cf = CFrame.lookAt(pos, pos + Vector3.new(1, 0, 0)) -- counter faces the middle of the beach
+	local stall = Voxel.stall(14, 9, Color3.fromRGB(80, 200, 110))
+	stall.Name = "Shop"
+	stall:PivotTo(cf)
+	signText(stall:FindFirstChild("Sign") :: BasePart, "SHOP", "Luck & Speed")
+	-- Wares on the counter.
+	for i, name in { "luck", "potion", "clock" } do
+		local item = Voxel.icon(name)
+		item:ScaleTo(0.7)
+		item:PivotTo(cf * CFrame.new(-4.5 + (i - 1) * 4.5, 3.5, -3.5))
+		item.Parent = stall
+	end
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Shop"
+	prompt.ObjectText = "Luck & Speed"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt:SetAttribute("Menu", "Upgrades")
+	prompt.Parent = stall:FindFirstChild("Counter")
+	stall.Parent = map
+	local stand = (cf * CFrame.new(0, 3.5, -13)).Position
+	World.ShopSpot = CFrame.lookAt(stand, Vector3.new(pos.X, stand.Y, pos.Z))
 end
 
 local function buildDecor()
@@ -304,6 +362,7 @@ function World.build()
 	buildLand()
 	buildSea()
 	buildDecor()
+	buildShop()
 	layoutPens()
 	setupLighting()
 

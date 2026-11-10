@@ -250,7 +250,7 @@ function Depths.start(sp)
 			shown = false,
 		})
 	end
-	nextJump = os.clock() + O.OpenAnim + 1
+	nextJump = os.clock() + Formulas.anim(sp) + 1
 	lastClock = os.clock()
 end
 
@@ -259,7 +259,7 @@ local function dropWater(sp, half: number)
 	local side = rng:NextNumber() < 0.5 and -1 or 1
 	local d = rng:NextNumber(6, sp.length)
 	local size = rng:NextNumber(0.6, 1.8)
-	local chunk = part(Vector3.new(size, size, size), CFrame.new(sp.cx + side * (half + 0.4), O.WallTopY - rng:NextNumber(0, 6), SHORE - d), rng:NextNumber() < 0.4 and FOAM or WATER)
+	local chunk = part(Vector3.new(size, size, size), CFrame.new(sp.cx + side * (half + 0.4), (sp.wallTop or O.WallTopY) - rng:NextNumber(0, 6), SHORE - d), rng:NextNumber() < 0.4 and FOAM or WATER)
 	chunk.Name = "Drip"
 	chunk.Transparency = 0.25
 	chunk.Anchored = false
@@ -288,7 +288,7 @@ function Depths.update(sp, elapsed: number, root: BasePart?)
 	if not sp then
 		return
 	end
-	local opening = elapsed < O.OpenAnim
+	local opening = elapsed < Formulas.anim(sp)
 	local half = Formulas.halfWidth(sp, elapsed)
 	local floor = O.SeabedY
 

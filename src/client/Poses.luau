@@ -32,17 +32,20 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Voxel = require(Shared.Voxel)
 
+local State = require(script.Parent.State)
+
 local Poses = {}
 
 local rad = math.rad
 
--- Moments in each move (as a fraction of its length) that get an impact effect.
-Poses.SLAM = 0.32 -- cast: the staff hits the ground and the sea starts to tear
-Poses.LOCKOUT = 0.5 -- workout: the bar locks out overhead
+-- workout: the fraction of a rep at which the bar locks out overhead
+Poses.LOCKOUT = 0.5
 
 local folder: Folder
 local barbells: { [Player]: { model: Model, tier: number } } = {}
 local lastPhase: { [Player]: number } = {}
+local lastBolt: { [Player]: number } = {}
+local hold: { pos: Vector3 }? = nil -- where the local player is pinned while posing
 
 ----------------------------------------------------------------------------
 -- Rig access
@@ -210,42 +213,78 @@ end
 -- The moves
 ----------------------------------------------------------------------------
 
+-- How each cast moves. Times are fractions of that cast's cutscene.
+--   coil    deepest point of the wind-up crouch
+--   apex    top of the leap (Poseidon's Wrath stays up there until `dive`)
+--   slam    the staff hits the ground (Config.Casts[...].slam)
+--   height  how far off the ground the leap goes, in studs
+--   spin    degrees the body turns on the way up and down
+local CAST_SHAPE = {
+	Split = { coil = 0.12, apex = 0.24, height = 3.4, slamY = -0.9, slamLean = 32, hover = 1.8, spin = 0 },
+	Super = { coil = 0.12, apex = 0.3, height = 7, slamY = -1.6, slamLean = 44, hover = 3, spin = 360 },
+	Poseidon = { coil = 0.07, apex = 0.26, dive = 0.47, height = 26, slamY = -1.9, slamLean = 50, hover = 5, spin = 720 },
+}
+
+local function castShape(key: string?)
+	local cast = Config.CastByKey[key or "Split"] or Config.Casts[1]
+	return CAST_SHAPE[cast.key] or CAST_SHAPE.Split, cast
+end
+
+-- How far off the ground the body is at time k of a cast (for the camera).
+function Poses.castHeight(k: number, key: string?): number
+	local shape, cast = castShape(key)
+	local keys = { { 0, 0 }, { shape.coil, -1.4 }, { shape.apex, shape.height } }
+	if shape.dive then
+		table.insert(keys, { shape.dive, shape.height + 1.5 })
+	end
+	table.insert(keys, { cast.slam, shape.slamY })
+	table.insert(keys, { cast.slam + 0.1, -0.3 })
+	table.insert(keys, { 0.85, shape.hover })
+	table.insert(keys, { 0.95, 0.3 })
+	table.insert(keys, { 1, 0 })
+	return track(k, keys)
+end
+
 -- Parting the sea, k from 0 to 1 over the cutscene:
---   0.00 - 0.12  coil: drop into a deep crouch, twist away, staff wound back
---   0.12 - 0.24  leap: launch off the ground, staff swung up overhead
---   0.24 - 0.32  slam: come down into a lunge, staff driven forward and down
---   0.32 - 0.85  part: rise off the ground, both arms pushed out in front and
---                then slowly spread wide apart as the sea opens, straining
---   0.85 - 1.00  settle back onto the sand
+--   coil   drop into a deep crouch, twist away, staff wound back
+--   leap   launch off the ground, staff swung up overhead (the bigger
+--          casts spin on the way up and go far higher; Poseidon's Wrath
+--          hangs in the sky with both arms raised before diving)
+--   slam   come down into a lunge, staff driven forward and down
+--   part   rise off the ground, both arms pushed out in front and then
+--          slowly spread wide apart as the sea opens, straining
+--   settle back onto the sand
 -- The staff arm's angles are added to the default tool-holding pose, which
 -- already has that arm raised about 90 degrees in front of the body.
-function Poses.cast(k: number, clock: number)
-	local strain = (k > 0.4 and k < 0.86) and math.sin(clock * 42) * 3 or 0
-	local hover = (k > 0.45 and k < 0.9) and math.sin(clock * 3) * 0.25 or 0
-	local spread = track(k, { { 0, 0 }, { 0.36, 0 }, { 0.45, 12 }, { 0.85, 88 }, { 1, 0 } })
+function Poses.cast(k: number, clock: number, key: string?)
+	local shape, cast = castShape(key)
+	local c, a, s = shape.coil, shape.apex, cast.slam
+	local d = shape.dive or a -- when the descent begins
+	local after = s + 0.1
+	-- Value at each beat: start, coil, apex, (held until the dive), slam, just after, parted, end.
+	local function beats(v0, vCoil, vApex, vSlam, vAfter, vPart)
+		return track(k, { { 0, v0 }, { c, vCoil }, { a, vApex }, { d, vApex }, { s, vSlam }, { after, vAfter }, { 0.85, vPart }, { 1, v0 } })
+	end
+	local strain = (k > after and k < 0.86) and math.sin(clock * 42) * 3 or 0
+	local hoverBob = (k > after + 0.05 and k < 0.9) and math.sin(clock * 3) * 0.25 or 0
+	local spread = track(k, { { 0, 0 }, { after - 0.04, 0 }, { after + 0.05, 12 }, { 0.85, 88 }, { 1, 0 } })
+	-- In the sky (Poseidon's Wrath) both arms are thrown wide and up.
+	local sky = shape.dive and track(k, { { 0, 0 }, { a - 0.05, 0 }, { a + 0.04, 50 }, { d, 50 }, { s, 0 } }) or 0
+	local turn = track(k, { { 0, 0 }, { c, -40 }, { a, shape.spin * 0.5 }, { d, shape.spin * 0.5 }, { s, shape.spin + 12 }, { after, shape.spin }, { 1, shape.spin } })
 	return {
-		rShoulder = {
-			f = track(k, { { 0, 0 }, { 0.12, -150 }, { 0.24, 95 }, { 0.32, -15 }, { 0.42, 5 }, { 0.85, 8 }, { 1, 0 } }) + strain,
-			s = spread,
-		},
-		rElbow = { f = track(k, { { 0, 0 }, { 0.12, 80 }, { 0.24, 0 }, { 0.32, 25 }, { 0.42, 0 }, { 1, 0 } }) },
-		lShoulder = {
-			f = track(k, { { 0, 0 }, { 0.12, 75 }, { 0.24, 160 }, { 0.32, 55 }, { 0.42, 95 }, { 0.85, 98 }, { 1, 0 } }) - strain,
-			s = spread,
-		},
-		lElbow = { f = track(k, { { 0, 0 }, { 0.12, 50 }, { 0.24, 10 }, { 0.32, 30 }, { 0.42, 0 }, { 1, 0 } }) },
-		rHip = { f = track(k, { { 0, 0 }, { 0.12, 75 }, { 0.24, -20 }, { 0.32, 65 }, { 0.42, 25 }, { 0.85, 12 }, { 1, 0 } }), s = spread * 0.12 },
-		lHip = { f = track(k, { { 0, 0 }, { 0.12, 75 }, { 0.24, 25 }, { 0.32, -30 }, { 0.42, -10 }, { 0.85, 6 }, { 1, 0 } }), s = spread * 0.12 },
-		rKnee = { f = track(k, { { 0, 0 }, { 0.12, -115 }, { 0.24, -35 }, { 0.32, -75 }, { 0.42, -30 }, { 0.85, -14 }, { 1, 0 } }) },
-		lKnee = { f = track(k, { { 0, 0 }, { 0.12, -115 }, { 0.24, -55 }, { 0.32, -10 }, { 0.42, -10 }, { 0.85, -20 }, { 1, 0 } }) },
-		waist = {
-			lean = track(k, { { 0, 0 }, { 0.12, 18 }, { 0.24, -22 }, { 0.32, 30 }, { 0.42, 5 }, { 0.85, -16 }, { 1, 0 } }),
-			yaw = track(k, { { 0, 0 }, { 0.12, -35 }, { 0.24, 10 }, { 0.32, 0 }, { 1, 0 } }),
-		},
+		rShoulder = { f = beats(0, -150, 95, -15, 5, 8) + strain, s = spread + sky },
+		rElbow = { f = beats(0, 80, 0, 25, 0, 0) },
+		lShoulder = { f = beats(0, 75, 160, 55, 95, 98) - strain, s = spread + sky },
+		lElbow = { f = beats(0, 50, 10, 30, 0, 0) },
+		rHip = { f = beats(0, 75, -20, 65, 25, 12), s = spread * 0.12 },
+		lHip = { f = beats(0, 75, 25, -30, -10, 6), s = spread * 0.12 },
+		rKnee = { f = beats(0, -115, -35, -75, -30, -14) },
+		lKnee = { f = beats(0, -115, -55, -10, -10, -20) },
+		waist = { lean = beats(0, 18, -22, 30, 5, -16), yaw = track(k, { { 0, 0 }, { c, -35 }, { a, 10 }, { s, 0 }, { 1, 0 } }) },
 		root = {
-			y = track(k, { { 0, 0 }, { 0.12, -1.4 }, { 0.24, 3.4 }, { 0.32, -0.9 }, { 0.42, -0.3 }, { 0.85, 1.8 }, { 0.95, 0.3 }, { 1, 0 } }) + hover,
-			lean = track(k, { { 0, 0 }, { 0.12, -10 }, { 0.24, -18 }, { 0.32, 32 }, { 0.42, 8 }, { 0.85, -14 }, { 1, 0 } }),
-			yaw = track(k, { { 0, 0 }, { 0.12, -40 }, { 0.24, 0 }, { 0.32, 12 }, { 0.42, 0 }, { 1, 0 } }),
+			y = Poses.castHeight(k, key) + hoverBob,
+			lean = beats(0, -10, -18, shape.slamLean, 8, -14),
+			yaw = turn,
 		},
 	}
 end
@@ -322,6 +361,49 @@ local function shockwave(pos: Vector3, color: Color3, size: number)
 		chunk.AssemblyAngularVelocity = Vector3.new(math.random() * 12 - 6, math.random() * 12 - 6, math.random() * 12 - 6)
 		Debris:AddItem(chunk, 1.2)
 	end
+end
+
+-- A jagged bolt of lightning from `from` down to `to`, gone in a blink.
+local function lightning(from: Vector3, to: Vector3)
+	local points = { from }
+	local steps = 8
+	for i = 1, steps - 1 do
+		local p = from:Lerp(to, i / steps)
+		table.insert(points, p + Vector3.new(math.random() * 8 - 4, 0, math.random() * 8 - 4))
+	end
+	table.insert(points, to)
+	for i = 1, #points - 1 do
+		local a, b = points[i], points[i + 1]
+		local seg = Instance.new("Part")
+		seg.Name = "Lightning"
+		seg.Anchored = true
+		seg.CanCollide = false
+		seg.CanQuery = false
+		seg.CanTouch = false
+		seg.CastShadow = false
+		seg.Material = Enum.Material.Neon
+		seg.Color = Color3.fromRGB(205, 235, 255)
+		local thick = 0.5 + math.random() * 0.7
+		seg.Size = Vector3.new(thick, thick, (b - a).Magnitude)
+		seg.CFrame = CFrame.lookAt((a + b) / 2, b)
+		seg.Parent = folder
+		Debris:AddItem(seg, 0.16)
+	end
+	local glow = Instance.new("Part")
+	glow.Name = "LightningFlash"
+	glow.Anchored = true
+	glow.CanCollide = false
+	glow.CanQuery = false
+	glow.Transparency = 1
+	glow.Size = Vector3.new(1, 1, 1)
+	glow.CFrame = CFrame.new(to + Vector3.new(0, 2, 0))
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(190, 225, 255)
+	light.Brightness = 12
+	light.Range = 60
+	light.Parent = glow
+	glow.Parent = folder
+	Debris:AddItem(glow, 0.2)
 end
 
 -- A short downward kick of the local camera, for weight.
@@ -403,11 +485,74 @@ function Poses.repPhase(player: Player, now: number): number
 	return ((now - start) / Config.Training.RepTime + Poses.LOCKOUT) % 1
 end
 
+-- While the local player is posing, pin them where they stand unless they
+-- are actually steering. The body moving around over the feet otherwise
+-- nudges the character a little each rep until they slide off the pad.
+local function pin(char: Model, always: boolean)
+	local root = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not root or not humanoid then
+		return
+	end
+	local steering = not always and humanoid:GetMoveVelocity().Magnitude > 0.5
+	if not hold or steering then
+		hold = { pos = root.Position }
+		return
+	end
+	local drift = Vector3.new(root.Position.X - hold.pos.X, 0, root.Position.Z - hold.pos.Z)
+	if drift.Magnitude > 0.02 then
+		root.CFrame = CFrame.new(hold.pos.X, root.Position.Y, hold.pos.Z) * root.CFrame.Rotation
+	end
+	local v = root.AssemblyLinearVelocity
+	root.AssemblyLinearVelocity = Vector3.new(0, v.Y, 0)
+end
+
+-- The impact effects for a cast, by how far through it is.
+local function castEffects(player: Player, char: Model, k: number, key: string, me: boolean)
+	local shape, cast = castShape(key)
+	local feet = feetPosition(char)
+	local now = os.clock()
+	-- Lightning: the bigger casts call it down while they wind up and fly.
+	if cast.tier >= 2 and k > shape.coil and k < cast.slam then
+		local gap = cast.tier == 3 and 0.11 or 0.22
+		if now - (lastBolt[player] or 0) > gap then
+			lastBolt[player] = now
+			local reach = cast.tier == 3 and 34 or 14
+			local angle = math.random() * math.pi * 2
+			local target = feet + Vector3.new(math.cos(angle) * reach * math.random(), 0, math.sin(angle) * reach * math.random())
+			lightning(target + Vector3.new(math.random() * 20 - 10, 150, math.random() * 20 - 10), target)
+			if me then
+				State.effect:Fire("bolt", cast.tier)
+			end
+		end
+	end
+	if crossed(player, k, cast.slam) then
+		local size = cast.tier == 3 and 110 or cast.tier == 2 and 60 or 30
+		local color = cast.tier == 3 and Color3.fromRGB(255, 225, 120) or Color3.fromRGB(120, 230, 255)
+		shockwave(feet, color, size)
+		if cast.tier >= 2 then
+			-- A bolt straight onto the staff, and more rings rolling out.
+			lightning(feet + Vector3.new(0, 160, 0), feet)
+			for i = 1, cast.tier do
+				task.delay(i * 0.12, shockwave, feet, Color3.fromRGB(120, 230, 255), size * (0.5 + i * 0.25))
+			end
+			if cast.tier == 3 then
+				for i = 1, 6 do
+					local angle = i * math.pi / 3
+					local at = feet + Vector3.new(math.cos(angle) * 22, 0, math.sin(angle) * 22)
+					lightning(at + Vector3.new(0, 150, 0), at)
+				end
+			end
+		end
+	end
+end
+
 -- Every frame: pose whoever is casting or training, release everyone else.
 local function poseAll()
 	local now = workspace:GetServerTimeNow()
 	local clock = os.clock()
 	local me = Players.LocalPlayer
+	local mePosing = false
 	for _, player in Players:GetPlayers() do
 		local char = player.Character
 		local active = false
@@ -416,6 +561,10 @@ local function poseAll()
 				local p = Poses.repPhase(player, now)
 				apply(player, char, "workout", Poses.rep(p, clock))
 				active = true
+				if player == me then
+					mePosing = true
+					pin(char, false)
+				end
 				if crossed(player, p, Poses.LOCKOUT) then
 					shockwave(feetPosition(char), Color3.fromRGB(255, 215, 80), 16)
 					if player == me then
@@ -425,13 +574,17 @@ local function poseAll()
 			else
 				local castStart = player:GetAttribute("CastStart")
 				if castStart then
-					local k = (now - castStart) / Config.Ocean.OpenAnim
+					local seconds = player:GetAttribute("CastSeconds") or Config.Ocean.OpenAnim
+					local key = player:GetAttribute("CastKey") or "Split"
+					local k = (now - castStart) / seconds
 					if k >= 0 and k < 1 then
-						apply(player, char, "cast", Poses.cast(k, clock))
+						apply(player, char, "cast", Poses.cast(k, clock, key))
 						active = true
-						if crossed(player, k, Poses.SLAM) then
-							shockwave(feetPosition(char), Color3.fromRGB(120, 230, 255), 30)
+						if player == me then
+							mePosing = true
+							pin(char, true)
 						end
+						castEffects(player, char, k, key, player == me)
 					end
 				end
 			end
@@ -442,6 +595,9 @@ local function poseAll()
 				release(player)
 			end
 		end
+	end
+	if not mePosing then
+		hold = nil
 	end
 end
 
@@ -481,6 +637,7 @@ function Poses.init()
 		release(player)
 		dropBarbell(player)
 		lastPhase[player] = nil
+		lastBolt[player] = nil
 	end)
 end
 

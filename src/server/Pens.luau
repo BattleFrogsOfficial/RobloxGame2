@@ -25,7 +25,7 @@ local SLOT_ROWS = { 4, 13, 22, 31 }
 local WANDER_MIN = Vector3.new(-28, 0, -8)
 local WANDER_MAX = Vector3.new(28, 0, 33)
 Pens.PadLocal = Vector3.new(-20, 0, -22)
-local UPGRADE_PAD_LOCAL = Vector3.new(-5, 0, -29)
+local UPGRADE_PAD_LOCAL = Vector3.new(-31, 0, -5) -- the weights stall, against the side fence near the pad
 local BASE_SIGN_LOCAL = Vector3.new(22, 0, -28)
 
 local pens = {} -- array of pen records
@@ -186,27 +186,37 @@ local function buildPen(index: number, info)
 	local ring = part(model, Vector3.new(0.5, 14.5, 14.5), padCf * CFrame.new(0, 0.45, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(150, 60, 230), Enum.Material.Neon)
 	ring.Shape = Enum.PartType.Cylinder
 	local barbell = Voxel.barbell(1)
-	barbell:PivotTo(padCf * CFrame.new(0, 1.6, 2))
+	-- Rests on top of the pad (pad top 0.9 + plate radius 1.1).
+	local barbellCf = padCf * CFrame.new(0, 2.05, 0)
+	barbell:PivotTo(barbellCf)
 	barbell.Name = "PadBarbell"
 	barbell.Parent = model
 	local _, padLabels = billboard(pad, 4.5, { { "+1 STRENGTH", Color3.fromRGB(255, 220, 60), 30 } }, 90, 1.6)
 
-	-- Weight upgrade pad (yellow).
-	local upCf = cf * CFrame.new(UPGRADE_PAD_LOCAL)
-	local upPad = part(model, Vector3.new(0.7, 7, 7), upCf * CFrame.new(0, 0.55, 0) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(255, 220, 60), Enum.Material.SmoothPlastic)
-	upPad.Shape = Enum.PartType.Cylinder
-	upPad.Name = "UpgradePad"
-	local _, upLabels = billboard(upPad, 2.5, {
+	-- Weights stall: opens the barbell menu on the owner's client.
+	local stallCf = cf * CFrame.new(UPGRADE_PAD_LOCAL) * CFrame.Angles(0, -math.pi / 2, 0) -- counter faces into the base
+	local stall = Voxel.stall(8, 5, Color3.fromRGB(255, 190, 60))
+	stall.Name = "WeightsStall"
+	stall:PivotTo(stallCf)
+	World.signText(stall:FindFirstChild("Sign") :: BasePart, "WEIGHTS")
+	local shelfBar = Voxel.barbell(4)
+	shelfBar:ScaleTo(0.55)
+	shelfBar:PivotTo(stallCf * CFrame.new(0, 4.2, -1.5))
+	shelfBar.Parent = stall
+	stall.Parent = model
+	local counter = stall:FindFirstChild("Counter") :: BasePart
+	local _, upLabels = billboard(counter, 12, {
 		{ "Heavier Weight", Color3.new(1, 1, 1), 20 },
 		{ "$250", Color3.fromRGB(120, 255, 120), 24 },
-	}, 60)
+	}, 70)
 	local upPrompt = Instance.new("ProximityPrompt")
-	upPrompt.ActionText = "Buy Weight"
-	upPrompt.ObjectText = "Upgrades"
-	upPrompt.HoldDuration = 0.2
-	upPrompt.MaxActivationDistance = 9
+	upPrompt.ActionText = "Browse"
+	upPrompt.ObjectText = "Weights"
+	upPrompt.HoldDuration = 0
+	upPrompt.MaxActivationDistance = 11
 	upPrompt.RequiresLineOfSight = false
-	upPrompt.Parent = upPad
+	upPrompt:SetAttribute("Menu", "Weights")
+	upPrompt.Parent = counter
 
 	-- "Upgrade Base" sign.
 	local signCf = cf * CFrame.new(BASE_SIGN_LOCAL)
@@ -256,6 +266,8 @@ local function buildPen(index: number, info)
 		face = face,
 		padLabels = padLabels,
 		barbell = barbell,
+		barbellCf = barbellCf,
+		barbellShown = true,
 		upLabels = upLabels,
 		upPrompt = upPrompt,
 		signInfo = signInfo,
@@ -266,11 +278,6 @@ local function buildPen(index: number, info)
 		slotModels = {},
 	}
 
-	upPrompt.Triggered:Connect(function(player)
-		if pen.owner == player and Pens.callbacks.buyWeight then
-			Pens.callbacks.buyWeight(player)
-		end
-	end)
 	basePrompt.Triggered:Connect(function(player)
 		if pen.owner == player then
 			Pens.upgradeBase(player)
@@ -445,12 +452,11 @@ function Pens.refreshSigns(player: Player)
 	end
 	if pen.barbellTier ~= d.weightTier then
 		pen.barbellTier = d.weightTier
-		local cf = pen.barbell:GetPivot()
 		pen.barbell:Destroy()
 		pen.barbell = Voxel.barbell(d.weightTier)
 		pen.barbell.Name = "PadBarbell"
-		pen.barbell:PivotTo(cf)
-		pen.barbell.Parent = pen.model
+		pen.barbell:PivotTo(pen.barbellCf)
+		pen.barbell.Parent = pen.barbellShown and pen.model or nil
 	end
 	if d.baseSlots >= Config.Base.MaxSlots then
 		pen.signInfo.Text = d.baseSlots .. " slots (max)"
@@ -776,6 +782,16 @@ function Pens.get(player: Player)
 	return penByPlayer[player]
 end
 
+-- The barbell rests on the pad when nobody is using it and disappears from
+-- there while its owner has it in their hands.
+function Pens.showPadBarbell(player: Player, shown: boolean)
+	local pen = penByPlayer[player]
+	if pen then
+		pen.barbellShown = shown
+		pen.barbell.Parent = shown and pen.model or nil
+	end
+end
+
 -- Is this position inside the player's own base?
 function Pens.contains(player: Player, pos: Vector3): boolean
 	local pen = penByPlayer[player]
@@ -838,6 +854,8 @@ local function unassign(player: Player)
 	pen.contents:ClearAllChildren()
 	pen.slotsFolder:ClearAllChildren()
 	table.clear(pen.slotModels)
+	pen.barbellShown = true
+	pen.barbell.Parent = pen.model
 	pen.padLabels[1].Text = ""
 	pen.upLabels[1].Text = ""
 	pen.upLabels[2].Text = ""

@@ -263,6 +263,27 @@ check("platinum rate is about 1.8% x sqrt(luck)", math.abs(seen.Platinum / 40000
 eq("platinum income", Formulas.animalIncome("Crab", "Platinum"), Config.AnimalById.Crab.income * 4)
 eq("platinum index key", Formulas.indexKey("Crab", "Platinum"), "Crab|Platinum")
 
+-- Casts: a split is usually basic, sometimes Super, rarely Poseidon's Wrath.
+eq("lowest roll is the rarest cast", Formulas.rollCast(0).key, "Poseidon")
+eq("just past it is Super", Formulas.rollCast(Config.CastByKey.Poseidon.chance + 0.001).key, "Super")
+eq("everything else is a basic split", Formulas.rollCast(0.5).key, "Split")
+local casts = { Split = 0, Super = 0, Poseidon = 0 }
+for _ = 1, 20000 do
+	local key = Formulas.rollCast(rng:NextNumber()).key
+	casts[key] += 1
+end
+check("Super Split about 12% of the time", math.abs(casts.Super / 20000 - 0.12) < 0.015, casts.Super / 20000)
+check("Poseidon's Wrath about 3% of the time", math.abs(casts.Poseidon / 20000 - 0.03) < 0.008, casts.Poseidon / 20000)
+for _, cast in Config.Casts do
+	local spc = { length = 100, width = 30, duration = 20, anim = cast.seconds, slam = cast.slam }
+	eq(cast.key .. ": sea shut until the slam", Formulas.halfWidth(spc, cast.seconds * (cast.slam - 0.01)), 0)
+	eq(cast.key .. ": fully open when its cutscene ends", Formulas.halfWidthAt(spc, 100, cast.seconds), 15)
+	check(cast.key .. ": closing only starts after its cutscene", Formulas.isOpen(spc, cast.seconds + 1) and Formulas.halfWidth(spc, cast.seconds + 1) < 15)
+	eq(cast.key .. ": total duration", Formulas.totalDuration(spc), cast.seconds + 20)
+end
+eq("speed level 0 is the base walk speed", Formulas.walkSpeed(0), Config.Speed.Base)
+check("speed costs rise", Formulas.speedCost(3) > Formulas.speedCost(2))
+
 -- Luck zones.
 eq("six luck zones", #Config.Zones, 6)
 eq("zone at the shore", Formulas.zoneAt(0).name, "Shallows")

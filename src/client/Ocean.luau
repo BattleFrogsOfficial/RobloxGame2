@@ -23,6 +23,7 @@ local Voxel = require(Shared.Voxel)
 
 local State = require(script.Parent.State)
 local Depths = require(script.Parent.Depths)
+local Poses = require(script.Parent.Poses)
 
 local Ocean = {}
 
@@ -265,11 +266,11 @@ local function layoutCrests(sp, t: number)
 end
 
 -- Chunks of water flung up and out of the tear as the sea rips open.
-local function flingWater(sp, frontD: number)
+local function flingWater(sp, frontD: number, power: number)
 	local z = SHORE - frontD
 	for _, sx in { -1, 1 } do
 		for _ = 1, 2 do
-			local size = 1.4 + math.random() * 2.6
+			local size = (1.4 + math.random() * 2.6) * (0.75 + power * 0.25)
 			local chunk = Instance.new("Part")
 			chunk.Name = "Splash"
 			chunk.Size = Vector3.new(size, size, size)
@@ -283,7 +284,7 @@ local function flingWater(sp, frontD: number)
 			chunk.CFrame = CFrame.new(sp.cx + sx * (1 + math.random() * 3), O.WaterTopY + 1, z + (math.random() - 0.5) * 8)
 				* CFrame.Angles(math.random() * 6, math.random() * 6, math.random() * 6)
 			chunk.Parent = folder
-			chunk.AssemblyLinearVelocity = Vector3.new(sx * (18 + math.random() * 42), 70 + math.random() * 60, (math.random() - 0.5) * 36)
+			chunk.AssemblyLinearVelocity = Vector3.new(sx * (18 + math.random() * 42) * (0.7 + power * 0.3), (70 + math.random() * 60) * (0.6 + power * 0.4), (math.random() - 0.5) * 36)
 			chunk.AssemblyAngularVelocity = Vector3.new(math.random() * 10 - 5, math.random() * 10 - 5, math.random() * 10 - 5)
 			Debris:AddItem(chunk, 2.8)
 		end
@@ -307,7 +308,7 @@ local function layout(sp, elapsed: number, t: number)
 	local full = sp.width / 2
 	local length = sp.length
 	local farZ = SHORE - length
-	local opening = elapsed < O.OpenAnim
+	local opening = elapsed < Formulas.anim(sp)
 	local half = Formulas.halfWidth(sp, elapsed) -- at the shore; everywhere once open
 	-- The flat sea stops at fixed edges either side of the corridor; the
 	-- walls fill from those edges in to wherever the gap currently is, so no
@@ -320,7 +321,7 @@ local function layout(sp, elapsed: number, t: number)
 
 	-- Once open, the walls lean taller the closer they are to slamming shut.
 	local squeeze = opening and 0 or 1 - math.clamp(half / full, 0, 1)
-	local peak = O.WallTopY + squeeze * 10
+	local peak = (sp.wallTop or O.WallTopY) + squeeze * 10
 	for i = 1, MAX_SEGS do
 		local d0 = (i - 1) * SEG
 		local d1 = math.min(i * SEG, length)
@@ -381,7 +382,7 @@ local function layout(sp, elapsed: number, t: number)
 	-- Spray: a fountain riding the tear while it opens, plus flung chunks of
 	-- water; then foam churning at the foot of each wall as they close.
 	local xl, xr = sp.cx - half, sp.cx + half
-	local frontK = (elapsed / O.OpenAnim - O.SlamAt) / Formulas.RipSpan -- 0 at the slam, 1 at the far end
+	local frontK = (elapsed / Formulas.anim(sp) - Formulas.slam(sp)) / Formulas.ripSpan(sp) -- 0 at the slam, 1 at the far end
 	local ripping = opening and frontK > 0 and frontK < 1.15
 	if ripping then
 		local frontD = math.min(frontK, 1) * length
@@ -389,7 +390,11 @@ local function layout(sp, elapsed: number, t: number)
 		parts.RipFront.Transparency = 1
 		if frontK < 1 and t - lastBurst > 0.07 then
 			lastBurst = t
-			flingWater(sp, frontD)
+			-- Bigger casts throw far more water, and throw it higher.
+			local tier = Config.CastByKey[sp.cast or "Split"].tier
+			for _ = 1, tier * tier do
+				flingWater(sp, frontD, tier)
+			end
 		end
 	end
 	parts.RipFront.ParticleEmitter.Enabled = ripping
@@ -580,51 +585,57 @@ local function smoothstep(k: number): number
 end
 
 -- Shot 1: a wide, low arc in front of the player for the coil, the leap
--- and the slam (wide enough to keep the leap in frame).
-local function heroShot(p: Vector3, u: number): CFrame
+-- and the slam. It pulls back and tilts up to keep the leap in frame,
+-- however high the cast goes.
+local function heroShot(p: Vector3, u: number, height: number, tier: number): CFrame
 	local angle = math.rad(50 - 70 * u)
-	local pos = p + Vector3.new(math.sin(angle) * 15, 1.5 + u * 3, -math.cos(angle) * 15)
-	return CFrame.lookAt(pos, p + Vector3.new(0, 3.6, 0))
+	local radius = 15 + (tier - 1) * 5 + height * 0.9
+	local pos = p + Vector3.new(math.sin(angle) * radius, 1.5 + u * 3 + height * 0.25, -math.cos(angle) * radius)
+	return CFrame.lookAt(pos, p + Vector3.new(0, 3.6 + height * 0.8, 0))
 end
 
 -- Shot 2: behind and above, rising as the tear races away from the shore.
-local function seaShot(p: Vector3, v: number, length: number): CFrame
-	local pos = (p + Vector3.new(0, 9, 15)):Lerp(p + Vector3.new(0, 32 + length * 0.07, 32), v)
-	return CFrame.lookAt(pos, p + Vector3.new(0, -5, -(18 + length * 0.6 * v)))
+local function seaShot(p: Vector3, v: number, sp): CFrame
+	local lift = (sp.wallTop or O.WallTopY) - O.WallTopY -- taller walls, higher camera
+	local pos = (p + Vector3.new(0, 9, 15)):Lerp(p + Vector3.new(0, 32 + sp.length * 0.07 + lift * 0.9, 32 + lift * 0.5), v)
+	return CFrame.lookAt(pos, p + Vector3.new(0, -5, -(18 + sp.length * 0.6 * v)))
 end
 
 local function updateCutscene(sp, elapsed: number)
 	if not scene then
 		return
 	end
-	local k = elapsed / O.OpenAnim
+	local k = elapsed / Formulas.anim(sp)
 	if k >= 1 then
 		endCutscene()
 		return
 	end
 	local p = scene.origin
-	local slam = O.SlamAt
+	local slam = Formulas.slam(sp)
+	local tier = Config.CastByKey[sp.cast or "Split"].tier
+	local height = math.max(0, Poses.castHeight(k, sp.cast))
 	local cf
 	if k < slam + 0.03 then
-		cf = heroShot(p, k / (slam + 0.03))
+		cf = heroShot(p, k / (slam + 0.03), height, tier)
 		if k > slam then
-			-- The slam jolts the camera.
-			cf *= CFrame.new((math.random() - 0.5) * 1.6, (math.random() - 0.5) * 1.6, 0)
+			-- The slam jolts the camera; harder for the bigger casts.
+			local jolt = 1.6 * tier
+			cf *= CFrame.new((math.random() - 0.5) * jolt, (math.random() - 0.5) * jolt, 0)
 		end
 	elseif k < slam + 0.11 then
 		-- Whip around from the hero shot to the view down the sea.
-		cf = heroShot(p, 1):Lerp(seaShot(p, 0, sp.length), smoothstep((k - slam - 0.03) / 0.08))
+		cf = heroShot(p, 1, 0, tier):Lerp(seaShot(p, 0, sp), smoothstep((k - slam - 0.03) / 0.08))
 	elseif k < 0.85 then
 		local v = smoothstep((k - slam - 0.11) / (0.85 - slam - 0.11))
-		cf = seaShot(p, v, sp.length)
-		local shake = (1 - v) * 0.8
+		cf = seaShot(p, v, sp)
+		local shake = (1 - v) * 0.8 * tier
 		cf *= CFrame.new((math.random() - 0.5) * shake, (math.random() - 0.5) * shake, 0)
 	else
 		-- Glide back to the player's own camera.
-		cf = seaShot(p, 1, sp.length):Lerp(scene.home, smoothstep((k - 0.85) / 0.15))
+		cf = seaShot(p, 1, sp):Lerp(scene.home, smoothstep((k - 0.85) / 0.15))
 	end
 	scene.camera.CFrame = cf
-	scene.camera.FieldOfView = scene.fov + 14 * math.sin(math.pi * math.clamp(k / 0.85, 0, 1))
+	scene.camera.FieldOfView = scene.fov + (12 + tier * 4) * math.sin(math.pi * math.clamp(k / 0.85, 0, 1))
 end
 
 ----------------------------------------------------------------------------
@@ -669,7 +680,7 @@ function Ocean.timing(): (string?, number, number)
 		return nil, 0, 0
 	end
 	local elapsed = State.serverNow() - sp.t0
-	if elapsed < O.OpenAnim then
+	if elapsed < Formulas.anim(sp) then
 		return "opening", sp.duration, 1
 	end
 	local left = math.max(0, Formulas.totalDuration(sp) - elapsed)

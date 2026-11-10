@@ -38,6 +38,16 @@ local actions = {
 	BuyLuck = function(player, times)
 		return Shop.buyLuck(player, if type(times) == "number" then times else 1)
 	end,
+	BuySpeed = function(player)
+		return Shop.buySpeed(player)
+	end,
+	TeleportShop = function(player)
+		local char = player.Character
+		if char then
+			char:PivotTo(World.ShopSpot)
+		end
+		return true
+	end,
 	BuyWeight = function(player)
 		return Training.buyWeight(player)
 	end,

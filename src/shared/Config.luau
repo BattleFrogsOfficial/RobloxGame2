@@ -4,7 +4,7 @@ local Config = {}
 
 -- Shown in small print at the top of the screen and used in the place
 -- file's name, so it is always clear which build is running.
-Config.Build = 18
+Config.Build = 19
 
 ----------------------------------------------------------------------------
 -- Rarities
@@ -172,9 +172,9 @@ Config.Ocean = {
 	RampLength = 20, -- sand slope from the shore down to the seabed
 	SeabedY = -12,
 	WaterTopY = -1.5,
-	WallTopY = 26, -- height the parted water walls rise to
+	WallTopY = 26, -- height the parted water walls rise to (a basic split)
 	SplitZoneDepth = 18, -- beach band (from the shoreline) where you can part the sea
-	OpenAnim = 4, -- seconds of the parting cutscene before the walls start closing
+	OpenAnim = 4, -- seconds of the parting cutscene before the walls start closing (a basic split)
 	SlamAt = 0.32, -- fraction of the cutscene at which the staff slams down and the sea starts to tear
 	Reach = 300, -- the deepest a corridor can ever go
 	GrabRadius = 6,
@@ -187,6 +187,22 @@ Config.World = {
 	BeachDepth = 45,
 	WallHeight = 70, -- walls around the land
 }
+
+-- The three ways a split can go. Each split rolls one: the rarer casts have
+-- a longer, bigger cutscene, taller walls, and multiply your Luck for the
+-- eggs in that split.
+--   seconds  cutscene length         slam   fraction of it at which the sea tears
+--   wallTop  wall height in studs    luck   Luck multiplier for this split
+--   chance   odds of rolling it (the basic split takes whatever is left)
+Config.Casts = {
+	{ key = "Split", tier = 1, seconds = 4, slam = 0.32, wallTop = 26, luck = 1 },
+	{ key = "Super", tier = 2, name = "SUPER SPLIT", seconds = 5.2, slam = 0.42, wallTop = 44, luck = 5, chance = 0.12 },
+	{ key = "Poseidon", tier = 3, name = "POSEIDON'S WRATH", seconds = 8, slam = 0.56, wallTop = 78, luck = 10, chance = 0.03 },
+}
+Config.CastByKey = {}
+for _, cast in Config.Casts do
+	Config.CastByKey[cast.key] = cast
+end
 
 Config.MaxPlayers = 5 -- one base each; set the same number in Game Settings
 
@@ -251,6 +267,9 @@ Config.Weights = {
 	{ name = "Kraken Tentacle", cost = 30000000, gain = 1650 },
 	{ name = "Trident of Tides", cost = 300000000, gain = 4200 },
 }
+
+-- Walk speed, bought at the shop on the beach.
+Config.Speed = { Base = 16, PerLevel = 1, MaxLevel = 14, BaseCost = 400, Growth = 2.1 }
 
 Config.Luck = { BaseCost = 120, Growth = 1.45, PerLevel = 0.12, MaxLevel = 150 }
 Config.Base = { StartSlots = 4, SlotsPerLevel = 2, MaxSlots = 20, BaseCost = 500, Growth = 2.9 }

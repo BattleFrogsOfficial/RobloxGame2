@@ -1,5 +1,5 @@
--- "Buy" window: Luck, heavier weights and base slots, plus a preview of what
--- your current Strength and Luck do to a split.
+-- The beach shop's menu: Luck and Speed, plus a preview of what your
+-- current Strength and Luck do to a split.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -76,17 +76,11 @@ local function render()
 	Ui.setButtonText(rows.luckBtn, luckMax and "MAX" or Format.cash(Formulas.luckCost(d.luckLevel)))
 	rows.luckBtn5.Visible = not luckMax
 
-	-- Weight
-	local w = Config.Weights[d.weightTier]
-	local nw = Config.Weights[d.weightTier + 1]
-	rows.weightDesc.Text = nw and string.format("%s (+%d) -> %s (+%d) per rep", w.name, w.gain, nw.name, nw.gain)
-		or (w.name .. " (+" .. w.gain .. ") is the heaviest!")
-	Ui.setButtonText(rows.weightBtn, nw and Format.cash(nw.cost) or "MAX")
-
-	-- Base
-	local maxed = d.baseSlots >= Config.Base.MaxSlots
-	rows.baseDesc.Text = maxed and (d.baseSlots .. " slots (max)") or string.format("%d -> %d pen slots", d.baseSlots, d.baseSlots + Config.Base.SlotsPerLevel)
-	Ui.setButtonText(rows.baseBtn, maxed and "MAX" or Format.cash(Formulas.baseCost(d.baseSlots)))
+	-- Speed
+	local speedMax = d.speedLevel >= Config.Speed.MaxLevel
+	rows.speedDesc.Text = speedMax and string.format("Run speed %d (max)", d.walkSpeed)
+		or string.format("Level %d:  run speed %d -> %d", d.speedLevel, d.walkSpeed, Formulas.walkSpeed(d.speedLevel + 1))
+	Ui.setButtonText(rows.speedBtn, speedMax and "MAX" or Format.cash(Formulas.speedCost(d.speedLevel)))
 
 	-- Rarity odds for an egg at the far end of a full-charge split.
 	local full = Formulas.splitParams(d.strength, 1)
@@ -110,7 +104,7 @@ local function render()
 end
 
 function Upgrades.init(gui: ScreenGui)
-	local win = Ui.window(gui, "Upgrades", "Upgrades", C.Blue, Vector2.new(820, 560), "chest")
+	local win = Ui.window(gui, "Upgrades", "Shop: Luck & Speed", C.Blue, Vector2.new(820, 470), "luck")
 	local list = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 22, Parent = win.body })
 	Ui.new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 12), Parent = list })
 
@@ -132,18 +126,13 @@ function Upgrades.init(gui: ScreenGui)
 		State.action("BuyLuck", 5)
 	end })
 
-	f, rows.weightDesc = row(list, 2, "strength", "Heavier Weight", C.Yellow)
-	rows.weightBtn = Ui.button({ Text = "", Color = C.Green, Size = UDim2.fromOffset(260, 56), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), ZIndex = 24, Parent = f, OnClick = function()
-		State.action("BuyWeight")
-	end })
-
-	f, rows.baseDesc = row(list, 3, "pets", "Bigger Base", C.Orange)
-	rows.baseBtn = Ui.button({ Text = "", Color = C.Green, Size = UDim2.fromOffset(260, 56), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), ZIndex = 24, Parent = f, OnClick = function()
-		State.action("UpgradeBase")
+	f, rows.speedDesc = row(list, 2, "clock", "Speed", C.Blue)
+	rows.speedBtn = Ui.button({ Text = "", Color = C.Green, Size = UDim2.fromOffset(260, 56), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), ZIndex = 24, Parent = f, OnClick = function()
+		State.action("BuySpeed")
 	end })
 
 	Ui.text({
-		Text = "Step onto the pink pad in your base to train Strength. More Strength parts the sea deeper.",
+		Text = "Luck finds rarer eggs. Speed gets you deeper and back before the sea closes.",
 		Size = UDim2.new(1, 0, 0, 22),
 		TextColor3 = Color3.fromRGB(200, 200, 210),
 		LayoutOrder = 4,

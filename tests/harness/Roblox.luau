@@ -161,6 +161,7 @@ local EVENTS = {
 	RemoteEvent = { "OnServerEvent", "OnClientEvent" },
 	BindableEvent = { "Event" },
 	ProximityPrompt = { "Triggered" },
+	ProximityPromptService = { "PromptTriggered", "PromptShown", "PromptHidden" },
 	GuiObject = { "MouseEnter", "MouseLeave", "InputBegan", "InputEnded" },
 	GuiButton = { "Activated", "MouseButton1Down", "MouseButton1Up", "MouseButton1Click" },
 	UserInputService = { "InputBegan", "InputEnded", "InputChanged" },
@@ -471,6 +472,9 @@ local function registerMocks()
 	method("Players", "GetNameFromUserIdAsync", function(_, id)
 		return "User" .. id
 	end)
+	method("Humanoid", "GetMoveVelocity", function(self)
+		return current.moveVelocity[self] or roblox.Vector3.new(0, 0, 0)
+	end)
 	method("Humanoid", "ChangeState", function(_, state)
 		assert(typeof(state) == "EnumItem", "ChangeState expects an Enum.HumanoidStateType")
 	end)
@@ -527,6 +531,7 @@ function Harness.new(options)
 	self.dataStores = options.dataStores or {}
 	self.orderedStores = options.orderedStores or {}
 	self.coreGui = {}
+	self.moveVelocity = {} -- [Humanoid] = Vector3, set by tests to simulate steering
 	self.dataStoreFails = options.dataStoreFails or false
 	self.errors = {}
 	self.warnings = {}
@@ -861,6 +866,7 @@ function Harness:spawnCharacter(player, position)
 		p.Name = name
 		p.Size = size
 		setCFrame(p, roblox.CFrame.new(position + offset))
+		p.AssemblyLinearVelocity = roblox.Vector3.new(0, 0, 0)
 		p.Parent = char
 		return p
 	end
@@ -914,6 +920,9 @@ function Harness:spawnCharacter(player, position)
 	local humanoid = I.new("Humanoid")
 	humanoid.CameraOffset = roblox.Vector3.new(0, 0, 0)
 	humanoid.RigType = roblox.Enum.HumanoidRigType.R15
+	pcall(function()
+		humanoid.MoveDirection = roblox.Vector3.new(0, 0, 0) -- standing still
+	end)
 	humanoid.WalkSpeed = 16
 	humanoid.JumpPower = 50
 	humanoid.JumpHeight = 7.2

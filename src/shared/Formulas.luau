@@ -49,15 +49,31 @@ local function smooth(k: number): number
 	return k * k * (3 - 2 * k)
 end
 
+-- Cutscene length, and the fraction of it at which the staff slams down,
+-- for this split (they differ by cast; see Config.Casts).
+function Formulas.anim(sp): number
+	return sp.anim or Config.Ocean.OpenAnim
+end
+
+function Formulas.slam(sp): number
+	return sp.slam or Config.Ocean.SlamAt
+end
+
+-- Fraction of the cutscene the tear takes to travel from the shore to the
+-- far end (slam + rip + opening = the whole cutscene).
+function Formulas.ripSpan(sp): number
+	return 1 - 0.35 - Formulas.slam(sp)
+end
+
 -- Half the corridor's width `elapsed` seconds after the split began. Nothing
 -- moves until the staff slams down partway through the cutscene; then the
 -- shore tears open first. After the cutscene both walls close in steadily
 -- along the whole corridor.
 function Formulas.halfWidth(sp, elapsed: number): number
-	local anim = Config.Ocean.OpenAnim
+	local anim = Formulas.anim(sp)
 	local full = sp.width / 2
 	if elapsed < anim then
-		return full * smooth((elapsed / anim - Config.Ocean.SlamAt) / 0.35)
+		return full * smooth((elapsed / anim - Formulas.slam(sp)) / 0.35)
 	end
 	return full * math.max(0, 1 - (elapsed - anim) / sp.duration)
 end
@@ -66,26 +82,42 @@ end
 -- peels open from the shore outward, so far points open later; by the end
 -- of the cutscene the whole corridor is fully open.
 function Formulas.halfWidthAt(sp, d: number, elapsed: number): number
-	local anim = Config.Ocean.OpenAnim
+	local anim = Formulas.anim(sp)
 	if elapsed >= anim then
 		return Formulas.halfWidth(sp, elapsed)
 	end
-	local start = Config.Ocean.SlamAt + math.clamp(d / sp.length, 0, 1) * Formulas.RipSpan
+	local start = Formulas.slam(sp) + math.clamp(d / sp.length, 0, 1) * Formulas.ripSpan(sp)
 	return sp.width / 2 * smooth((elapsed / anim - start) / 0.35)
 end
 
--- Fraction of the cutscene the tear takes to travel from the shore to the
--- far end (slam + rip + opening = the whole cutscene).
-Formulas.RipSpan = 1 - 0.35 - Config.Ocean.SlamAt
-
 -- Is there still room to stand in the corridor?
 function Formulas.isOpen(sp, elapsed: number): boolean
-	return elapsed < Config.Ocean.OpenAnim or Formulas.halfWidth(sp, elapsed) > Config.Ocean.MinGap
+	return elapsed < Formulas.anim(sp) or Formulas.halfWidth(sp, elapsed) > Config.Ocean.MinGap
 end
 
 -- Has the water already covered this egg?
 function Formulas.eggCovered(sp, egg, elapsed: number): boolean
-	return elapsed >= Config.Ocean.OpenAnim and math.abs(egg.x) > Formulas.halfWidth(sp, elapsed) - 0.5
+	return elapsed >= Formulas.anim(sp) and math.abs(egg.x) > Formulas.halfWidth(sp, elapsed) - 0.5
+end
+
+-- Which cast a split gets, from a 0..1 roll: rarest first.
+function Formulas.rollCast(roll: number)
+	local used = 0
+	for i = #Config.Casts, 2, -1 do
+		used += Config.Casts[i].chance
+		if roll < used then
+			return Config.Casts[i]
+		end
+	end
+	return Config.Casts[1]
+end
+
+function Formulas.walkSpeed(speedLevel: number): number
+	return Config.Speed.Base + Config.Speed.PerLevel * speedLevel
+end
+
+function Formulas.speedCost(level: number): number
+	return math.floor(Config.Speed.BaseCost * Config.Speed.Growth ^ level)
 end
 
 -- Height of the sea floor `d` studs out from the shore (a ramp slopes down
@@ -97,7 +129,7 @@ end
 
 -- Seconds from the start of a split until the corridor is shut.
 function Formulas.totalDuration(sp): number
-	return Config.Ocean.OpenAnim + sp.duration
+	return Formulas.anim(sp) + sp.duration
 end
 
 local function pickWeighted(rng: Random, weights: { number }): number
