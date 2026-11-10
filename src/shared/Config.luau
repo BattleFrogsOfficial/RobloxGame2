@@ -4,7 +4,7 @@ local Config = {}
 
 -- Shown in small print at the top of the screen and used in the place
 -- file's name, so it is always clear which build is running.
-Config.Build = 19
+Config.Build = 20
 
 ----------------------------------------------------------------------------
 -- Rarities
@@ -276,7 +276,9 @@ Config.Base = { StartSlots = 4, SlotsPerLevel = 2, MaxSlots = 20, BaseCost = 500
 
 Config.Training = { RepTime = 1.4, PadRadius = 7 } -- one rep = one push up and back down
 
-Config.Pen = { Width = 70, Depth = 72, Gate = 9, Spacing = 84, FrontZ = 66 } -- studs; gates face the ocean
+-- Studs; gates face the ocean. Eggs can be placed anywhere in the plot that
+-- is PlaceMargin clear of the fence and EggGap from the next egg.
+Config.Pen = { Width = 70, Depth = 72, Gate = 9, Spacing = 84, FrontZ = 66, PlaceMargin = 3, EggGap = 5 }
 
 Config.Offline = { Rate = 0.5, MaxSeconds = 4 * 3600, MinSeconds = 60 }
 Config.SellAnimalSeconds = 25 -- an animal sells for 25s of its income

@@ -3,7 +3,7 @@
 An original Roblox egg-collecting idler. Walk up to the ocean, hold click with your **Sea Staff** to charge, and release
 to part the sea. Your **Strength** decides how deep the corridor goes, and your **Luck** decides how many eggs are down
 there and how rare they are. The walls of water start closing the moment the sea opens: grab an egg and get out before
-they meet, or you're thrown back onto the beach without it. Carry the egg into your base to plant it, and it hatches
+they meet, or you're thrown back onto the beach without it. Back on land the egg goes into your inventory; place it anywhere in your plot and it hatches
 into a pixel animal that earns money. The rarer the animal, the bigger it is.
 
 Only you see your parted sea and your eggs. Everyone else sees you walk into the closed ocean.
@@ -39,7 +39,7 @@ number is shown in small print at the top of the screen in game. Bump it wheneve
 ### Server size
 
 There are 5 bases per server, so set **Game Settings → Places → Max Players** to **5** before publishing. A 6th player
-can still play and earn money but has no base to plant eggs or show animals in.
+can still play and earn money but has no base to place eggs or show animals in.
 
 ### Saving in Studio
 
@@ -70,7 +70,7 @@ src/server/      ServerScriptService.Server
   init.server.luau boot order + the validated UI action router
   World.luau       map: one shore, bases, walls, seabed, headlands, decor, lighting
   Data.luau        DataStore save/load, session state, state sync to the client
-  Split.luau       authoritative sea parting: corridor, closing walls, eggs, grabs, carrying, planting
+  Split.luau       authoritative sea parting: corridor, closing walls, eggs, grabs, carrying
   Pens.luau        bases: slots, incubation, hatching, wandering animals, income, offline cash
   Training.luau    the Strength pad (automatic reps) and weight upgrades
   Shop.luau        Luck upgrades, game passes, developer products
@@ -81,6 +81,7 @@ src/client/      StarterPlayerScripts.Client
   State.luau       client copy of player state + server actions
   Ocean.luau       draws the ocean, the parting cutscene, the closing corridor, your eggs; charging
   Depths.luau      the inside of a parted sea: zone lines, kelp, mist, fish, falling water
+  Placement.luau   picking a spot in your plot for an egg from the inventory
   Ragdoll.luau     goes limp and flies back to shore when the sea catches you
   Poses.luau       limb animation for the staff cast and barbell reps (R6 and R15)
   Guide.luau       new-player objective text and the trail of arrows on the ground
@@ -123,7 +124,7 @@ reach and how Strength, depth, Luck and income grow over 8 hours.
 `game.spec.luau` boots the real server and client scripts on a small fake engine. Lune supplies real Roblox Instances,
 so a wrong property name, a wrong value type or an enum item that doesn't exist fails the test the same way it would
 error in Studio. The harness adds events, a virtual clock, remotes, tweens and in-memory DataStores. The playthrough
-joins a player, parts the sea (cutscene included), grabs an egg, carries it home and plants it, gets caught by the
+joins a player, parts the sea (cutscene included), grabs an egg, banks it on land and places it in the plot, gets caught by the
 closing walls, hatches, earns, trains, buys upgrades, claims rewards, tests every shop item, manages the inventory,
 fills a server, checks the leaderboards, saves, and rejoins two hours later.
 

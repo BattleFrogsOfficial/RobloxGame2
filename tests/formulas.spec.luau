@@ -352,6 +352,31 @@ eq("fast hatch halves", Formulas.hatchSeconds("Coral", true), math.ceil(Config.E
 eq("gold variant income", Formulas.animalIncome("Crab", "Gold"), Config.AnimalById.Crab.income * Config.Variants.Gold.mult)
 
 ----------------------------------------------------------------------------
+-- Placing eggs in the plot.
+----------------------------------------------------------------------------
+do
+	local P = Config.Pen
+	local edgeX, edgeZ = P.Width / 2 - P.PlaceMargin, P.Depth / 2 - P.PlaceMargin
+	check("an empty plot takes an egg anywhere", Formulas.canPlaceEgg({}, 0, 0) and Formulas.canPlaceEgg({}, edgeX, -edgeZ) and Formulas.canPlaceEgg({}, -edgeX, edgeZ))
+	check("not on or past the fence", not Formulas.canPlaceEgg({}, edgeX + 0.5, 0) and not Formulas.canPlaceEgg({}, 0, -edgeZ - 0.5) and not Formulas.canPlaceEgg({}, 1e9, 0))
+	check("not at a broken position", not Formulas.canPlaceEgg({}, 0 / 0, 0) and not Formulas.canPlaceEgg({}, 0, 0 / 0))
+	local plot = { ["1"] = { kind = "egg", x = 10, z = 10 }, ["2"] = { kind = "animal", x = -10, z = -10 } }
+	check("eggs keep their distance", not Formulas.canPlaceEgg(plot, 10 + P.EggGap - 0.5, 10) and Formulas.canPlaceEgg(plot, 10 + P.EggGap + 0.5, 10))
+	check("animals don't block a spot", Formulas.canPlaceEgg(plot, -10, -10))
+	local x, z = Formulas.penSpot("1", plot["1"])
+	check("an item stands where it was put", x == 10 and z == 10)
+	-- Eggs saved before free placement keep a spot inside the plot.
+	local seen = {}
+	for i = 1, Config.Base.MaxSlots do
+		local ox, oz = Formulas.penSpot(tostring(i), { kind = "egg" })
+		check("old egg " .. i .. " is inside the plot", math.abs(ox) <= edgeX and math.abs(oz) <= edgeZ)
+		check("old egg " .. i .. " has its own spot", not seen[ox .. ":" .. oz])
+		seen[ox .. ":" .. oz] = true
+		check("old egg " .. i .. " blocks its spot", not Formulas.canPlaceEgg({ [tostring(i)] = { kind = "egg" } }, ox, oz))
+	end
+end
+
+----------------------------------------------------------------------------
 -- Round trips: sprint to the far end and back before the walls meet.
 ----------------------------------------------------------------------------
 print("\nstrength | depth | width | seconds to close | round trip | room left when home | max tier there")

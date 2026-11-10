@@ -1,5 +1,5 @@
 -- The weights stall's menu: every barbell, which ones you own, and the next
--- one you can buy. Opened by the stall's prompt in your base.
+-- one you can buy. Opened by the prompt at the stall outside your base.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

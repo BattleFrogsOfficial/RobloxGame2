@@ -7,7 +7,8 @@
 -- A corridor opens straight out from the shore. Its two side walls start
 -- closing as soon as it opens and meet after `duration` seconds; an egg is
 -- gone once the water covers it, and so is anyone still between the walls.
--- Eggs you grab stay on your head until you carry them into your own base.
+-- Eggs you grab stay on your head until you're back on land, where they go
+-- into your Eggs inventory.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -143,8 +144,8 @@ local function caught(player: Player, root: BasePart, reason: string)
 	end)
 end
 
--- Carried eggs are planted the moment their owner walks into their base.
-local function plant(player: Player)
+-- Carried eggs go into the Eggs inventory the moment their owner is back on land.
+local function bank(player: Player)
 	local list = carrying[player]
 	if not list or #list == 0 then
 		return
@@ -153,15 +154,15 @@ local function plant(player: Player)
 	if not d then
 		return
 	end
-	local planted = {}
+	local banked = {}
 	for _, item in list do
 		local where = Pens.addEgg(player, item.egg, item.variant)
 		d.stats.eggsCollected += 1
-		table.insert(planted, { egg = item.egg, variant = item.variant, where = where })
+		table.insert(banked, { egg = item.egg, variant = item.variant, where = where })
 	end
 	clearCarry(player)
 	Data.markDirty(player)
-	Data.effect(player, "planted", planted)
+	Data.effect(player, "banked", banked)
 end
 
 function endSplit(player: Player)
@@ -200,7 +201,7 @@ local function onRequestSplit(player: Player, charge: any)
 	end
 	local cap = Formulas.carry(Data.hasPass(player, "ExtraCarry"))
 	if carrying[player] and #carrying[player] >= cap then
-		return nil, "Your hands are full! Plant your egg in your base first."
+		return nil, "Your hands are full! Get back to the beach first."
 	end
 
 	-- Which cast is this? Usually a plain split; sometimes a Super Split or
@@ -330,13 +331,9 @@ local function step()
 			else
 				local list = carrying[player]
 				if list and #list > 0 then
-					if wasInOcean[player] then
-						-- Made it back to land with eggs in hand.
-						Data.effect(player, "safe", { count = #list })
-					end
-					if Pens.contains(player, pos) then
-						plant(player)
-					end
+					-- Made it back to land with eggs in hand: they're yours.
+					Data.effect(player, "safe", { count = #list })
+					bank(player)
 				end
 			end
 			wasInOcean[player] = inOcean

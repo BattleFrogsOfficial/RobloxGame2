@@ -54,11 +54,11 @@ local actions = {
 	UpgradeBase = function(player)
 		return Pens.upgradeBase(player)
 	end,
-	PlaceEgg = function(player, index)
-		if type(index) ~= "number" then
+	PlaceEgg = function(player, index, pos)
+		if type(index) ~= "number" or typeof(pos) ~= "Vector3" or pos ~= pos then
 			return false
 		end
-		return Pens.placeStoredEgg(player, index)
+		return Pens.placeStoredEgg(player, index, pos)
 	end,
 	SellEgg = function(player, index)
 		if type(index) ~= "number" then

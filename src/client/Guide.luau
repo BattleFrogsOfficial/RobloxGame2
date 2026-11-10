@@ -12,6 +12,7 @@ local Formulas = require(Shared.Formulas)
 
 local State = require(script.Parent.State)
 local Ocean = require(script.Parent.Ocean)
+local Placement = require(script.Parent.Placement)
 
 local Guide = {}
 
@@ -100,6 +101,14 @@ local function penEgg(pen: Model): Vector3?
 	return nil
 end
 
+local function penCount(d): number
+	local n = 0
+	for _ in d.pen do
+		n += 1
+	end
+	return n
+end
+
 -- What should the player do right now? Returns text and an optional target.
 local function think(root: BasePart): (string?, Vector3?, boolean)
 	local d = State.data
@@ -112,15 +121,25 @@ local function think(root: BasePart): (string?, Vector3?, boolean)
 	local pen = myPen()
 	local inSea = pos.Z < O.ShoreZ
 
-	-- Carrying: get out of the sea, then plant the egg at home.
+	-- Carrying: get out of the sea. On land the egg goes into your inventory.
 	if Ocean.carried > 0 then
 		if inSea then
 			return "Run back to the beach!", newbie and Vector3.new(pos.X, 0, O.ShoreZ + 6) or nil, true
 		end
-		if pen then
-			return "Carry your egg to your base to plant it!", pen:GetAttribute("Gate") :: Vector3, false
-		end
 		return nil, nil, false
+	end
+
+	-- Picking a spot for an egg: the HUD panel does the talking.
+	if Placement.active then
+		return nil, nil, false
+	end
+
+	-- An egg in the inventory and room in the plot: go and place it.
+	if pen and newbie and not inSea and #d.eggs > 0 and penCount(d) < d.baseSlots then
+		if insidePen(pen, pos) then
+			return "Open EGGS, press Place, then pick a spot in your plot!", nil, false
+		end
+		return "Take your egg to your plot and place it!", pen:GetAttribute("Center") :: Vector3, false
 	end
 
 	if sp and not Ocean.cutscene then

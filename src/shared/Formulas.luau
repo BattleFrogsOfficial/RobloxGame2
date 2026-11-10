@@ -303,4 +303,41 @@ function Formulas.baseCost(slots: number): number
 	return math.floor(Config.Base.BaseCost * Config.Base.Growth ^ level)
 end
 
+----------------------------------------------------------------------------
+-- Placing eggs in a plot. Positions are in pen space: x across, z from the
+-- gate (-) to the back fence (+).
+----------------------------------------------------------------------------
+local FALLBACK_COLS = { -24, -12, 0, 12, 24 }
+local FALLBACK_ROWS = { 4, 13, 22, 31 }
+
+-- Where a pen item stands. Items saved before eggs could be placed freely
+-- have no position, so they keep their old grid spot.
+function Formulas.penSpot(key: string, item: any): (number, number)
+	if item and type(item.x) == "number" and type(item.z) == "number" then
+		return item.x, item.z
+	end
+	local i = tonumber(key) or 1
+	local col = (i - 1) % #FALLBACK_COLS + 1
+	local row = ((i - 1) // #FALLBACK_COLS) % #FALLBACK_ROWS + 1
+	return FALLBACK_COLS[col], FALLBACK_ROWS[row]
+end
+
+-- Can an egg go down at (x, z)? Used by the client's preview and enforced by
+-- the server.
+function Formulas.canPlaceEgg(pen: { [string]: any }, x: number, z: number): (boolean, string?)
+	local P = Config.Pen
+	if x ~= x or z ~= z or math.abs(x) > P.Width / 2 - P.PlaceMargin or math.abs(z) > P.Depth / 2 - P.PlaceMargin then
+		return false, "Place it inside your fence."
+	end
+	for key, item in pen do
+		if item.kind == "egg" then
+			local ex, ez = Formulas.penSpot(key, item)
+			if (ex - x) ^ 2 + (ez - z) ^ 2 < P.EggGap ^ 2 then
+				return false, "Too close to another egg."
+			end
+		end
+	end
+	return true, nil
+end
+
 return Formulas

@@ -47,7 +47,7 @@ local Format = load("Format")
 
 local WALK = 16
 local TRAIN_SECONDS = 25 -- training between runs
-local TRIP_OVERHEAD = 22 -- base <-> shore walking, charging, the cutscene, planting, hatching
+local TRIP_OVERHEAD = 22 -- base <-> shore walking, charging, the cutscene, placing, hatching
 
 local function simulate(seed)
 	local rng = lcg(seed)

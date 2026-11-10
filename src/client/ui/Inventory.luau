@@ -10,6 +10,7 @@ local Format = require(Shared.Format)
 local Ui = require(script.Parent.Ui)
 local Viewport = require(script.Parent.Viewport)
 local State = require(script.Parent.Parent.State)
+local Placement = require(script.Parent.Parent.Placement)
 
 local Inventory = {}
 
@@ -265,7 +266,9 @@ local function renderEggs()
 		lines[3].Text = "Sells for " .. Format.cash(Formulas.eggSellPrice(e.egg, e.variant))
 		lines[3].TextColor3 = C.Cash
 		smallButton(card, "Place", C.Green, 0, 0.5, function()
-			State.action("PlaceEgg", i)
+			-- Close the window and pick a spot in the plot.
+			Ui.close("Eggs")
+			Placement.start(i)
 		end)
 		smallButton(card, "Sell", C.Orange, 0.5, 0.5, function()
 			State.action("SellEgg", i)

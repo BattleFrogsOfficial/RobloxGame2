@@ -20,6 +20,7 @@ local Layout = require(script.Parent.Layout)
 local State = require(script.Parent.Parent.State)
 local Ocean = require(script.Parent.Parent.Ocean)
 local Guide = require(script.Parent.Parent.Guide)
+local Placement = require(script.Parent.Parent.Placement)
 
 local Hud = {}
 
@@ -652,7 +653,7 @@ local function buildHeadCounter()
 	refs.headTag = tag
 end
 
--- "Eggs 1/1": stays up from the moment you grab an egg until it's planted.
+-- "Eggs 1/1": stays up from the moment you grab an egg until you are back on land.
 local function buildCarry()
 	local frame = slot("Carry")
 	frame.Visible = false
@@ -679,6 +680,37 @@ local function buildCarry()
 		Parent = panel,
 	})
 	refs.carry = frame
+end
+
+-- Shown while you pick a spot for an egg in your plot.
+local function buildPlace()
+	local frame = slot("Place")
+	frame.Visible = false
+	local panel = Ui.new("Frame", { BackgroundColor3 = C.Darker, Size = UDim2.fromScale(1, 1), Parent = frame })
+	Ui.corner(panel, 12)
+	refs.placeStroke = Ui.stroke(panel, 4, C.Cash)
+	local holder = Ui.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(56, 56), Position = UDim2.fromOffset(6, 2), ZIndex = 2, Parent = panel })
+	Ui.icon(holder, "egg", { ZIndex = 2 })
+	refs.placeHint = Ui.text({
+		Text = "",
+		Size = UDim2.new(1, -196, 0, 40),
+		Position = UDim2.fromOffset(68, 10),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 2,
+		Parent = panel,
+	})
+	Ui.button({
+		Name = "Cancel",
+		Text = "Cancel",
+		Color = C.Red,
+		Size = UDim2.fromOffset(112, 44),
+		Position = UDim2.new(1, -8, 0.5, 0),
+		AnchorPoint = Vector2.new(1, 0.5),
+		ZIndex = 2,
+		Parent = panel,
+		OnClick = Placement.cancel,
+	})
+	refs.place = frame
 end
 
 local function buildTrain()
@@ -922,7 +954,15 @@ local function perFrame(dt: number)
 		refs.danger.Visible = false
 	end
 
-	-- Egg counter: from the grab until the egg is planted in your base.
+	-- Picking a spot for an egg in your plot.
+	refs.place.Visible = Placement.active
+	if Placement.active then
+		refs.placeHint.Text = Placement.hint
+		refs.placeHint.TextColor3 = Placement.ok and C.Cash or Color3.fromRGB(255, 120, 100)
+		refs.placeStroke.Color = Placement.ok and C.Cash or Color3.fromRGB(255, 120, 100)
+	end
+
+	-- Egg counter: from the grab until you are back on land.
 	local carried = Ocean.carried
 	local cap = State.data and State.data.carry or 1
 	refs.carry.Visible = carried > 0
@@ -938,7 +978,7 @@ local function perFrame(dt: number)
 	if carried > 0 then
 		refs.carryCount.Text = carried .. "/" .. cap
 		if onLand then
-			refs.carryHint.Text = "Plant it in your base!"
+			refs.carryHint.Text = "Safe!"
 			refs.carryHint.TextColor3 = C.Cash
 			refs.carryStroke.Color = C.Cash
 		else
@@ -952,7 +992,7 @@ local function perFrame(dt: number)
 	local text = Guide.text
 	if not text then
 		if Ocean.inZone and Ocean.handsFull and not phase then
-			text = "Your hands are full. Plant your egg in your base first."
+			text = "Your hands are full. Get back to the beach first."
 		elseif Ocean.inZone and not Ocean.canCharge and not phase then
 			text = "Equip your Sea Staff to part the ocean!"
 		elseif Ocean.canCharge and not Ocean.charging then
@@ -1016,11 +1056,11 @@ local function onEffect(kind: string, payload: any)
 		Hud.shake(0.5, 0.35)
 	elseif kind == "bolt" then
 		Hud.flash(Color3.fromRGB(215, 235, 255), 0.22, 0.14)
-	elseif kind == "planted" then
+	elseif kind == "banked" then
 		for _, b in payload do
 			local e = Config.EggById[b.egg]
 			local name = (b.variant ~= "Normal" and b.variant .. " " or "") .. e.name
-			local where = b.where == "pen" and " planted! It's incubating." or b.where == "storage" and " stored (your base is full)." or " sold (storage is full)."
+			local where = b.where == "storage" and " added to your Eggs. Place it in your plot!" or " sold (your egg storage is full)."
 			Hud.toast(name .. where, Config.Rarities[e.tier].color)
 		end
 	elseif kind == "caught" then
@@ -1047,6 +1087,7 @@ function Hud.init()
 	buildLeft()
 	buildRight()
 	buildCarry()
+	buildPlace()
 	buildTrain()
 	buildCharge()
 	buildHoldButton()

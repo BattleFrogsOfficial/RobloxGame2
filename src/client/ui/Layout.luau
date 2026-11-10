@@ -32,6 +32,8 @@ Layout.Elements = {
 	RightGrid = { anchor = { 1, 0 }, pivot = { 1, 0 }, offset = { -16, 292 }, size = { 190, 190 }, touch = { offset = { -16, 176 } } },
 
 	Carry = { anchor = { 0.5, 1 }, pivot = { 0.5, 1 }, offset = { 0, -176 }, size = { 320, 60 } },
+	-- Shown while you pick a spot for an egg in your plot.
+	Place = { anchor = { 0.5, 1 }, pivot = { 0.5, 1 }, offset = { 0, -176 }, size = { 460, 60 } },
 	Train = { anchor = { 0.5, 1 }, pivot = { 0.5, 1 }, offset = { 0, -244 }, size = { 420, 40 } },
 	Charge = {
 		anchor = { 0.5, 0.5 }, pivot = { 0, 0.5 }, offset = { 120, 26 }, size = { 200, 250 },
@@ -44,7 +46,7 @@ Layout.Elements = {
 -- Pairs that can never be on screen together, so they may share space:
 -- the charge meter and HOLD button only show while you can part the sea,
 -- which is never while a sea is open, while carrying an egg, or while
--- training (the pad is inside your base, not on the shoreline). The zone bar
+-- training (the pad is by your base, not on the shoreline). The zone bar
 -- replaces the top bar for as long as a sea is open.
 Layout.NeverTogether = {
 	{ "TopBar", "ZoneBar" },
@@ -56,6 +58,11 @@ Layout.NeverTogether = {
 	{ "Hold", "ZoneBar" },
 	{ "Hold", "Carry" },
 	{ "Hold", "Train" },
+	-- Eggs are placed in your plot, far from the shoreline; carried eggs go
+	-- into the inventory the moment you are back on land.
+	{ "Place", "Carry" },
+	{ "Place", "Charge" },
+	{ "Place", "Hold" },
 	{ "Train", "Status" },
 	{ "Train", "ZoneBar" },
 }

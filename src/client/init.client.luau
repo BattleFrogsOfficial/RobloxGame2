@@ -2,6 +2,7 @@
 
 local State = require(script.State)
 local Ocean = require(script.Ocean)
+local Placement = require(script.Placement)
 local Guide = require(script.Guide)
 local PenAnimals = require(script.PenAnimals)
 local Ragdoll = require(script.Ragdoll)
@@ -18,6 +19,7 @@ local Hatch = require(script.ui.Hatch)
 
 State.init()
 Ocean.init()
+Placement.init()
 Guide.init()
 PenAnimals.init()
 Ragdoll.init()

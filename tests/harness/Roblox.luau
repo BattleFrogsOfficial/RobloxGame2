@@ -164,7 +164,7 @@ local EVENTS = {
 	ProximityPromptService = { "PromptTriggered", "PromptShown", "PromptHidden" },
 	GuiObject = { "MouseEnter", "MouseLeave", "InputBegan", "InputEnded" },
 	GuiButton = { "Activated", "MouseButton1Down", "MouseButton1Up", "MouseButton1Click" },
-	UserInputService = { "InputBegan", "InputEnded", "InputChanged" },
+	UserInputService = { "InputBegan", "InputEnded", "InputChanged", "TouchTapInWorld" },
 	Sound = { "Ended" },
 	Instance = { "DescendantAdded", "ChildAdded", "ChildRemoved", "AncestryChanged", "Destroying" },
 	MarketplaceService = { "PromptGamePassPurchaseFinished", "PromptProductPurchaseFinished" },
@@ -301,8 +301,22 @@ local function registerMocks()
 	method("RunService", "IsStudio", function()
 		return current.studio
 	end)
+	-- The mouse: tests set harness.mouseWorld to the world point under it.
+	-- A screen point then looks straight down onto that point.
+	method("UserInputService", "GetMouseLocation", function()
+		return roblox.Vector2.new(640, 360)
+	end)
+	method("Camera", "ViewportPointToRay", function()
+		local at = current.mouseWorld or roblox.Vector3.new(0, 0, 0)
+		return roblox.Ray.new(at + roblox.Vector3.new(0, 50, 0), roblox.Vector3.new(0, -1, 0))
+	end)
+
+	-- Lune keeps whole-number attributes as 32-bit floats, which would round
+	-- a timestamp published on an exact second by up to a minute. Roblox
+	-- keeps doubles, so the fake server clock just never lands on a whole
+	-- second.
 	method("Workspace", "GetServerTimeNow", function()
-		return current.epoch + current.clock
+		return current.epoch + current.clock + 0.013731
 	end)
 	method("Debris", "AddItem", function(_, inst, life)
 		current.task.delay(life or 10, function()
@@ -982,6 +996,7 @@ function Harness:stopClient()
 	local uis = self.game:GetService("UserInputService")
 	signalOf(uis, "InputBegan").handlers = {}
 	signalOf(uis, "InputEnded").handlers = {}
+	signalOf(uis, "TouchTapInWorld").handlers = {}
 	self.localPlayer = nil
 end
 

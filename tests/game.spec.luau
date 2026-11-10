@@ -202,7 +202,7 @@ for _, m in ws.Pens:GetChildren() do
 end
 
 ----------------------------------------------------------------------------
--- 3. Part the sea (cutscene), grab an egg, carry it home, plant it
+-- 3. Part the sea (cutscene), grab an egg, bank it on land, place it in the plot
 ----------------------------------------------------------------------------
 local camera = ws.CurrentCamera
 
@@ -405,7 +405,7 @@ local secondPrompt = grabAt(eggSpots[2])
 check("prompts switch off with full hands", secondPrompt == nil or secondPrompt.Enabled == false)
 eq("still carrying one egg (hands full)", Ocean.carried, 1)
 
--- Back on the beach the egg is safe but NOT planted yet.
+-- Back on the beach the egg goes straight into the inventory.
 h:moveTo(player, Vector3.new(sp.cx, 3, SHORE + 8))
 h:advance(0.4)
 check("safe effect on reaching land", sawEffect("safe"))
@@ -417,28 +417,45 @@ for _, c in player.PlayerGui.Overlay:GetChildren() do
 	end
 end
 check("reaching land flashes the screen green", flashed)
-eq("still carrying on the beach", Ocean.carried, 1)
-eq("nothing planted yet", count(d.pen), 0)
-eq("egg not counted until planted", d.stats.eggsCollected, 0)
-check("counter stays up on land", player.PlayerGui.Hud.Carry.Visible == true)
-check("guide sends you home", Guide.text ~= nil and Guide.text:find("base") ~= nil, Guide.text)
-h:advance(3)
-eq("egg still carried a few seconds later", Ocean.carried, 1)
-check("can't part the sea with full hands", not Ocean.canCharge)
+eq("hands empty once on land", Ocean.carried, 0)
+check("banked effect received", sawEffect("banked"))
+eq("server counted the egg", d.stats.eggsCollected, 1)
+eq("the egg is in the inventory", #d.eggs, 1)
+eq("nothing placed in the plot yet", count(d.pen), 0)
+check("carried egg removed from character", player.Character:FindFirstChild("CarriedEgg") == nil)
+check("counter gone once on land", player.PlayerGui.Hud.Carry.Visible == false)
+check("guide sends you to your plot", Guide.text ~= nil and Guide.text:find("plot") ~= nil, Guide.text)
 
--- Walk into your own base: now it's planted.
+-- Place it anywhere in the plot: pick the egg, point at a spot, click.
+local Placement = w.clientModule("Placement")
+local uis = h.game:GetService("UserInputService")
+local function click()
+	h:fire(uis, "InputBegan", { UserInputType = roblox.Enum.UserInputType.MouseButton1 }, false)
+	h:advance(0.3)
+end
+local function plotPoint(x, z)
+	return pen.cf:PointToWorldSpace(Vector3.new(x, 0, z))
+end
 local home = pen.cf.Position
 h:moveTo(player, Vector3.new(home.X, 3, home.Z - 20))
 h:advance(0.4)
-eq("egg planted on entering the base", Ocean.carried, 0)
-check("planted effect received", sawEffect("planted"))
-eq("server counted the egg", d.stats.eggsCollected, 1)
-check("egg is incubating in slot 1", d.pen["1"] ~= nil and d.pen["1"].kind == "egg")
-check("carried egg removed from character", player.Character:FindFirstChild("CarriedEgg") == nil)
-check("counter gone once planted", player.PlayerGui.Hud.Carry.Visible == false)
-check("egg model placed in the pen", #pen.contents:GetChildren() == 1)
+check("guide explains placing", Guide.text ~= nil and Guide.text:find("Place") ~= nil, Guide.text)
+check("no fixed egg spots are drawn", pen.model:FindFirstChild("Slots") == nil)
+check("an egg can't be placed outside the fence", act("PlaceEgg", 1, plotPoint(60, 0)) == false and #d.eggs == 1)
+check("a bad position is refused", act("PlaceEgg", 1, "here") == false and act("PlaceEgg", 1) == false and #d.eggs == 1)
+Placement.start(1)
+h.mouseWorld = plotPoint(12, -9)
+h:advance(0.2)
+check("a preview egg follows the mouse", ws:FindFirstChild("EggPreview") ~= nil and (ws.EggPreview:GetPivot().Position - plotPoint(12, -9)).Magnitude < 0.1)
+check("the placing panel is up", player.PlayerGui.Hud.Place.Visible == true and Placement.ok)
+eq("guide is quiet while placing", Guide.text, nil)
+click()
+eq("the egg left the inventory", #d.eggs, 0)
+check("egg is incubating where it was put", d.pen["1"] ~= nil and d.pen["1"].kind == "egg" and math.abs(d.pen["1"].x - 12) < 0.01 and math.abs(d.pen["1"].z + 9) < 0.01)
+check("egg model stands on that spot", #pen.contents:GetChildren() == 1 and (pen.contents:GetChildren()[1]:GetPivot().Position - plotPoint(12, -9)).Magnitude < 0.1)
+check("placing ends with the last egg", not Placement.active and ws:FindFirstChild("EggPreview") == nil and player.PlayerGui.Hud.Place.Visible == false)
 check("egg is not ready straight away", act("HatchAll") == false and d.pen["1"].kind == "egg")
-noErrors(h, "carry home and plant")
+noErrors(h, "bank the egg and place it")
 
 -- Close early (the corridor may already have shut on its own).
 Ocean.close()
@@ -735,7 +752,7 @@ h:advance(3)
 eq("no more strength once off the pad", d.strength, frozen)
 noErrors(h, "training")
 
--- The tutorial is done once you've planted an egg, hatched one and trained.
+-- The tutorial is done once you've placed an egg, hatched one and trained.
 h:moveTo(player, Vector3.new(0, 3, SHORE + 60))
 h:advance(0.5)
 eq("guide goes quiet after the tutorial", Guide.text, nil)
@@ -750,7 +767,6 @@ check("buy heavier weight", act("BuyWeight") == true and d.weightTier == 2)
 check("upgrade base", act("UpgradeBase") == true and d.baseSlots == Config.Base.StartSlots + Config.Base.SlotsPerLevel)
 h:advance(0.3)
 check("pad label shows the new weight", pen.padLabels[1].Text:find(tostring(Config.Weights[2].gain)) ~= nil, pen.padLabels[1].Text)
-eq("slot pads match base size", #pen.slotsFolder:GetChildren(), d.baseSlots)
 check("client luck updated", State.data.luck > 1)
 noErrors(h, "upgrades")
 
@@ -819,7 +835,7 @@ check("unknown action refused", act("GiveMeEverything") == false)
 openEveryWindow("(established player)")
 plainText(player.PlayerGui, "the windows with real data")
 
--- With Double Carry, two eggs can be carried and planted together.
+-- With Double Carry, two eggs can be carried and banked together.
 d.strength = 400 -- a deeper, longer-lasting corridor for a two-egg run
 h:advance(1)
 startSplit(0)
@@ -859,13 +875,45 @@ end)
 grabAt(eggSpots[1])
 grabAt(eggSpots[2])
 eq("double carry holds two eggs", Ocean.carried, 2)
-local eggsBefore = d.stats.eggsCollected
-h:moveTo(player, Vector3.new(home.X, 3, home.Z - 20))
+local eggsBefore, storedBefore = d.stats.eggsCollected, #d.eggs
+h:moveTo(player, Vector3.new(sp.cx, 3, SHORE + 8))
 h:advance(0.4)
-eq("both eggs planted at home", d.stats.eggsCollected, eggsBefore + 2)
-eq("hands empty after planting", Ocean.carried, 0)
+eq("both eggs counted on land", d.stats.eggsCollected, eggsBefore + 2)
+eq("both eggs are in the inventory", #d.eggs, storedBefore + 2)
+eq("hands empty on land", Ocean.carried, 0)
 Ocean.close()
 h:advance(0.5)
+
+-- Placing several eggs: starting from anywhere takes you home, eggs keep
+-- their distance from each other, and the preview stays inside the fence.
+d.baseSlots = math.max(d.baseSlots, count(d.pen) + #d.eggs)
+Data.markDirty(player)
+h:advance(0.3)
+local toPlace, placedBefore = #d.eggs, count(d.pen)
+Placement.start(1)
+h:advance(0.4)
+check("starting to place takes you to your plot", Pens.contains(player, player.Character.HumanoidRootPart.Position))
+h.mouseWorld = plotPoint(-20, 20)
+h:advance(0.2)
+click()
+eq("first egg placed", count(d.pen), placedBefore + 1)
+check("placing carries on with the next egg", toPlace < 2 or Placement.active)
+h:advance(0.2)
+check("the same spot is too close to the last egg", toPlace < 2 or (not Placement.ok and Placement.hint:find("close") ~= nil), Placement.hint)
+click()
+eq("nothing placed on top of another egg", count(d.pen), placedBefore + 1)
+h.mouseWorld = plotPoint(500, 20)
+h:advance(0.2)
+check("the preview stays inside the fence", toPlace < 2 or (Placement.ok and (ws.EggPreview:GetPivot().Position - plotPoint(Config.Pen.Width / 2 - Config.Pen.PlaceMargin, 20)).Magnitude < 0.1))
+for _ = 2, toPlace do
+	click()
+	h.mouseWorld = plotPoint(0, -25 + count(d.pen) * 6)
+	h:advance(0.2)
+end
+eq("every egg placed", #d.eggs, 0)
+check("placing is over", not Placement.active and ws:FindFirstChild("EggPreview") == nil)
+Placement.start(1)
+check("nothing to place with an empty inventory", not Placement.active)
 noErrors(h, "double carry run")
 
 -- A player whose backpack has no staff (spawned before it existed) gets one.
@@ -887,6 +935,14 @@ local PromptService = h.game:GetService("ProximityPromptService")
 -- Weights stall in the base.
 local weightsStall = pen.model:FindFirstChild("WeightsStall")
 check("weights stall replaces the yellow pad", weightsStall ~= nil and pen.model:FindFirstChild("UpgradePad") == nil)
+-- The pad, the stall and the upgrade sign stand just outside the front fence.
+for _, name in { "TrainPad", "WeightsStall", "BaseSign" } do
+	local thing = pen.model:FindFirstChild(name)
+	local at = pen.cf:PointToObjectSpace(thing:IsA("Model") and thing:GetPivot().Position or thing.CFrame.Position)
+	local front = -Config.Pen.Depth / 2
+	check(name .. " is outside the fence, by the front", at.Z < front - 2 and at.Z > front - 20 and math.abs(at.X) < Config.Pen.Width / 2 and math.abs(at.X) > Config.Pen.Gate + 2, tostring(at))
+	check(name .. " is not in the plot", not Pens.contains(player, pen.cf:PointToWorldSpace(at)))
+end
 local weightsPrompt = weightsStall and weightsStall.Counter:FindFirstChildOfClass("ProximityPrompt")
 check("its prompt opens the Weights menu", weightsPrompt ~= nil and weightsPrompt:GetAttribute("Menu") == "Weights")
 h:fire(PromptService, "PromptTriggered", weightsPrompt, player)
@@ -1052,7 +1108,7 @@ end)
 grabAt(eggSpots[1])
 h:moveTo(player, Vector3.new(sp.cx, 3, SHORE + 8))
 h:advance(0.4)
-eq("carrying an egg on the beach before leaving", Ocean.carried, 1)
+eq("the egg went into the inventory before leaving", Ocean.carried, 0)
 local eggsOwned = #d.eggs + count(d.pen)
 
 local saved = {
@@ -1088,7 +1144,7 @@ eq("weight restored", d2.weightTier, saved.weightTier)
 eq("base size restored", d2.baseSlots, saved.baseSlots)
 eq("strength restored", d2.strength, saved.strength)
 eq("stats restored", d2.stats.hatched, saved.hatched)
-eq("the egg carried to safety was kept", #d2.eggs + count(d2.pen), eggsOwned + 1)
+eq("the egg carried to safety was kept", #d2.eggs + count(d2.pen), eggsOwned)
 check("offline earnings granted", offline)
 check("passes are per-session until real IDs exist", State2.data.passes.DoubleCash == nil)
 eq("pen rebuilt from save", #w2.serverModule("Pens").get(player2).contents:GetChildren(), count(d2.pen))

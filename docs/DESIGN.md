@@ -56,19 +56,25 @@ stand against the back wall. A server holds 5 players, one base each.
      chances scale with √Luck, and the animal that hatches keeps the egg's variant.
    - Walk up to an egg and hold **E** for a third of a second to pick it up (a tap-and-hold prompt on touch, the
      prompt button on gamepad). Walking over it does nothing. You can carry 1 egg (2 with the Double Carry pass).
-6. **Carry it home.** Stepping back onto land flashes the screen green with a small shake. The egg stays on your head, and an "Eggs 1/1" counter stays on screen, until you walk into your
-   own base. Reaching the beach makes it safe, but it is only planted when you step inside your fence. With full hands
-   you can't grab another egg or part the sea again.
-7. **Hatch.** Planted eggs incubate in a base slot. When the timer reads *Ready!*, use the egg's prompt (or *Hatch All
+6. **Get out.** The egg stays on your head, and an "Eggs 1/1" counter stays on screen, while you are in the sea.
+   Stepping back onto land flashes the screen green with a small shake and puts the egg in your **Eggs** inventory.
+   With full hands you can't grab another egg.
+7. **Place it.** Open **Eggs** and press *Place* on an egg. The window closes and a see-through copy of the egg
+   follows your mouse over your plot (on touch it sits in front of you until you tap a spot). Click or tap to put it
+   down anywhere inside the fence, at least 5 studs from the next egg. The preview ring is green where it fits and red
+   where it doesn't. Placing carries on with the next egg until you run out of eggs or room, or press *Cancel* (Q).
+   If you aren't in your plot when you press *Place*, you are taken there. Incubation starts when the egg is put down.
+   The number of eggs and animals a base holds is still set by its size (4, +2 per upgrade, up to 20).
+8. **Hatch.** When an egg's timer reads *Ready!*, use the egg's prompt (or *Hatch All
    Ready* in the Eggs menu). The hatch cutscene plays first; the animal appears in your base, and any "new Index entry"
    news is announced, only after it ends.
-8. **Grow.**
-   - **Strength:** step onto the pink pad in your base. Reps start on their own, 1.4 seconds each: a clean-and-press.
+9. **Grow.**
+   - **Strength:** step onto the pink pad outside your base, left of the gate. Reps start on their own, 1.4 seconds each: a clean-and-press.
      Your character drops into a deep squat with the bar at the shoulders, drives up with a small hop as the bar
      punches overhead, holds the lockout with shaking arms, and lowers it. Each lockout sends a shockwave ring and
      debris out from the feet, kicks your camera, and adds Strength. Step off to stop. The staff is put away while you
      train.
-   - **Heavier weights:** the weights stall in your base opens a menu of all eight barbells; buy the next one for
+   - **Heavier weights:** the weights stall next to the pad opens a menu of all eight barbells; buy the next one for
      more Strength per rep. The barbell rests on the pad when you aren't training and is in your hands when you are.
    - **Luck and Speed:** sold at the shop stall on the beach (the **Buy** button takes you there). Speed raises your
      walk speed from 16 by 1 per level, up to 30, so you can get deeper and back before the sea closes.
@@ -105,7 +111,9 @@ The server is authoritative for everything that matters:
 - At 10 Hz it checks every character seaward of the shoreline, at any height. Anyone outside an open corridor is thrown
   back.
 - It accepts a grab only if the egg exists, hasn't been taken, hasn't been covered, and the player is within reach.
-- It plants carried eggs only when their owner is inside their own base.
+- It moves carried eggs into the inventory once their owner is back on land.
+- It places an egg only at a spot inside its owner's own fence, clear of the other eggs, and only while the base has
+  room.
 
 ## Progression
 
@@ -185,16 +193,15 @@ Everything inside a parted sea is drawn only for the player who parted it (`clie
 
 ## Feedback while you play
 
-- **Guide:** until a new player has planted an egg, hatched one and trained once, a line of text says what to do next
-  and a trail of green arrows on the ground leads there (routing through the base gate). While carrying, it always
-  points you home.
+- **Guide:** until a new player has placed an egg, hatched one and trained once, a line of text says what to do next
+  and a trail of green arrows on the ground leads there (routing through the base gate). With an egg in the inventory it points you to your plot.
 - **Zone bar:** while your sea is open it replaces Buy/Base/Sell at the top: one colored segment per luck zone with its
   multiplier, the rarest egg that zone can hold underneath, zones beyond your corridor greyed out, and your face
   marking how deep you are.
 - **Sea bar:** under the zone bar, a bar drains from both ends like the walls, with the seconds left. It turns red in
   the last 5 seconds, a tick sounds each second, and the screen edge pulses red as the walls get close.
 - **Egg counter:** "0/1" floats over your head while a sea is open, and a panel reading "Eggs 1/1" stays up from the
-  grab until the egg is planted, red in the sea and green on land.
+  grab until you are back on land.
 - **Banners:** large centered messages for the moments that matter (the sea parting, a special cast's luck, SWEPT
   AWAY, offline cash). Reaching land safely is a green flash and a shake, with no banner.
 - **Egg odds:** the Buy menu shows the chance of each rarity at the deepest point you can currently reach.
@@ -220,10 +227,12 @@ that way.
 
 ## Systems
 
-- **Bases:** 5 per server, assigned on join. You start with 4 slots, and each upgrade adds 2 (up to 20). Animals and eggs
-  in slots are rendered by the server so everyone can see your base; animals hop around, animated on each client.
-- **Pets menu:** *Place Best* fills the base with your highest earners from the base and storage. Incubating eggs keep
-  their slots.
+- **Bases:** 5 per server, assigned on join. A base holds 4 eggs and animals to start, and each upgrade adds 2 (up to
+  20). Eggs stand wherever their owner put them, and animals hop around the whole plot; the server renders both so
+  everyone can see your base, and each client animates the hops. The whole fenced plot is free: the training pad and
+  weights stall stand just outside the front fence left of the gate, and the *Upgrade Base* sign to its right.
+- **Pets menu:** *Place Best* fills the base with your highest earners from the base and storage. Incubating eggs stay
+  where they are.
 - **Leaderboards:** three boards on the back wall rank Most Cash Earned, Strongest and Most Eggs. They are global
   (OrderedDataStores), merged with live numbers for everyone in the server, and refresh every minute. Without DataStore
   access they rank the current server only. Cash, Strength and Eggs also show in the Roblox player list.

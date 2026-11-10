@@ -1,4 +1,4 @@
--- Strength training on the pink pad in your base, plus buying heavier weights.
+-- Strength training on the pink pad outside your base, plus buying heavier weights.
 --
 -- Training starts as soon as you step onto your pad and stops when you step
 -- off. The server only keeps time: it marks the player as training, says

@@ -20,13 +20,15 @@ Pens.callbacks = {
 	buyWeight = nil :: ((Player) -> ())?,
 }
 
-local SLOT_COLS = { -24, -12, 0, 12, 24 }
-local SLOT_ROWS = { 4, 13, 22, 31 }
-local WANDER_MIN = Vector3.new(-28, 0, -8)
-local WANDER_MAX = Vector3.new(28, 0, 33)
-Pens.PadLocal = Vector3.new(-20, 0, -22)
-local UPGRADE_PAD_LOCAL = Vector3.new(-31, 0, -5) -- the weights stall, against the side fence near the pad
-local BASE_SIGN_LOCAL = Vector3.new(22, 0, -28)
+-- The whole fenced plot is for eggs and animals. The training pad, the
+-- weights stall and the upgrade sign stand just outside the front fence, on
+-- either side of the gate.
+local HALF_W, HALF_D = Config.Pen.Width / 2, Config.Pen.Depth / 2
+local WANDER_MIN = Vector3.new(-HALF_W + 5, 0, -HALF_D + 5)
+local WANDER_MAX = Vector3.new(HALF_W - 5, 0, HALF_D - 5)
+Pens.PadLocal = Vector3.new(-17.5, 0, -HALF_D - 9.5)
+local STALL_LOCAL = Vector3.new(-30, 0, -HALF_D - 4.5) -- the weights stall, back against the fence
+local BASE_SIGN_LOCAL = Vector3.new(22, 0, -HALF_D - 3.5)
 
 local pens = {} -- array of pen records
 local penByPlayer: { [Player]: any } = {}
@@ -124,10 +126,10 @@ local function fenceLine(parent: Instance, cf: CFrame, a: Vector3, b: Vector3)
 	end
 end
 
-local function slotLocal(i: number): Vector3
-	local col = (i - 1) % #SLOT_COLS + 1
-	local row = (i - 1) // #SLOT_COLS + 1
-	return Vector3.new(SLOT_COLS[col], 0, SLOT_ROWS[row])
+-- Where an item stands in the plot (pen space).
+local function spotLocal(key: string, item): Vector3
+	local x, z = Formulas.penSpot(key, item)
+	return Vector3.new(x, 0, z)
 end
 
 local function buildPen(index: number, info)
@@ -152,6 +154,7 @@ local function buildPen(index: number, info)
 
 	-- Landmarks the client guide arrows point at.
 	model:SetAttribute("Center", cf.Position)
+	model:SetAttribute("Frame", cf)
 	model:SetAttribute("Gate", (cf * CFrame.new(0, 0, -D - 3)).Position)
 	model:SetAttribute("Pad", (cf * CFrame.new(Pens.PadLocal)).Position)
 	fenceLine(model, cf, Vector3.new(-W, 0, -D), Vector3.new(-gate, 0, -D))
@@ -194,7 +197,7 @@ local function buildPen(index: number, info)
 	local _, padLabels = billboard(pad, 4.5, { { "+1 STRENGTH", Color3.fromRGB(255, 220, 60), 30 } }, 90, 1.6)
 
 	-- Weights stall: opens the barbell menu on the owner's client.
-	local stallCf = cf * CFrame.new(UPGRADE_PAD_LOCAL) * CFrame.Angles(0, -math.pi / 2, 0) -- counter faces into the base
+	local stallCf = cf * CFrame.new(STALL_LOCAL) -- counter faces the beach
 	local stall = Voxel.stall(8, 5, Color3.fromRGB(255, 190, 60))
 	stall.Name = "WeightsStall"
 	stall:PivotTo(stallCf)
@@ -226,7 +229,7 @@ local function buildPen(index: number, info)
 	local board = part(model, Vector3.new(7, 3.4, 0.5), signCf * CFrame.new(0, 3.8, 0), Color3.fromRGB(90, 95, 110))
 	board.Name = "BaseSign"
 	local signGui = Instance.new("SurfaceGui")
-	signGui.Face = Enum.NormalId.Back
+	signGui.Face = Enum.NormalId.Front -- faces the beach
 	signGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	signGui.PixelsPerStud = 40
 	signGui.LightInfluence = 0
@@ -248,9 +251,6 @@ local function buildPen(index: number, info)
 	basePrompt.RequiresLineOfSight = false
 	basePrompt.Parent = board
 
-	local slotsFolder = Instance.new("Folder")
-	slotsFolder.Name = "Slots"
-	slotsFolder.Parent = model
 	local contents = Instance.new("Folder")
 	contents.Name = "Contents"
 	contents.Parent = model
@@ -273,7 +273,6 @@ local function buildPen(index: number, info)
 		signInfo = signInfo,
 		signCost = signCost,
 		basePrompt = basePrompt,
-		slotsFolder = slotsFolder,
 		contents = contents,
 		slotModels = {},
 	}
@@ -333,7 +332,7 @@ local function itemSignature(item): string
 		return ""
 	end
 	if item.kind == "egg" then
-		return "egg:" .. item.egg .. ":" .. tostring(item.variant) .. ":" .. tostring(item.start)
+		return "egg:" .. item.egg .. ":" .. tostring(item.variant) .. ":" .. tostring(item.start) .. ":" .. tostring(item.x) .. ":" .. tostring(item.z)
 	end
 	return "animal:" .. tostring(item.uid) .. ":" .. item.animal .. ":" .. tostring(item.variant)
 end
@@ -351,7 +350,7 @@ local function renderSlot(pen, key: string, item)
 	if not item then
 		return
 	end
-	local slotCf = pen.cf * CFrame.new(slotLocal(tonumber(key) :: number)) * CFrame.Angles(0, math.pi, 0)
+	local slotCf = pen.cf * CFrame.new(spotLocal(key, item)) * CFrame.Angles(0, math.pi, 0)
 	local model
 	if item.kind == "egg" then
 		local e = Config.EggById[item.egg]
@@ -405,24 +404,11 @@ local function renderSlot(pen, key: string, item)
 	pen.slotModels[key].model = model
 end
 
-local function renderSlotPads(pen, slots: number)
-	pen.slotsFolder:ClearAllChildren()
-	for i = 1, slots do
-		local p = part(pen.slotsFolder, Vector3.new(7, 0.1, 7), pen.cf * CFrame.new(slotLocal(i) + Vector3.new(0, 0.22, 0)), Color3.fromRGB(235, 215, 160), Enum.Material.SmoothPlastic)
-		p.CanCollide = false
-		p.CanQuery = false
-		p.Transparency = 0.25
-	end
-end
-
 function Pens.refresh(player: Player)
 	local pen = penByPlayer[player]
 	local d = Data.get(player)
 	if not pen or not d then
 		return
-	end
-	if #pen.slotsFolder:GetChildren() ~= d.baseSlots then
-		renderSlotPads(pen, d.baseSlots)
 	end
 	for i = 1, Config.Base.MaxSlots do
 		local key = tostring(i)
@@ -498,7 +484,8 @@ local function changed(player: Player)
 	Pens.refresh(player)
 end
 
-function Pens.placeEggItem(player: Player, egg: string, variant: string, key: string)
+-- Incubation starts when the egg is put down at (x, z) in the plot.
+function Pens.placeEggItem(player: Player, egg: string, variant: string, key: string, x: number, z: number)
 	local d = Data.get(player)
 	d.pen[key] = {
 		kind = "egg",
@@ -506,19 +493,18 @@ function Pens.placeEggItem(player: Player, egg: string, variant: string, key: st
 		variant = variant,
 		start = os.time(),
 		dur = Formulas.hatchSeconds(egg, Data.hasPass(player, "FastHatch")),
+		x = x,
+		z = z,
 	}
 end
 
--- New egg from a run or reward: incubate if there's room, else store.
+-- New egg from a run or reward: it goes into the Eggs inventory, and its
+-- owner places it in their plot wherever they like.
 function Pens.addEgg(player: Player, egg: string, variant: string?): string
 	local d = Data.get(player)
 	variant = variant or "Normal"
-	local key = freeSlot(d)
 	local where
-	if key then
-		Pens.placeEggItem(player, egg, variant :: string, key)
-		where = "pen"
-	elseif #d.eggs < Config.MaxStoredEggs then
+	if #d.eggs < Config.MaxStoredEggs then
 		table.insert(d.eggs, { egg = egg, variant = variant })
 		where = "storage"
 	else
@@ -565,7 +551,8 @@ function Pens.hatch(player: Player, key: string): boolean
 	local variant = item.variant or "Normal"
 	discover(player, animal, variant)
 	local uid = Data.newUid(player)
-	d.pen[key] = { kind = "animal", uid = uid, animal = animal, variant = variant }
+	-- The animal starts where its egg stood.
+	d.pen[key] = { kind = "animal", uid = uid, animal = animal, variant = variant, x = item.x, z = item.z }
 	d.stats.hatched += 1
 	-- The uid lets the owner's client keep the new animal hidden in the pen
 	-- until their hatch cutscene has revealed it.
@@ -598,18 +585,25 @@ function Pens.instantHatch(player: Player)
 	changed(player)
 end
 
-function Pens.placeStoredEgg(player: Player, index: number): (boolean, string?)
+-- Put a stored egg down at a spot the player picked inside their own plot.
+function Pens.placeStoredEgg(player: Player, index: number, worldPos: Vector3): (boolean, string?)
 	local d = Data.get(player)
+	local pen = penByPlayer[player]
 	local e = d.eggs[index]
-	if not e then
+	if not e or not pen then
 		return false, "That egg is gone."
 	end
 	local key = freeSlot(d)
 	if not key then
 		return false, "Your base is full! Upgrade it for more slots."
 	end
+	local p = pen.cf:PointToObjectSpace(worldPos)
+	local ok, why = Formulas.canPlaceEgg(d.pen, p.X, p.Z)
+	if not ok then
+		return false, why
+	end
 	table.remove(d.eggs, index)
-	Pens.placeEggItem(player, e.egg, e.variant, key)
+	Pens.placeEggItem(player, e.egg, e.variant, key, p.X, p.Z)
 	changed(player)
 	return true
 end
@@ -852,7 +846,6 @@ local function unassign(player: Player)
 	setPromptOwner(pen.upPrompt, nil)
 	setPromptOwner(pen.basePrompt, nil)
 	pen.contents:ClearAllChildren()
-	pen.slotsFolder:ClearAllChildren()
 	table.clear(pen.slotModels)
 	pen.barbellShown = true
 	pen.barbell.Parent = pen.model
