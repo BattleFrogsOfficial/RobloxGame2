@@ -58,8 +58,9 @@ Layout.NeverTogether = {
 	{ "Hold", "ZoneBar" },
 	{ "Hold", "Carry" },
 	{ "Hold", "Train" },
-	-- Eggs are placed in your plot, far from the shoreline; carried eggs go
-	-- into the inventory the moment you are back on land.
+	-- The placing panel only shows in or right by your plot, far from the
+	-- shoreline; carried eggs go into the inventory the moment you are
+	-- back on land.
 	{ "Place", "Carry" },
 	{ "Place", "Charge" },
 	{ "Place", "Hold" },

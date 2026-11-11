@@ -439,13 +439,36 @@ end
 local home = pen.cf.Position
 h:moveTo(player, Vector3.new(home.X, 3, home.Z - 20))
 h:advance(0.4)
-check("guide explains placing", Guide.text ~= nil and Guide.text:find("Place") ~= nil, Guide.text)
+check("guide explains placing", Guide.text ~= nil and Guide.text:find("hotbar") ~= nil, Guide.text)
+-- The egg is a tool on the hotbar, next to the Sea Staff.
+local function eggTools(holder)
+	local list = {}
+	for _, c in holder:GetChildren() do
+		if c:IsA("Tool") and c:GetAttribute("Egg") then
+			table.insert(list, c)
+		end
+	end
+	return list
+end
+local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+local eggTool = eggTools(player.Backpack)[1]
+eq("one egg tool on the hotbar", #eggTools(player.Backpack), 1)
+check("the tool is that egg", eggTool ~= nil and eggTool:GetAttribute("Egg") == d.eggs[1].egg and eggTool:FindFirstChild("Handle") ~= nil and #eggTool:GetChildren() > 5)
+check("the Sea Staff is still there too", player.Backpack:FindFirstChild("Sea Staff") ~= nil or player.Character:FindFirstChild("Sea Staff") ~= nil)
+check("nothing to place until the egg is in hand", not Placement.active and player.PlayerGui.Hud.Place.Visible == false)
 check("no fixed egg spots are drawn", pen.model:FindFirstChild("Slots") == nil)
 check("an egg can't be placed outside the fence", act("PlaceEgg", 1, plotPoint(60, 0)) == false and #d.eggs == 1)
 check("a bad position is refused", act("PlaceEgg", 1, "here") == false and act("PlaceEgg", 1) == false and #d.eggs == 1)
-Placement.start(1)
+-- Holding the egg away from the plot does nothing.
+humanoid:UnequipTools()
+humanoid:EquipTool(eggTool)
+h:moveTo(player, Vector3.new(home.X, 3, SHORE + 30))
+h:advance(0.3)
+check("no placing away from the plot", not Placement.active and ws:FindFirstChild("EggPreview") == nil)
+h:moveTo(player, Vector3.new(home.X, 3, home.Z - 20))
 h.mouseWorld = plotPoint(12, -9)
 h:advance(0.2)
+check("holding the egg in the plot starts placing", Placement.active)
 check("a preview egg follows the mouse", ws:FindFirstChild("EggPreview") ~= nil and (ws.EggPreview:GetPivot().Position - plotPoint(12, -9)).Magnitude < 0.1)
 check("the placing panel is up", player.PlayerGui.Hud.Place.Visible == true and Placement.ok)
 eq("guide is quiet while placing", Guide.text, nil)
@@ -453,7 +476,8 @@ click()
 eq("the egg left the inventory", #d.eggs, 0)
 check("egg is incubating where it was put", d.pen["1"] ~= nil and d.pen["1"].kind == "egg" and math.abs(d.pen["1"].x - 12) < 0.01 and math.abs(d.pen["1"].z + 9) < 0.01)
 check("egg model stands on that spot", #pen.contents:GetChildren() == 1 and (pen.contents:GetChildren()[1]:GetPivot().Position - plotPoint(12, -9)).Magnitude < 0.1)
-check("placing ends with the last egg", not Placement.active and ws:FindFirstChild("EggPreview") == nil and player.PlayerGui.Hud.Place.Visible == false)
+check("placing ends once it is down", not Placement.active and ws:FindFirstChild("EggPreview") == nil and player.PlayerGui.Hud.Place.Visible == false)
+eq("the egg tool is gone from the hand and the hotbar", #eggTools(player.Character) + #eggTools(player.Backpack), 0)
 check("egg is not ready straight away", act("HatchAll") == false and d.pen["1"].kind == "egg")
 noErrors(h, "bank the egg and place it")
 
@@ -890,30 +914,48 @@ d.baseSlots = math.max(d.baseSlots, count(d.pen) + #d.eggs)
 Data.markDirty(player)
 h:advance(0.3)
 local toPlace, placedBefore = #d.eggs, count(d.pen)
+eq("one tool per egg", #eggTools(player.Backpack) + #eggTools(player.Character), toPlace)
+-- The Place button in the Eggs window takes the egg in hand and goes home.
+humanoid:UnequipTools()
 Placement.start(1)
 h:advance(0.4)
-check("starting to place takes you to your plot", Pens.contains(player, player.Character.HumanoidRootPart.Position))
+check("Place puts that egg in your hand", #eggTools(player.Character) == 1 and eggTools(player.Character)[1]:GetAttribute("Egg") == d.eggs[1].egg)
+check("Place takes you to your plot", Pens.contains(player, player.Character.HumanoidRootPart.Position))
 h.mouseWorld = plotPoint(-20, 20)
 h:advance(0.2)
 click()
 eq("first egg placed", count(d.pen), placedBefore + 1)
-check("placing carries on with the next egg", toPlace < 2 or Placement.active)
+eq("the placed egg's tool is gone, the other stays", #eggTools(player.Backpack) + #eggTools(player.Character), toPlace - 1)
+check("hands empty after placing", #eggTools(player.Character) == 0 and not Placement.active)
+humanoid:EquipTool(eggTools(player.Backpack)[1])
 h:advance(0.2)
-check("the same spot is too close to the last egg", toPlace < 2 or (not Placement.ok and Placement.hint:find("close") ~= nil), Placement.hint)
+check("the same spot is too close to the last egg", not Placement.ok and Placement.hint:find("close") ~= nil, Placement.hint)
 click()
 eq("nothing placed on top of another egg", count(d.pen), placedBefore + 1)
 h.mouseWorld = plotPoint(500, 20)
 h:advance(0.2)
-check("the preview stays inside the fence", toPlace < 2 or (Placement.ok and (ws.EggPreview:GetPivot().Position - plotPoint(Config.Pen.Width / 2 - Config.Pen.PlaceMargin, 20)).Magnitude < 0.1))
+check("the preview stays inside the fence", Placement.ok and (ws.EggPreview:GetPivot().Position - plotPoint(Config.Pen.Width / 2 - Config.Pen.PlaceMargin, 20)).Magnitude < 0.1)
+-- Putting the egg away stops placing and keeps the egg.
+Placement.cancel()
+h:advance(0.2)
+check("put away: back on the hotbar", not Placement.active and ws:FindFirstChild("EggPreview") == nil and #eggTools(player.Backpack) == toPlace - 1 and #d.eggs == toPlace - 1)
 for _ = 2, toPlace do
-	click()
+	Placement.start(1)
 	h.mouseWorld = plotPoint(0, -25 + count(d.pen) * 6)
 	h:advance(0.2)
+	click()
 end
 eq("every egg placed", #d.eggs, 0)
-check("placing is over", not Placement.active and ws:FindFirstChild("EggPreview") == nil)
+check("placing is over", not Placement.active and ws:FindFirstChild("EggPreview") == nil and #eggTools(player.Backpack) + #eggTools(player.Character) == 0)
 Placement.start(1)
 check("nothing to place with an empty inventory", not Placement.active)
+-- New eggs get a tool, and selling a stored egg from the menu takes its tool away.
+Pens.addEgg(player, "Shell", "Gold")
+Pens.addEgg(player, "Shell", "Normal")
+eq("new eggs appear on the hotbar", #eggTools(player.Backpack), 2)
+check("variant eggs are named", player.Backpack:FindFirstChild("Gold " .. Config.EggById.Shell.name) ~= nil)
+check("sell one from the menu", act("SellEgg", 1) == true and #eggTools(player.Backpack) == 1 and eggTools(player.Backpack)[1]:GetAttribute("Variant") == "Normal")
+check("sell the other", act("SellEgg", 1) == true and #eggTools(player.Backpack) == 0)
 noErrors(h, "double carry run")
 
 -- A player whose backpack has no staff (spawned before it existed) gets one.

@@ -3,7 +3,7 @@
 An original Roblox egg-collecting idler. Walk up to the ocean, hold click with your **Sea Staff** to charge, and release
 to part the sea. Your **Strength** decides how deep the corridor goes, and your **Luck** decides how many eggs are down
 there and how rare they are. The walls of water start closing the moment the sea opens: grab an egg and get out before
-they meet, or you're thrown back onto the beach without it. Back on land the egg goes into your inventory; place it anywhere in your plot and it hatches
+they meet, or you're thrown back onto the beach without it. Back on land the egg goes onto your hotbar; hold it and click anywhere in your plot and it hatches
 into a pixel animal that earns money. The rarer the animal, the bigger it is.
 
 Only you see your parted sea and your eggs. Everyone else sees you walk into the closed ocean.
@@ -81,7 +81,7 @@ src/client/      StarterPlayerScripts.Client
   State.luau       client copy of player state + server actions
   Ocean.luau       draws the ocean, the parting cutscene, the closing corridor, your eggs; charging
   Depths.luau      the inside of a parted sea: zone lines, kelp, mist, fish, falling water
-  Placement.luau   picking a spot in your plot for an egg from the inventory
+  Placement.luau   placing the egg you hold anywhere in your plot
   Ragdoll.luau     goes limp and flies back to shore when the sea catches you
   Poses.luau       limb animation for the staff cast and barbell reps (R6 and R15)
   Guide.luau       new-player objective text and the trail of arrows on the ground

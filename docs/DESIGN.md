@@ -57,14 +57,15 @@ stand against the back wall. A server holds 5 players, one base each.
    - Walk up to an egg and hold **E** for a third of a second to pick it up (a tap-and-hold prompt on touch, the
      prompt button on gamepad). Walking over it does nothing. You can carry 1 egg (2 with the Double Carry pass).
 6. **Get out.** The egg stays on your head, and an "Eggs 1/1" counter stays on screen, while you are in the sea.
-   Stepping back onto land flashes the screen green with a small shake and puts the egg in your **Eggs** inventory.
-   With full hands you can't grab another egg.
-7. **Place it.** Open **Eggs** and press *Place* on an egg. The window closes and a see-through copy of the egg
-   follows your mouse over your plot (on touch it sits in front of you until you tap a spot). Click or tap to put it
-   down anywhere inside the fence, at least 5 studs from the next egg. The preview ring is green where it fits and red
-   where it doesn't. Placing carries on with the next egg until you run out of eggs or room, or press *Cancel* (Q).
-   If you aren't in your plot when you press *Place*, you are taken there. Incubation starts when the egg is put down.
-   The number of eggs and animals a base holds is still set by its size (4, +2 per upgrade, up to 20).
+   Stepping back onto land flashes the screen green with a small shake and puts the egg in your inventory: it appears
+   on your hotbar as a tool, next to the Sea Staff (and in the **Eggs** window). With full hands you can't grab another
+   egg.
+7. **Place it.** Pick the egg on your hotbar while you are in or right by your plot. A see-through copy of it follows
+   your mouse over the plot (on touch it sits in front of you until you tap a spot). Click or tap to put it down
+   anywhere inside the fence, at least 5 studs from the next egg. The preview ring is green where it fits and red
+   where it doesn't. *Put away* (Q) returns the egg to the hotbar. *Place* in the **Eggs** window does the same as
+   picking the egg on the hotbar, and takes you to your plot if you aren't there. Incubation starts when the egg is
+   put down. The number of eggs and animals a base holds is still set by its size (4, +2 per upgrade, up to 20).
 8. **Hatch.** When an egg's timer reads *Ready!*, use the egg's prompt (or *Hatch All
    Ready* in the Eggs menu). The hatch cutscene plays first; the animal appears in your base, and any "new Index entry"
    news is announced, only after it ends.

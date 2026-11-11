@@ -4,7 +4,7 @@ local Config = {}
 
 -- Shown in small print at the top of the screen and used in the place
 -- file's name, so it is always clear which build is running.
-Config.Build = 20
+Config.Build = 21
 
 ----------------------------------------------------------------------------
 -- Rarities

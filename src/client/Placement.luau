@@ -1,8 +1,10 @@
 -- Placing an egg from your inventory anywhere in your own plot.
 --
--- A see-through copy of the egg follows the mouse over the plot (on touch
--- and gamepad it sits in front of you until you tap a spot). Click, tap or
--- press the right trigger to put it down. The server checks the spot again.
+-- Every egg in the inventory is a tool on the hotbar, next to the Sea Staff.
+-- Hold one in or by your plot and a see-through copy of it follows the mouse
+-- over the plot (on touch and gamepad it sits in front of you until you tap
+-- a spot). Click, tap or press the right trigger to put it down. The server
+-- checks the spot again.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,7 +17,6 @@ local Formulas = require(Shared.Formulas)
 local Voxel = require(Shared.Voxel)
 
 local State = require(script.Parent.State)
-local Ocean = require(script.Parent.Ocean)
 
 local Placement = {}
 
@@ -133,18 +134,45 @@ local function buildGhost(egg: string, variant: string)
 	ring = r
 end
 
-function Placement.cancel()
+-- The egg tool in your hand, if any.
+local function heldEgg(): Tool?
+	local char = player.Character
+	for _, c in char and char:GetChildren() or {} do
+		if c:IsA("Tool") and c:GetAttribute("Egg") then
+			return c
+		end
+	end
+	return nil
+end
+
+local function matches(tool: Instance, e): boolean
+	return tool:IsA("Tool") and tool:GetAttribute("Egg") == e.egg and tool:GetAttribute("Variant") == (e.variant or "Normal")
+end
+
+local function stop()
 	Placement.active = false
 	Placement.ok = false
 	spot = nil
 	clearGhost()
 end
 
--- Start placing stored egg number i (its place in State.data.eggs).
+-- Put the egg away (back onto the hotbar).
+function Placement.cancel()
+	stop()
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if humanoid and heldEgg() then
+		humanoid:UnequipTools()
+	end
+end
+
+-- Take stored egg number i (its place in State.data.eggs) in hand, as if it
+-- had been picked on the hotbar, and go to the plot if you aren't there.
 function Placement.start(i: number)
 	local d = State.data
 	local pen = myPen()
-	if not d or not d.eggs[i] then
+	local e = d and d.eggs[i]
+	if not e then
 		return
 	end
 	if not pen then
@@ -155,9 +183,18 @@ function Placement.start(i: number)
 		State.toast:Fire("Your base is full! Upgrade it for more slots.", BAD)
 		return
 	end
-	index = i
-	Placement.active = true
-	-- Not in your plot? Go there.
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	local held = heldEgg()
+	if humanoid and not (held and matches(held, e)) then
+		local backpack = player:FindFirstChildOfClass("Backpack")
+		for _, tool in backpack and backpack:GetChildren() or {} do
+			if matches(tool, e) then
+				humanoid:EquipTool(tool :: Tool)
+				break
+			end
+		end
+	end
 	local root = rootPart()
 	local here = root and frameOf(pen):PointToObjectSpace(root.Position)
 	if not here or math.abs(here.X) > P.Width / 2 or math.abs(here.Z) > P.Depth / 2 then
@@ -173,6 +210,10 @@ function Placement.confirm(at: Vector3?)
 	if not Placement.active or busy or not d or not pen or not p then
 		return
 	end
+	if penUsed(d) >= d.baseSlots then
+		State.toast:Fire("Your base is full! Upgrade it for more slots.", BAD)
+		return
+	end
 	local ok, why = Formulas.canPlaceEgg(d.pen, p.X, p.Z)
 	if not ok then
 		State.toast:Fire(why :: string, BAD)
@@ -185,34 +226,38 @@ function Placement.confirm(at: Vector3?)
 	end)
 end
 
--- Keep going with the next egg while there are eggs and room for them.
-local function onState(d)
-	if not Placement.active then
-		return
-	end
-	if #d.eggs == 0 or penUsed(d) >= d.baseSlots then
-		Placement.cancel()
-	else
-		index = math.min(index, #d.eggs)
-	end
-end
+-- Placing is on while you hold an egg in or right by your own plot.
+local NEAR = 14 -- studs outside the fence that still count
 
 local function update()
-	if not Placement.active then
-		return
-	end
+	local tool = heldEgg()
 	local d = State.data
 	local pen = myPen()
-	local egg = d and d.eggs[index]
-	if not pen or not egg or Ocean.inZone then
-		Placement.cancel()
+	local root = rootPart()
+	local found: number? = nil
+	if tool and d then
+		for i, e in d.eggs do
+			if matches(tool, e) then
+				found = i
+				break
+			end
+		end
+	end
+	local here = pen and root and frameOf(pen):PointToObjectSpace(root.Position)
+	if not found or not here or math.abs(here.X) > P.Width / 2 + NEAR or math.abs(here.Z) > P.Depth / 2 + NEAR then
+		if Placement.active then
+			stop()
+		end
 		return
 	end
+	index = found
+	Placement.active = true
+	local egg = d.eggs[index]
 	local sig = egg.egg .. ":" .. egg.variant
 	if sig ~= ghostSig then
 		buildGhost(egg.egg, egg.variant)
 	end
-	local frame = frameOf(pen)
+	local frame = frameOf(pen :: Model)
 	local touch = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 	local p = not touch and underScreenPoint(frame, UserInputService:GetMouseLocation()) or inFrontOfMe(frame)
 	spot = p
@@ -220,6 +265,9 @@ local function update()
 		return
 	end
 	local ok, why = Formulas.canPlaceEgg(d.pen, p.X, p.Z)
+	if penUsed(d) >= d.baseSlots then
+		ok, why = false, "Your base is full!"
+	end
 	Placement.ok = ok
 	Placement.hint = ok and (touch and "Tap a spot in your plot" or "Click a spot in your plot") or why :: string
 	ghost:PivotTo(frame * CFrame.new(p) * CFrame.Angles(0, math.pi, 0))
@@ -228,7 +276,6 @@ local function update()
 end
 
 function Placement.init()
-	State.changed:Connect(onState)
 	RunService.RenderStepped:Connect(update)
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed or not Placement.active then

@@ -701,7 +701,7 @@ local function buildPlace()
 	})
 	Ui.button({
 		Name = "Cancel",
-		Text = "Cancel",
+		Text = "Put away",
 		Color = C.Red,
 		Size = UDim2.fromOffset(112, 44),
 		Position = UDim2.new(1, -8, 0.5, 0),
@@ -1060,7 +1060,7 @@ local function onEffect(kind: string, payload: any)
 		for _, b in payload do
 			local e = Config.EggById[b.egg]
 			local name = (b.variant ~= "Normal" and b.variant .. " " or "") .. e.name
-			local where = b.where == "storage" and " added to your Eggs. Place it in your plot!" or " sold (your egg storage is full)."
+			local where = b.where == "storage" and " is on your hotbar. Hold it in your plot to place it!" or " sold (your egg storage is full)."
 			Hud.toast(name .. where, Config.Rarities[e.tier].color)
 		end
 	elseif kind == "caught" then

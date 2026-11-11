@@ -404,7 +404,94 @@ local function renderSlot(pen, key: string, item)
 	pen.slotModels[key].model = model
 end
 
+----------------------------------------------------------------------------
+-- Egg tools: every egg in the inventory is a tool on its owner's hotbar,
+-- next to the Sea Staff. Holding one is how you place it.
+----------------------------------------------------------------------------
+local function eggSig(egg: string, variant: string?): string
+	return egg .. ":" .. (variant or "Normal")
+end
+
+local function makeEggTool(egg: string, variant: string): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = (variant ~= "Normal" and variant .. " " or "") .. Config.EggById[egg].name
+	tool.CanBeDropped = false
+	tool.RequiresHandle = true
+	tool.ToolTip = "Click a spot in your plot to place it"
+	tool:SetAttribute("Egg", egg)
+	tool:SetAttribute("Variant", variant)
+	-- The egg sits on an invisible handle held in the hand.
+	local model = Voxel.egg(egg, variant, false)
+	model:PivotTo(CFrame.new())
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(1, 1, 1)
+	handle.Transparency = 1
+	handle.CanCollide = false
+	handle.Massless = true
+	handle.CFrame = CFrame.new(0, 0.5, 0)
+	handle.Parent = tool
+	for _, p in model:GetDescendants() do
+		if p:IsA("BasePart") then
+			p.Anchored = false
+			p.CanCollide = false
+			p.Massless = true
+			local w = Instance.new("WeldConstraint")
+			w.Part0 = handle
+			w.Part1 = p
+			w.Parent = p
+			p.Parent = tool
+		end
+	end
+	model:Destroy()
+	return tool
+end
+
+-- Make the tools match the stored eggs: one tool per egg.
+function Pens.syncEggTools(player: Player)
+	local d = Data.get(player)
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not d or not backpack then
+		return
+	end
+	local want: { [string]: number } = {}
+	for _, e in d.eggs do
+		local sig = eggSig(e.egg, e.variant)
+		want[sig] = (want[sig] or 0) + 1
+	end
+	-- Tools beyond the count are removed. After placing an egg the one in
+	-- the hand is the one to go; otherwise the one in the hand is kept.
+	local placed = player:GetAttribute("EggPlaced")
+	local char = player.Character
+	local holders: { Instance } = { backpack }
+	if char then
+		table.insert(holders, placed and 2 or 1, char)
+	end
+	for _, holder in holders do
+		for _, tool in holder:GetChildren() do
+			local egg = tool:IsA("Tool") and tool:GetAttribute("Egg")
+			if egg then
+				local sig = eggSig(egg, tool:GetAttribute("Variant"))
+				if (want[sig] or 0) > 0 then
+					want[sig] -= 1
+				else
+					tool:Destroy()
+				end
+			end
+		end
+	end
+	player:SetAttribute("EggPlaced", nil)
+	for _, e in d.eggs do
+		local sig = eggSig(e.egg, e.variant)
+		if (want[sig] or 0) > 0 then
+			want[sig] -= 1
+			makeEggTool(e.egg, e.variant or "Normal").Parent = backpack
+		end
+	end
+end
+
 function Pens.refresh(player: Player)
+	Pens.syncEggTools(player)
 	local pen = penByPlayer[player]
 	local d = Data.get(player)
 	if not pen or not d then
@@ -603,6 +690,7 @@ function Pens.placeStoredEgg(player: Player, index: number, worldPos: Vector3): 
 		return false, why
 	end
 	table.remove(d.eggs, index)
+	player:SetAttribute("EggPlaced", true) -- the egg in the hand is the one that goes
 	Pens.placeEggItem(player, e.egg, e.variant, key, p.X, p.Z)
 	changed(player)
 	return true
@@ -927,6 +1015,7 @@ function Pens.init()
 		local pen = assign(player)
 		if not pen then
 			Data.notify(player, "The server is full of bases! Try another server.", Color3.fromRGB(255, 90, 90))
+			Pens.syncEggTools(player)
 			return
 		end
 		Pens.refresh(player)
@@ -939,6 +1028,7 @@ function Pens.init()
 	local function onCharacter(player: Player, char: Model)
 		char:WaitForChild("HumanoidRootPart", 10)
 		task.wait(0.1)
+		Pens.syncEggTools(player) -- a respawn empties the hotbar
 		if penByPlayer[player] then
 			Pens.teleportHome(player)
 		end

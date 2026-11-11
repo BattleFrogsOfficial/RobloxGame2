@@ -129,15 +129,14 @@ local function think(root: BasePart): (string?, Vector3?, boolean)
 		return nil, nil, false
 	end
 
-	-- Picking a spot for an egg: the HUD panel does the talking.
-	if Placement.active then
-		return nil, nil, false
-	end
 
 	-- An egg in the inventory and room in the plot: go and place it.
 	if pen and newbie and not inSea and #d.eggs > 0 and penCount(d) < d.baseSlots then
+		if Placement.active then
+			return nil, nil, false -- the HUD panel does the talking
+		end
 		if insidePen(pen, pos) then
-			return "Open EGGS, press Place, then pick a spot in your plot!", nil, false
+			return "Hold your egg (it is on your hotbar) and click a spot in your plot!", nil, false
 		end
 		return "Take your egg to your plot and place it!", pen:GetAttribute("Center") :: Vector3, false
 	end
